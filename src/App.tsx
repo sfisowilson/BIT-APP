@@ -87,7 +87,10 @@ export default function App() {
   const [newVideoTitle, setNewVideoTitle] = useState<string>('');
   const [newVideoRes, setNewVideoRes] = useState<string>('1920x1080 (1080p)');
   const [newVideoFps, setNewVideoFps] = useState<number>(50);
+  const [newVideoDuration, setNewVideoDuration] = useState<string>('00:05:00');
   const [newVideoChannel, setNewVideoChannel] = useState<string>('SuperSport Variety');
+  const [newVideoFile, setNewVideoFile] = useState<File | null>(null);
+  const [ingestError, setIngestError] = useState<string | null>(null);
 
   // Dispatch Composite Renders
   const [composerCampaignId, setComposerCampaignId] = useState<string>('');
@@ -368,25 +371,41 @@ export default function App() {
     }
   };
 
-  // Handle Content Upload Simulation
+  // Handle Content Upload (MReq 1: real file upload with metadata)
   const handleIngestVideo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newVideoTitle) return;
+    setIngestError(null);
     try {
-      await fetchWithAuth('/api/content', {
+      const formData = new FormData();
+      formData.append('title', newVideoTitle);
+      formData.append('resolution', newVideoRes);
+      formData.append('frameRate', String(newVideoFps));
+      formData.append('duration', newVideoDuration);
+      formData.append('sourceChannel', newVideoChannel);
+      if (newVideoFile) {
+        formData.append('file', newVideoFile);
+      }
+
+      const token = getToken();
+      const res = await fetch('/api/content/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newVideoTitle,
-          resolution: newVideoRes,
-          frameRate: Number(newVideoFps),
-          sourceChannel: newVideoChannel
-        })
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        body: formData,
       });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setIngestError(data.error || 'Ingestion failed.');
+        return;
+      }
       setNewVideoTitle('');
+      setNewVideoDuration('00:05:00');
+      setNewVideoFile(null);
       fetchAllData();
     } catch (err) {
       console.error(err);
+      setIngestError('API communication failure.');
     }
   };
 
@@ -928,9 +947,14 @@ export default function App() {
               setNewVideoRes={setNewVideoRes}
               newVideoFps={newVideoFps}
               setNewVideoFps={setNewVideoFps}
+              newVideoDuration={newVideoDuration}
+              setNewVideoDuration={setNewVideoDuration}
               newVideoChannel={newVideoChannel}
               setNewVideoChannel={setNewVideoChannel}
+              newVideoFile={newVideoFile}
+              setNewVideoFile={setNewVideoFile}
               handleIngestVideo={handleIngestVideo}
+              ingestError={ingestError}
               handleDeleteContent={handleDeleteContent}
               handleAiSplitAnalyze={handleAiSplitAnalyze}
               aiAnalyzingVideoId={aiAnalyzingVideoId}

@@ -36,11 +36,34 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
 }) => {
   const aiCustomizedScenes = scenesForVideo?.filter(s => s.aiStatus === 'completed' && s.aiPrompt) || [];
 
+  // Filter assets by selected campaign for coherent flow (campaign → its assets)
+  const campaignFilteredAssets = composerCampaignId
+    ? assetList.filter(a => a.campaignId === composerCampaignId)
+    : assetList;
+  const unassignedAssetsForDropdown = assetList.filter(a => !a.campaignId);
+
+  // Auto-clear asset selection when switching to a campaign whose assets don't include the current pick
+  React.useEffect(() => {
+    if (composerCampaignId && composerAssetId) {
+      const stillValid = campaignFilteredAssets.some(a => a.id === composerAssetId);
+      if (!stillValid) setComposerAssetId('');
+    }
+  }, [composerCampaignId]);
+
   // Stitching Console States
   const [isStitching, setIsStitching] = React.useState(false);
   const [stitchingProgress, setStitchingProgress] = React.useState(0);
   const [isStitchedDone, setIsStitchedDone] = React.useState(false);
   const [stitchingLogs, setStitchingLogs] = React.useState<string[]>([]);
+  const [renderSubmitted, setRenderSubmitted] = React.useState(false);
+
+  const wrappedHandleQueueRender = async (e: React.FormEvent) => {
+    await handleQueueRender(e);
+    setRenderSubmitted(true);
+    setTimeout(() => setRenderSubmitted(false), 4000);
+    // Scroll to render queue
+    document.getElementById('render_queue_section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const handleStitchProgram = async () => {
     setIsStitching(true);
@@ -100,50 +123,99 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
       <div className="col-span-1 space-y-6">
         <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
           <h2 className="text-lg font-bold text-slate-800 font-display mb-2">GPU Composite Dispatcher</h2>
-          <p className="text-xs text-slate-500 mb-6">Coordinate campaigns, staged creative brand assets, and approved placement surfaces to start GPU composites.</p>
+          <p className="text-xs text-slate-500 mb-4">Step 4: Select an approved surface, then pick a campaign and its creative asset to queue a GPU render.</p>
 
-          <form onSubmit={handleQueueRender} className="space-y-4">
+          {/* Flow readiness indicator */}
+          <div className="grid grid-cols-3 gap-2 mb-5">
+            <div className={`rounded-lg p-2 text-center text-[10px] font-bold transition-colors ${
+              selectedSurfaceId ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-50 text-slate-400 border border-slate-200'
+            }`}>
+              <div className="text-lg">{selectedSurfaceId ? '✓' : '1'}</div>
+              <div>Surface{selectedSurfaceId ? ' ready' : ''}</div>
+            </div>
+            <div className={`rounded-lg p-2 text-center text-[10px] font-bold transition-colors ${
+              composerCampaignId ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-50 text-slate-400 border border-slate-200'
+            }`}>
+              <div className="text-lg">{composerCampaignId ? '✓' : '2'}</div>
+              <div>Campaign{composerCampaignId ? ' ready' : ''}</div>
+            </div>
+            <div className={`rounded-lg p-2 text-center text-[10px] font-bold transition-colors ${
+              composerAssetId ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-50 text-slate-400 border border-slate-200'
+            }`}>
+              <div className="text-lg">{composerAssetId ? '✓' : '3'}</div>
+              <div>Asset{composerAssetId ? ' ready' : ''}</div>
+            </div>
+          </div>
+
+          <form onSubmit={wrappedHandleQueueRender} className="space-y-4">
             <div>
-              <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1.5 font-mono">Target Video Surface</label>
-              <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 font-mono text-[11px] text-slate-700">
+              <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1.5 font-mono">1. Target Surface</label>
+              <div className={`p-3 rounded-lg border font-mono text-[11px] ${
+                selectedSurfaceId ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-100 text-red-700'
+              }`}>
                 {selectedSurfaceId ? (
                   <>
-                    <div className="font-semibold text-slate-900">Surface ID: {selectedSurfaceId}</div>
-                    <div className="text-blue-600 mt-1">Video Source ID: {selectedVideo}</div>
+                    <div className="font-semibold">Surface: {selectedSurfaceId}</div>
+                    <div className="mt-0.5 opacity-75">Video: {selectedVideo}</div>
+                    <div className="text-[10px] mt-1 opacity-60">← Approved in QA Workbench (Step 3)</div>
                   </>
                 ) : (
-                  <div className="text-red-600 font-bold">Please choose/approve a surface first on the Approvals tab.</div>
+                  <div className="font-bold text-xs">No surface selected. Go to QA Workbench → approve a surface first.</div>
                 )}
               </div>
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1.5 font-mono">Active Advertiser Campaign</label>
+              <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1.5 font-mono">2. Advertiser Campaign</label>
               <select 
                 value={composerCampaignId} 
-                onChange={(e) => setComposerCampaignId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-850"
+                onChange={(e) => { setComposerCampaignId(e.target.value); setComposerAssetId(''); }}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
                 required
               >
                 <option value="">-- Choose Campaign --</option>
-                {campaignList.map(c => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.namingStructureCode})</option>
-                ))}
+                {campaignList.map(c => {
+                  const assetCount = assetList.filter(a => a.campaignId === c.id).length;
+                  return (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.namingStructureCode}) — {assetCount} asset{assetCount !== 1 ? 's' : ''}
+                    </option>
+                  );
+                })}
               </select>
+              {composerCampaignId && campaignFilteredAssets.length === 0 && (
+                <p className="text-[10px] text-amber-600 mt-1 font-medium">
+                  ⚠ This campaign has no assets. Go to Campaigns tab to stage and assign assets first.
+                </p>
+              )}
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1.5 font-mono">Creative Brand Asset</label>
+              <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1.5 font-mono">
+                3. Creative Asset {composerCampaignId && <span className="text-blue-500 font-normal">(filtered by campaign)</span>}
+              </label>
               <select 
                 value={composerAssetId} 
                 onChange={(e) => setComposerAssetId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-850"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
                 required
+                disabled={!composerCampaignId}
               >
-                <option value="">-- Choose Staged Asset --</option>
-                {assetList.map(a => (
-                  <option key={a.id} value={a.id}>{a.name} ({a.brandCategory})</option>
-                ))}
+                <option value="">{composerCampaignId ? '-- Choose Asset --' : '-- Select a campaign first --'}</option>
+                {campaignFilteredAssets.length > 0 && (
+                  <optgroup label="Campaign Assets">
+                    {campaignFilteredAssets.map(a => (
+                      <option key={a.id} value={a.id}>{a.name} ({a.type} · {a.brandCategory})</option>
+                    ))}
+                  </optgroup>
+                )}
+                {!composerCampaignId && unassignedAssetsForDropdown.length > 0 && (
+                  <optgroup label="Unassigned Assets (assign to a campaign first)">
+                    {unassignedAssetsForDropdown.map(a => (
+                      <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
 
@@ -188,12 +260,18 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
               <Cpu className="h-4 w-4" />
               Queue GPU Composite Render
             </button>
+
+            {renderSubmitted && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-700 font-medium text-center animate-pulse">
+                ✅ Render job queued! Scroll down to monitor progress in the GPU job queue ↓
+              </div>
+            )}
           </form>
         </div>
       </div>
 
       {/* Real-time Render Queue logs with dynamic percentages (MReq 14) */}
-      <div className="col-span-2 space-y-6">
+      <div className="col-span-2 space-y-6" id="render_queue_section">
         <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 font-display">Asynchronous GPU Compositing Jobs</h3>
