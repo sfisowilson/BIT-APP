@@ -155,7 +155,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
             )}
             
             {/* Bounding vector polygons via SVG overlay on top of video */}
-            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1280 720" id="player_overlay_svg">
+            <svg className="absolute inset-0 w-full h-full pointer-events-none z-10" viewBox="0 0 1280 720" id="player_overlay_svg" preserveAspectRatio="none">
               {/* MReq 3: Render surface polygons from surfacesForScene — clickable for selection */}
               {surfacesForScene.map(sf => {
                 const isSelected = selectedSurfaceId === sf.id;
@@ -177,18 +177,19 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                 const rotAngle = sf.orientationVector?.roll || 0;
 
                 return (
-                  <g key={sf.id} className="cursor-pointer" onClick={() => setSelectedSurfaceId(sf.id)} id={`svg_surface_${sf.id}`}>
+                  <g key={sf.id} className="cursor-pointer pointer-events-auto" onClick={() => setSelectedSurfaceId(sf.id)} id={`svg_surface_${sf.id}`}>
                     <polygon 
                       points={pointsString}
                       fill={isExcluded ? "#ef4444" : isApproved ? "#10b981" : "#3b82f6"}
-                      fillOpacity={isSelected ? 0.35 : 0.15}
+                      fillOpacity={isSelected ? 0.45 : 0.25}
                       stroke={isExcluded ? "#ef4444" : isApproved ? "#10b981" : "#3b82f6"}
-                      strokeWidth={isSelected ? 3 : 1.5}
+                      strokeWidth={isSelected ? 3 : 2}
+                      strokeDasharray={isSelected ? "none" : "6 3"}
                       className="transition-all duration-200"
                     />
 
-                    {/* Realistic Spatial Brand Compositing Simulation */}
-                    {activePreviewAsset && isApproved && (
+                    {/* Realistic Spatial Brand Compositing Simulation — preview on any selected surface when asset chosen */}
+                    {activePreviewAsset && isSelected && (
                       <g style={{ mixBlendMode: selectedBlendMode, opacity: ambientIntensity }}>
                         <polygon 
                           points={pointsString}
@@ -240,14 +241,14 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               })}
             </svg>
 
-            {/* HUD bar with video metadata */}
-            <div className="absolute bottom-4 left-4 right-4 bg-slate-900/90 border border-slate-700 rounded-lg px-4 py-2 flex items-center justify-between text-[11px] font-mono text-slate-400 z-10">
+            {/* HUD bar with scene metadata — not a second control bar */}
+            <div className="absolute bottom-4 left-4 right-4 bg-slate-900/90 border border-slate-700 rounded-lg px-4 py-2 flex items-center justify-between text-[11px] font-mono text-slate-400 z-20 pointer-events-none">
               <div className="flex items-center gap-2">
-                <Play className="h-3 w-3 text-blue-500 fill-blue-500" />
-                <span>{activeVideo?.duration || '00:00:00'}</span>
+                <Eye className="h-3 w-3 text-blue-400" />
+                <span>Scene #{currentScene?.sceneIndex || '—'} · {surfacesForScene.length} surface{surfacesForScene.length !== 1 ? 's' : ''}</span>
               </div>
               <div>
-                <span>{activeVideo?.resolution || '1920x1080'} · {activeVideo?.frameRate || 50} FPS</span>
+                <span>{activeVideo?.resolution || '—'} · {activeVideo?.frameRate || '—'} FPS · {activeVideo?.duration || '—'}</span>
               </div>
             </div>
           </div>
@@ -257,7 +258,8 @@ export const EditorTab: React.FC<EditorTabProps> = ({
             <div>
               <div className="text-[10px] uppercase font-mono font-bold text-slate-500 mb-1.5 flex items-center gap-1.5">
                 <Layout className="h-3.5 w-3.5 text-blue-500" />
-                <span>3D Compositing Blend Mode</span>
+                <span>Blend Mode Preview</span>
+                <span className="text-[9px] text-slate-400 normal-case">— visible when surface selected + asset chosen</span>
               </div>
               <div className="flex gap-1.5">
                 {[
@@ -299,7 +301,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
 
           <div className="mt-4 text-xs text-slate-500 flex items-center gap-1.5 font-mono">
             <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse"></span>
-            <span>Click on the colored boundaries on the screen above to select recommended placement inventory.</span>
+            <span>Click colored boundary polygons above to select surfaces. Choose a Preview Asset and blend mode below to simulate brand insertion.</span>
           </div>
         </div>
 
