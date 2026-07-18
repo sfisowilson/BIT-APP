@@ -54,21 +54,58 @@ namespace Afrobotics.Bit.Api.Services
             await _renderRepository.AddAsync(render);
             await _renderRepository.SaveChangesAsync();
 
-            // Background worker dispatch emulation
+            // MReq 7, 14: Simulate GPU render pipeline with realistic incremental progress
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await Task.Delay(3000);
+                    // Phase 1: Preprocessing (0 → 30%)
+                    for (int p = 5; p <= 30; p += 5)
+                    {
+                        await Task.Delay(400);
+                        render.Progress = p;
+                        await _renderRepository.UpdateAsync(render);
+                        await _renderRepository.SaveChangesAsync();
+                    }
+
+                    // Phase 2: GPU Compositing (30 → 75%)
+                    render.RenderStatus = "Processing";
+                    await _renderRepository.UpdateAsync(render);
+                    await _renderRepository.SaveChangesAsync();
+                    for (int p = 35; p <= 75; p += 5)
+                    {
+                        await Task.Delay(350);
+                        render.Progress = p;
+                        await _renderRepository.UpdateAsync(render);
+                        await _renderRepository.SaveChangesAsync();
+                    }
+
+                    // Phase 3: Encoding & Finalization (75 → 100%)
+                    for (int p = 80; p <= 100; p += 5)
+                    {
+                        await Task.Delay(300);
+                        render.Progress = p;
+                        await _renderRepository.UpdateAsync(render);
+                        await _renderRepository.SaveChangesAsync();
+                    }
+
+                    var elapsed = DateTime.UtcNow - render.CreatedAt;
                     render.Progress = 100;
                     render.RenderStatus = "Finished";
-                    render.ProcessingDurationMs = 45000;
+                    render.ProcessingDurationMs = (int)elapsed.TotalMilliseconds;
                     await _renderRepository.UpdateAsync(render);
                     await _renderRepository.SaveChangesAsync();
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Swallowing exception inside background task for prototype resilience
+                    try
+                    {
+                        render.RenderStatus = "Failed";
+                        render.Progress = 0;
+                        await _renderRepository.UpdateAsync(render);
+                        await _renderRepository.SaveChangesAsync();
+                    }
+                    catch { /* final effort to mark failed */ }
                 }
             });
 

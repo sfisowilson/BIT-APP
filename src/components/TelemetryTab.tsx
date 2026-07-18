@@ -131,7 +131,7 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({
 
         {/* Alarm Simulator Form */}
         <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 font-display">Raise Mock System Alarm</h3>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 font-display">Test Alarm Trigger (MReq 21)</h3>
           <form onSubmit={handleSimulateAlarm} className="space-y-3 font-mono text-xs">
             <div>
               <label className="block text-[9px] uppercase tracking-wider font-bold text-slate-500 mb-1">Severity</label>

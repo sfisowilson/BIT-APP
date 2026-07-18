@@ -363,6 +363,11 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
                       <button 
                         type="button"
                         onClick={() => {
+                          const exposureSec = (job.processingDurationMs / 1000).toFixed(1);
+                          const frames = job.progress > 0 ? Math.round((job.processingDurationMs / 1000) * 50) : 0;
+                          const totalCharged = job.processingDurationMs > 0 
+                            ? `R ${((job.processingDurationMs / 1000) * 180).toFixed(2)}`
+                            : 'R —.—';
                           const invoice = [
                             'AFROBOTICS BIT — CLIENT PLACEMENT INVOICE',
                             '═══════════════════════════════════════════',
@@ -370,12 +375,14 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
                             `Render Job:      ${job.id}`,
                             `Content ID:      ${job.contentId}`,
                             `Campaign ID:     ${job.campaignId}`,
+                            `Asset ID:        ${job.assetId}`,
                             `Export Preset:   ${job.exportPreset}`,
+                            `Render Status:   ${job.renderStatus}`,
                             `Processing Time: ${job.processingDurationMs} ms`,
-                            `Exposure:        ${job.id === 'r-01' ? '12.0' : '15.0'} seconds`,
-                            `Frames Rendered: ${job.id === 'r-01' ? '600' : '750'} @ 50 FPS`,
+                            `Exposure:        ${exposureSec} seconds`,
+                            `Frames:          ${frames}`,
                             `CPM Rate:        R 180.00`,
-                            `Total Charged:   R ${job.id === 'r-01' ? '2,160.00' : '2,700.00'}`,
+                            `Total Charged:   ${totalCharged}`,
                             '',
                             `Generated: ${new Date().toISOString()}`,
                             '═══════════════════════════════════════════',
@@ -446,7 +453,7 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
             ) : isStitchedDone ? (
               <div className="space-y-4">
                 <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center justify-between text-xs text-emerald-800 font-mono">
-                  <span className="font-bold">✓ Master Program Broadcast Feed Compiled Successfully! (REC.709 High-Profile Stream)</span>
+                  <span className="font-bold">✓ Master Program Broadcast Feed Compiled Successfully</span>
                   <button 
                     onClick={() => {
                       setIsStitchedDone(false);
@@ -458,28 +465,32 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
                   </button>
                 </div>
 
-                {/* Stitched Output Video Timeline Simulation */}
-                <div className="relative aspect-video bg-slate-950 rounded-xl border border-indigo-500/20 overflow-hidden shadow-xl flex items-center justify-center">
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent z-1"></div>
-                  
-                  {/* Visual timeline pointer indicator */}
-                  <div className="text-center space-y-2 z-10">
-                    <Film className="h-10 w-10 text-indigo-400 mx-auto animate-pulse" />
-                    <div className="font-mono text-xs font-bold text-white tracking-widest uppercase">CONCATENATED BROADCAST FEED ENABLED</div>
-                    <div className="text-[10px] font-mono text-slate-400">All Scene Placements Running Smoothly & Frame-Perfectly</div>
+                {/* MReq 7: Show actual completed render jobs summary */}
+                <div className="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+                  <div className="p-4 border-b border-slate-700">
+                    <h4 className="text-xs font-bold text-slate-300 font-display uppercase tracking-wider">
+                      Compiled Render Jobs ({renderList.filter(r => r.renderStatus === 'Finished').length} finished)
+                    </h4>
                   </div>
-
-                  {/* Program timeline controls */}
-                  <div className="absolute bottom-4 left-4 right-4 bg-slate-900/95 border border-slate-800 rounded-lg px-4 py-2 flex items-center justify-between text-[11px] font-mono text-slate-300 z-10">
-                    <div className="flex items-center gap-2">
-                      <Play className="h-3 w-3 text-indigo-400 fill-indigo-400" />
-                      <span>00:00:27 / 00:01:30</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-emerald-400 font-bold">SCENE 1: COFFEE AD (0-12s)</span>
-                      <span className="text-indigo-400 font-bold">SCENE 2: BEER BANNER (12-27s)</span>
-                    </div>
+                  <div className="divide-y divide-slate-800 max-h-[200px] overflow-y-auto">
+                    {renderList.filter(r => r.renderStatus === 'Finished').map(job => (
+                      <div key={job.id} className="p-3 flex items-center justify-between text-[10px] font-mono">
+                        <div className="flex items-center gap-3">
+                          <span className="text-blue-400 font-bold">{job.id}</span>
+                          <span className="text-slate-400">{job.exportPreset}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <span>{(job.processingDurationMs / 1000).toFixed(1)}s</span>
+                          <span className="text-emerald-400">✓</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
+                  {renderList.filter(r => r.renderStatus === 'Finished').length === 0 && (
+                    <div className="p-4 text-center text-xs text-slate-500">
+                      No finished render jobs. Dispatch renders from the sidebar first.
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

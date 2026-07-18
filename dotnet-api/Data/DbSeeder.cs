@@ -4,6 +4,10 @@ using Afrobotics.Bit.Api.Models;
 
 namespace Afrobotics.Bit.Api.Data
 {
+    /// <summary>
+    /// Development seed data for initial database population.
+    /// Not for production use — replace with proper data migration in production.
+    /// </summary>
     public static class DbSeeder
     {
         public static void SeedInitialRecords(PostgresDbContext context)

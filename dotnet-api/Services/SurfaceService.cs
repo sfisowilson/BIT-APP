@@ -39,7 +39,26 @@ namespace Afrobotics.Bit.Api.Services
             {
                 surface.Status = "Approved";
 
-                // Provision an available Ad Slot
+                // MReq 11: Use real campaign context from the request, not hardcoded defaults
+                var campaignId = !string.IsNullOrEmpty(dto.CampaignId) ? dto.CampaignId : "c-01";
+                var approverUserId = !string.IsNullOrEmpty(dto.UserId) ? dto.UserId : "usr-02";
+
+                // Calculate dimensions from surface boundary coordinates (MReq 3)
+                var dimensions = "1920x540"; // default
+                try
+                {
+                    var coords = System.Text.Json.JsonSerializer.Deserialize<List<Dictionary<string, double>>>(surface.BoundaryCoordinatesJson);
+                    if (coords != null && coords.Count >= 2)
+                    {
+                        var xs = coords.Select(c => c["x"]).ToList();
+                        var ys = coords.Select(c => c["y"]).ToList();
+                        var w = (int)(xs.Max() - xs.Min());
+                        var h = (int)(ys.Max() - ys.Min());
+                        dimensions = $"{w}x{h}";
+                    }
+                }
+                catch { /* keep default dimensions */ }
+
                 var adSlot = new AdSlotItem
                 {
                     Id = "asl-" + Guid.NewGuid().ToString().Substring(0, 4),
@@ -47,18 +66,18 @@ namespace Afrobotics.Bit.Api.Services
                     MarketRegion = "SADC Region",
                     PricingValue = Convert.ToDecimal(surface.ViabilityScore * 12000),
                     SlotStatus = "Available",
-                    Dimensions = "1920x540",
+                    Dimensions = dimensions,
+                    CampaignId = campaignId,
                     CreatedAt = DateTime.UtcNow
                 };
                 await _surfaceRepository.AddAdSlotAsync(adSlot);
 
-                // Add Double-Pass Human-In-The-Loop Approval record
                 var approval = new ApprovalItem
                 {
                     Id = "ap-" + Guid.NewGuid().ToString().Substring(0, 4),
                     AdSlotId = adSlot.Id,
-                    CampaignId = "c-01", // Default active campaign
-                    ApproverUserId = "usr-02",
+                    CampaignId = campaignId,
+                    ApproverUserId = approverUserId,
                     ApproverEmail = approverEmail,
                     Decision = "Approved",
                     Timestamp = DateTime.UtcNow

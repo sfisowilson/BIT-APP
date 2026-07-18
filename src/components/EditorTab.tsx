@@ -46,6 +46,8 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   const [ambientIntensity, setAmbientIntensity] = React.useState<number>(0.85);
   
   const currentScene = scenesForVideo.find(s => s.id === selectedSceneId);
+  const activeVideo = contentList.find(v => v.id === selectedVideo);
+  const isLocalVideo = activeVideo?.storageKey?.startsWith('/api/content/file/');
 
   React.useEffect(() => {
     setAiPromptText(currentScene?.aiPrompt || '');
@@ -119,16 +121,30 @@ export const EditorTab: React.FC<EditorTabProps> = ({
             </div>
           </div>
 
-          {/* Wireframe Player Overlay Simulation */}
-          <div className={`relative aspect-video bg-slate-950 border rounded-xl overflow-hidden flex items-center justify-center group shadow-2xl transition-all duration-500 ${
+          {/* MReq 3: Video player with surface overlay for placement review */}
+          <div className={`relative aspect-video bg-black border rounded-xl overflow-hidden group shadow-2xl transition-all duration-500 ${
             currentScene?.aiStatus === 'completed' 
               ? 'border-fuchsia-500 shadow-fuchsia-500/10' 
-              : 'border-slate-800'
+              : 'border-slate-700'
           }`}>
-            {/* Simulated Soccer Stadium Background using styled absolute grids */}
-            <div className={`absolute inset-0 bg-gradient-to-t from-emerald-950/20 via-slate-950 to-slate-950 transition-all duration-500 ${
-              currentScene?.aiStatus === 'completed' ? 'opacity-70 bg-fuchsia-950/10' : 'opacity-90'
-            }`}></div>
+            {/* Real video playback when file exists */}
+            {isLocalVideo && activeVideo ? (
+              <video
+                src={activeVideo.storageKey}
+                className="absolute inset-0 w-full h-full object-contain"
+                controls
+                preload="metadata"
+                id="qa_video_player"
+              />
+            ) : (
+              /* Fallback: dark preview frame when no video file */
+              <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center">
+                <div className="text-center">
+                  <Play className="h-12 w-12 text-white/20 mx-auto mb-2" />
+                  <p className="text-white/30 text-xs font-mono">No video file — upload in Ingestion tab</p>
+                </div>
+              </div>
+            )}
 
             {/* AI Active Overlay indicator */}
             {currentScene?.aiStatus === 'completed' && (
@@ -138,20 +154,9 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               </div>
             )}
             
-            {/* Bounding vector polygons drawn via SVG overlay */}
-            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1280 720" id="player_overlay_svg">
-              <defs>
-                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff" strokeWidth="0.5" strokeOpacity="0.05" />
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#grid)" />
-
-              {/* Mock Soccer Field Pitch perspective line overlays */}
-              <path d="M 100 720 L 500 400 L 780 400 L 1180 720 Z" fill="#10b981" fillOpacity="0.06" stroke="#ffffff" strokeOpacity="0.1" strokeWidth="1" />
-              <line x1="640" y1="400" x2="640" y2="720" stroke="#ffffff" strokeOpacity="0.2" strokeWidth="1" />
-
-              {/* Render surface polygons from surfacesForScene */}
+            {/* Bounding vector polygons via SVG overlay on top of video */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1280 720" id="player_overlay_svg">
+              {/* MReq 3: Render surface polygons from surfacesForScene — clickable for selection */}
               {surfacesForScene.map(sf => {
                 const isSelected = selectedSurfaceId === sf.id;
                 const isExcluded = sf.status === "Excluded";
@@ -235,14 +240,14 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               })}
             </svg>
 
-            {/* Bottom HUD bar on the player */}
-            <div className="absolute bottom-4 left-4 right-4 bg-slate-900/90 border border-slate-800 rounded-lg px-4 py-2 flex items-center justify-between text-[11px] font-mono text-slate-400">
+            {/* HUD bar with video metadata */}
+            <div className="absolute bottom-4 left-4 right-4 bg-slate-900/90 border border-slate-700 rounded-lg px-4 py-2 flex items-center justify-between text-[11px] font-mono text-slate-400 z-10">
               <div className="flex items-center gap-2">
                 <Play className="h-3 w-3 text-blue-500 fill-blue-500" />
-                <span>00:00:15 / 00:01:30</span>
+                <span>{activeVideo?.duration || '00:00:00'}</span>
               </div>
               <div>
-                <span>MODEL INFERENCE PRE-ANNOTATION FEED</span>
+                <span>{activeVideo?.resolution || '1920x1080'} · {activeVideo?.frameRate || 50} FPS</span>
               </div>
             </div>
           </div>
@@ -387,17 +392,16 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    <span className="text-[9px] bg-slate-50 border border-slate-250/50 px-2 py-0.5 rounded text-slate-600 font-mono">
-                      Stitch Blend: Seamless
-                    </span>
-                    <span className="text-[9px] bg-slate-50 border border-slate-250/50 px-2 py-0.5 rounded text-slate-600 font-mono">
-                      Contrast Curve: Adaptive
-                    </span>
-                    <span className="text-[9px] bg-slate-50 border border-slate-250/50 px-2 py-0.5 rounded text-slate-600 font-mono">
-                      Double-Pass Render: Yes
-                    </span>
-                  </div>
+                  {currentScene.aiOutputDescription && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <span className="text-[9px] bg-slate-50 border border-slate-250/50 px-2 py-0.5 rounded text-slate-600 font-mono">
+                        Model: {currentScene.aiModelUsed || 'Gemini'}
+                      </span>
+                      <span className="text-[9px] bg-slate-50 border border-slate-250/50 px-2 py-0.5 rounded text-slate-600 font-mono">
+                        Status: Complete
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 

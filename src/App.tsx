@@ -409,7 +409,7 @@ export default function App() {
     }
   };
 
-  // Handle Surface Approval Decision (MReq 11)
+  // Handle Surface Approval Decision (MReq 11: real campaign context, audit trail)
   const handleSurfaceDecision = async (decision: "Approved" | "Rejected") => {
     if (!selectedSurfaceId || !user) return;
     try {
@@ -419,7 +419,8 @@ export default function App() {
         body: JSON.stringify({
           decision,
           rejectionReason: decision === "Rejected" ? rejectionReason : "",
-          userId: user.email
+          campaignId: selectedCampaignId || undefined,
+          userId: user.id
         })
       });
       setRejectionReason('');

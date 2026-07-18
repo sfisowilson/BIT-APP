@@ -81,6 +81,12 @@ namespace Afrobotics.Bit.Api.Models
         
         [Required]
         public string QaStatus { get; set; } = "Unchecked"; // Unchecked, Approved, Flagged
+        
+        // MReq 2: AI scene modification metadata
+        public string? AiPrompt { get; set; }
+        public string? AiStatus { get; set; }
+        public string? AiOutputDescription { get; set; }
+        public string? AiModelUsed { get; set; }
     }
 
     public class SurfaceItem
