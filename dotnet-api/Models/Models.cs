@@ -170,6 +170,12 @@ namespace Afrobotics.Bit.Api.Models
         
         [Required]
         public string BrandCategory { get; set; } = string.Empty;
+        
+        // MReq 10: Assets belong to a campaign
+        public string? CampaignId { get; set; }
+        
+        [ForeignKey(nameof(CampaignId))]
+        public CampaignItem? Campaign { get; set; }
     }
 
     public class AdSlotItem

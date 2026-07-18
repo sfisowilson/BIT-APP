@@ -42,36 +42,39 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
   const [isStitchedDone, setIsStitchedDone] = React.useState(false);
   const [stitchingLogs, setStitchingLogs] = React.useState<string[]>([]);
 
-  const handleStitchProgram = () => {
+  const handleStitchProgram = async () => {
     setIsStitching(true);
+    setIsStitchedDone(false);
     setStitchingProgress(0);
-    setStitchingLogs([
-      "[FFMPEG] Initializing high-profile broadcast concatenation pipeline...",
-      "[STITCHER] Discovering successful ad-insertion segments...",
-      "[FFMPEG] Loading Scene #1 render clip: s3://afrobotics-staging/renders/r-01_composed.mov",
-      "[FFMPEG] Loading Scene #2 render clip: s3://afrobotics-staging/renders/r-02_composed.mov",
-    ]);
+    
+    const finishedJobs = renderList.filter(r => r.renderStatus === 'Finished');
+    const initLogs = ["[FFMPEG] Initializing high-profile broadcast concatenation pipeline..."];
+    if (finishedJobs.length === 0) {
+      initLogs.push("[WARN] No finished render jobs found. Run GPU compositing first.");
+    } else {
+      initLogs.push(`[STITCHER] Discovered ${finishedJobs.length} completed ad-insertion segment(s)...`);
+      finishedJobs.forEach(j => initLogs.push(`[FFMPEG] Loading render clip: s3://afrobotics-staging/renders/${j.id}_composed.mov`));
+    }
+    setStitchingLogs(initLogs);
 
-    let prog = 0;
-    const interval = setInterval(() => {
-      prog += 10;
-      setStitchingProgress(prog);
+    const stages = [
+      { pct: 20, msg: "[TRANSCODER] Analyzing gamut consistency across adjacent cuts..." },
+      { pct: 40, msg: "[COLOR_GRAD] Applying unified REC.709 cinematic profiles..." },
+      { pct: 60, msg: "[AUDIO] Synchronizing multi-channel surround sound elements..." },
+      { pct: 80, msg: "[INDEXER] Writing SMPTE timecode frame offset matrices..." },
+    ];
 
-      if (prog === 20) {
-        setStitchingLogs(prev => [...prev, "[TRANSCODER] Analyzing gamut consistency across adjacent cuts..."]);
-      } else if (prog === 40) {
-        setStitchingLogs(prev => [...prev, "[COLOR_GRAD] Applying unified REC.709 cinematic profiles..."]);
-      } else if (prog === 60) {
-        setStitchingLogs(prev => [...prev, "[AUDIO] Synchronizing multi-channel surround sound elements..."]);
-      } else if (prog === 80) {
-        setStitchingLogs(prev => [...prev, "[INDEXER] Writing SMPTE timecode frame offset matrices..."]);
-      } else if (prog === 100) {
-        setStitchingLogs(prev => [...prev, "[SUCCESS] Broadcaster MXF stream stitching completed! Master written to S3 feed output."]);
-        clearInterval(interval);
-        setIsStitching(false);
-        setIsStitchedDone(true);
-      }
-    }, 400);
+    for (const stage of stages) {
+      await new Promise(r => setTimeout(r, 350 + Math.random() * 300));
+      setStitchingProgress(stage.pct);
+      setStitchingLogs(prev => [...prev, stage.msg]);
+    }
+
+    await new Promise(r => setTimeout(r, 400));
+    setStitchingProgress(100);
+    setStitchingLogs(prev => [...prev, "[SUCCESS] Broadcaster MXF stream stitching completed! Master written to S3 feed output."]);
+    setIsStitching(false);
+    setIsStitchedDone(true);
   };
 
   return (
@@ -281,7 +284,35 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
                       <span>Calculated frame-perfectly based on regional CPM rate (R 180.00) & spatial coordinates prominence.</span>
                       <button 
                         type="button"
-                        onClick={() => alert(`SADC Corporate PDF Invoice generated successfully for Render Job ${job.id}. Transmitted to SAP/ERP.`)}
+                        onClick={() => {
+                          const invoice = [
+                            'AFROBOTICS BIT — CLIENT PLACEMENT INVOICE',
+                            '═══════════════════════════════════════════',
+                            '',
+                            `Render Job:      ${job.id}`,
+                            `Content ID:      ${job.contentId}`,
+                            `Campaign ID:     ${job.campaignId}`,
+                            `Export Preset:   ${job.exportPreset}`,
+                            `Processing Time: ${job.processingDurationMs} ms`,
+                            `Exposure:        ${job.id === 'r-01' ? '12.0' : '15.0'} seconds`,
+                            `Frames Rendered: ${job.id === 'r-01' ? '600' : '750'} @ 50 FPS`,
+                            `CPM Rate:        R 180.00`,
+                            `Total Charged:   R ${job.id === 'r-01' ? '2,160.00' : '2,700.00'}`,
+                            '',
+                            `Generated: ${new Date().toISOString()}`,
+                            '═══════════════════════════════════════════',
+                            'Afrobotics BIT — Brand Insertion Technology',
+                          ].join('\n');
+                          const blob = new Blob([invoice], { type: 'text/plain' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `BIT_Invoice_${job.id}_${Date.now()}.txt`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                        }}
                         className="inline-flex items-center gap-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-xs uppercase tracking-wider text-[9px]"
                       >
                         <Receipt className="h-3 w-3" />

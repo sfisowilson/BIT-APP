@@ -114,11 +114,16 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
               </div>
             </div>
 
-            <div className="border border-dashed border-slate-200 rounded-xl p-4 bg-slate-50/50 text-center">
+            <label className="border border-dashed border-slate-200 rounded-xl p-4 bg-slate-50/50 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors block">
               <Video className="h-6 w-6 text-slate-400 mx-auto mb-2" />
               <span className="text-2xs text-slate-500 block font-semibold">Select MXF, ProRes, or high-bitrate raw files.</span>
               <span className="text-[10px] text-slate-400 block mt-1">MReq 1 Compliance: maintains absolute visual and duration integrity.</span>
-            </div>
+              <input type="file" accept="video/*,.mxf,.mov,.mp4,.avi" className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file && !newVideoTitle) setNewVideoTitle(file.name.replace(/\.[^.]+$/, ''));
+                }} />
+            </label>
 
             <button 
               type="submit" 

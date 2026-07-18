@@ -24,6 +24,22 @@ export interface SceneItem {
   aiModelUsed?: string;
 }
 
+/** Shape returned by the .NET API (JSON strings for complex types) */
+export interface SurfaceItemResponse {
+  id: string;
+  sceneId: string;
+  surfaceType: string;
+  boundaryCoordinatesJson: string;  // Serialized JSON array of {x,y} points
+  estimatedDepth: number;
+  orientationVectorJson: string;    // Serialized JSON {yaw,pitch,roll}
+  confidenceScore: number;
+  viabilityScore: number;
+  status: string;
+  exclusionReason?: string;
+  placementImageUrl?: string;
+}
+
+/** Parsed surface with deserialized coordinates and orientation */
 export interface SurfaceItem {
   id: string;
   sceneId: string;
@@ -36,6 +52,34 @@ export interface SurfaceItem {
   status: "Candidate" | "Approved" | "Excluded" | "Pending";
   exclusionReason?: string;
   placementImageUrl?: string;
+}
+
+/** Parse a SurfaceItemResponse from the API into a SurfaceItem with proper types */
+export function parseSurfaceItem(raw: SurfaceItemResponse): SurfaceItem {
+  let coords: { x: number; y: number }[] = [];
+  let orientation: { yaw: number; pitch: number; roll: number } = { yaw: 0, pitch: 0, roll: 0 };
+  
+  try {
+    coords = JSON.parse(raw.boundaryCoordinatesJson || '[]');
+  } catch { /* keep default */ }
+  
+  try {
+    orientation = JSON.parse(raw.orientationVectorJson || '{}');
+  } catch { /* keep default */ }
+  
+  return {
+    id: raw.id,
+    sceneId: raw.sceneId,
+    surfaceType: raw.surfaceType,
+    boundaryCoordinates: coords,
+    estimatedDepth: raw.estimatedDepth,
+    orientationVector: orientation,
+    confidenceScore: raw.confidenceScore,
+    viabilityScore: raw.viabilityScore,
+    status: raw.status as SurfaceItem['status'],
+    exclusionReason: raw.exclusionReason,
+    placementImageUrl: raw.placementImageUrl,
+  };
 }
 
 export interface CampaignItem {
@@ -58,7 +102,44 @@ export interface CreativeAsset {
   fileSize: string;
   dimensions: string;
   brandCategory: string;
+  campaignId?: string;  // MReq 10: asset can be assigned to a campaign
 }
+
+/** Comprehensive brand categories for competitive separation and filtering (MReq 3, 10) */
+export const BRAND_CATEGORIES = [
+  'Apparel & Footwear',
+  'Automotive',
+  'Banking & Financial Services',
+  'Beauty & Personal Care',
+  'Beverages (Alcoholic)',
+  'Beverages (Non-Alcoholic)',
+  'Construction & Hardware',
+  'Consumer Electronics',
+  'Education & Training',
+  'Energy & Utilities',
+  'Entertainment & Media',
+  'FMCG - Food & Snacks',
+  'FMCG - Household Goods',
+  'Gaming & eSports',
+  'Government & Public Service',
+  'Healthcare & Pharmaceuticals',
+  'Insurance',
+  'Logistics & Courier',
+  'Luxury Goods',
+  'Mobile Networks & Telecoms',
+  'Motoring & Fuel',
+  'NGO & Non-Profit',
+  'Quick-Service Restaurants',
+  'Real Estate & Property',
+  'Retail & eCommerce',
+  'Software & SaaS',
+  'Sports & Fitness',
+  'Streaming & Broadcasting',
+  'Technology & IT Services',
+  'Travel & Hospitality',
+] as const;
+
+export type BrandCategory = typeof BRAND_CATEGORIES[number];
 
 export interface RenderItem {
   id: string;

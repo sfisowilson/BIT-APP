@@ -28,9 +28,9 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   setSelectedVideo,
   selectedSceneId,
   setSelectedSceneId,
-  scenesForVideo,
-  surfacesForScene,
-  selectedSurfaceId,
+  scenesForVideo = [],
+  surfacesForScene = [],
+  selectedSurfaceId = '',
   setSelectedSurfaceId,
   rejectionReason,
   setRejectionReason,
@@ -188,10 +188,12 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                         <polygon 
                           points={pointsString}
                           fill={
-                            activePreviewAsset.brandCategory === 'Beverages' ? '#1e3a8a' :
-                            activePreviewAsset.brandCategory === 'Automotive' ? '#1e293b' :
-                            activePreviewAsset.brandCategory === 'Telecommunications' ? '#701a75' :
-                            '#065f46'
+                            activePreviewAsset.brandCategory.includes('Beverage') ? '#1e3a8a' :
+                            activePreviewAsset.brandCategory.includes('Automotive') || activePreviewAsset.brandCategory.includes('Motoring') ? '#1e293b' :
+                            activePreviewAsset.brandCategory.includes('Telecom') || activePreviewAsset.brandCategory.includes('Mobile') ? '#701a75' :
+                            activePreviewAsset.brandCategory.includes('Apparel') ? '#b45309' :
+                            activePreviewAsset.brandCategory.includes('Electronics') || activePreviewAsset.brandCategory.includes('Technology') ? '#065f46' :
+                            '#475569'
                           }
                           fillOpacity={0.8}
                         />

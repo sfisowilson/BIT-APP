@@ -15,7 +15,6 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { User } from '../types';
-import { mockFetch } from '../mockApi';
 
 interface AdminConsoleTabProps {
   onTriggerLog?: (code: string, severity: 'Info' | 'Warning' | 'Major' | 'Critical', module: string, user: string, desc: string) => void;
@@ -39,11 +38,23 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
   const [editRole, setEditRole] = useState<"Admin" | "Editor" | "Advertiser">('Editor');
   const [editStatus, setEditStatus] = useState<"Active" | "Suspended">('Active');
 
+  const getToken = () => localStorage.getItem('bit_token');
+
+  const fetchWithAuth = async (url: string, options: RequestInit = {}): Promise<Response> => {
+    const token = getToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    };
+    return fetch(url, { ...options, headers });
+  };
+
   // Load all users from REST API
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await mockFetch('/api/users');
+      const res = await fetchWithAuth('/api/users');
       const data = await res.json();
       if (res.ok) {
         setUsers(data);
@@ -78,9 +89,8 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
     }
 
     try {
-      const res = await mockFetch('/api/users', {
+      const res = await fetchWithAuth('/api/users', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fullName: newFullName.trim(),
           email: newEmail.trim().toLowerCase(),
@@ -129,9 +139,8 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
     }
 
     try {
-      const res = await mockFetch('/api/users/update', {
+      const res = await fetchWithAuth('/api/users/update', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: userToUpdate.id,
           accountStatus: nextStatus
@@ -158,9 +167,8 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
   // Handle Save edits (Role/Status)
   const handleSaveEdits = async (userId: string) => {
     try {
-      const res = await mockFetch('/api/users/update', {
+      const res = await fetchWithAuth('/api/users/update', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: userId,
           role: editRole,

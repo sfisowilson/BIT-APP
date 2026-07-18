@@ -11,7 +11,9 @@ namespace Afrobotics.Bit.Api.Services
     public interface ICampaignService
     {
         Task<IEnumerable<CampaignItem>> GetCampaignsAsync();
+        Task<CampaignItem?> GetCampaignByIdAsync(string id);
         Task<CampaignItem> CreateCampaignAsync(CreateCampaignDto dto);
+        Task<bool> DeleteCampaignAsync(string id);
     }
 
     public class CampaignService : ICampaignService
@@ -28,12 +30,18 @@ namespace Afrobotics.Bit.Api.Services
             return await _campaignRepository.GetAllAsync();
         }
 
+        public async Task<CampaignItem?> GetCampaignByIdAsync(string id)
+        {
+            return await _campaignRepository.GetByIdAsync(id);
+        }
+
         public async Task<CampaignItem> CreateCampaignAsync(CreateCampaignDto dto)
         {
-            var namingRegex = new Regex(@"^[A-Z0-9]{8}_[A-Z0-9]+$");
+            // Per MReq 1: scene-code is 8 or 10 uppercase alphanumeric chars, underscore, brand identifier
+            var namingRegex = new Regex(@"^[A-Z0-9]{8,10}_[A-Z0-9]+$");
             if (!namingRegex.IsMatch(dto.NamingStructureCode))
             {
-                throw new ArgumentException("Naming structure violation! Code must match exactly: 8-character scene-code, underscore, brand identifier (e.g. UZ01EP12_COKE).");
+                throw new ArgumentException("Naming structure violation! Code must match: 8- or 10-character scene-code, underscore, brand identifier (e.g. UZ01EP12_COKE or GEN23EP100_UNIL).");
             }
 
             var campaign = new CampaignItem
@@ -53,6 +61,16 @@ namespace Afrobotics.Bit.Api.Services
             await _campaignRepository.SaveChangesAsync();
 
             return campaign;
+        }
+
+        public async Task<bool> DeleteCampaignAsync(string id)
+        {
+            var campaign = await _campaignRepository.GetByIdAsync(id);
+            if (campaign == null) return false;
+
+            await _campaignRepository.DeleteAsync(campaign);
+            await _campaignRepository.SaveChangesAsync();
+            return true;
         }
     }
 }

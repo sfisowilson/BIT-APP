@@ -23,6 +23,8 @@ import {
   ContentItem, 
   SceneItem, 
   SurfaceItem, 
+  SurfaceItemResponse,
+  parseSurfaceItem,
   CampaignItem, 
   CreativeAsset, 
   RenderItem, 
@@ -31,7 +33,7 @@ import {
   TIMELINE_DATA 
 } from './types';
 import { DOCUMENT_CONTENT } from './document';
-import { mockFetch } from './mockApi';
+import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession } from './apiClient';
 
 // Import our modular sub-components
 import { CampaignsTab } from './components/CampaignsTab';
@@ -63,6 +65,7 @@ export default function App() {
   const [alarmList, setAlarmList] = useState<AlarmItem[]>([]);
 
   // Selection / Form states
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<string>('v-01');
   const [scenesForVideo, setScenesForVideo] = useState<SceneItem[]>([]);
   const [selectedSceneId, setSelectedSceneId] = useState<string>('');
@@ -79,7 +82,7 @@ export default function App() {
 
   const [newAssetName, setNewAssetName] = useState<string>('');
   const [newAssetType, setNewAssetType] = useState<"Image" | "Logo" | "Video">('Image');
-  const [newAssetCategory, setNewAssetCategory] = useState<string>('Beverages');
+  const [newAssetCategory, setNewAssetCategory] = useState<string>('Beverages (Non-Alcoholic)');
 
   const [newVideoTitle, setNewVideoTitle] = useState<string>('');
   const [newVideoRes, setNewVideoRes] = useState<string>('1920x1080 (1080p)');
@@ -104,40 +107,24 @@ export default function App() {
     const password = bypassCredentials ? bypassCredentials.pass : loginPassword;
 
     try {
-      const res = await mockFetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setAuthError(data.error || "Authentication failed");
-        return;
-      }
+      const data = await apiLogin({ email, password });
       setToken(data.token);
       setUser(data.user);
-      localStorage.setItem('bit_token', data.token);
-      localStorage.setItem('bit_user', JSON.stringify(data.user));
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setAuthError("Identity Service connection error.");
+      setAuthError(err.message || "Identity Service connection error.");
     }
   };
 
   const handleLogout = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem('bit_token');
-    localStorage.removeItem('bit_user');
+    clearToken();
   };
 
   // Secure request broker (MReq 8 over secure JWT authorization)
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
-    const headers: HeadersInit = {
-      ...options.headers,
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-    };
-    const res = await mockFetch(url, { ...options, headers });
+    const res = await apiFetchWithAuth(url, options);
     if (!res.ok) {
       const clone = res.clone();
       const text = await clone.text();
@@ -154,11 +141,11 @@ export default function App() {
 
   // Load user session from local storage on load or auto-login (MReq 8)
   useEffect(() => {
-    const savedToken = localStorage.getItem('bit_token');
-    const savedUser = localStorage.getItem('bit_user');
+    const savedToken = getToken();
+    const savedUser = getSavedUser<UserSession>();
     if (savedToken && savedUser) {
       setToken(savedToken);
-      setUser(JSON.parse(savedUser));
+      setUser(savedUser);
     } else {
       // Auto-login as default editor to ensure out-of-the-box operation (Sfiso Dlamini, Editor)
       handleLogin(undefined, { email: 'loverboy.sfiso@gmail.com', pass: 'editor123' });
@@ -219,18 +206,12 @@ export default function App() {
     if (token) {
       fetchAllData();
 
-      const handleDbUpdate = () => {
-        fetchAllData();
-      };
-      window.addEventListener('bit_db_update', handleDbUpdate);
-
-      // Poll logs, alarms, and renders every 3 seconds to keep dynamic percentages/telemetry fresh
+      // Poll for fresh data every 5 seconds (renders, alarms, logs)
       const interval = setInterval(() => {
         fetchAllData();
-      }, 3000);
+      }, 5000);
       return () => {
         clearInterval(interval);
-        window.removeEventListener('bit_db_update', handleDbUpdate);
       };
     }
   }, [token]);
@@ -257,10 +238,11 @@ export default function App() {
     if (!selectedSceneId || !token) return;
     fetchWithAuth(`/api/scenes/${selectedSceneId}/surfaces`)
       .then(r => r.json())
-      .then(data => {
-        setSurfacesForScene(data);
-        if (data.length > 0) {
-          setSelectedSurfaceId(data[0].id);
+      .then((rawData: SurfaceItemResponse[]) => {
+        const parsed = rawData.map(parseSurfaceItem);
+        setSurfacesForScene(parsed);
+        if (parsed.length > 0) {
+          setSelectedSurfaceId(parsed[0].id);
         } else {
           setSelectedSurfaceId('');
         }
@@ -299,8 +281,8 @@ export default function App() {
     }
   };
 
-  // Handle Asset library upload simulation
-  const handleUploadAsset = async (e: React.FormEvent) => {
+  // Handle Asset library upload (MReq 10: optional campaign association)
+  const handleUploadAsset = async (e: React.FormEvent, campaignId?: string) => {
     e.preventDefault();
     if (!newAssetName) return;
     try {
@@ -310,13 +292,38 @@ export default function App() {
         body: JSON.stringify({
           name: newAssetName,
           type: newAssetType,
-          brandCategory: newAssetCategory
+          brandCategory: newAssetCategory,
+          campaignId: campaignId || null
         })
       });
       setNewAssetName('');
       fetchAllData();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // Handle associating an existing asset with a campaign
+  const handleAssociateAsset = async (assetId: string, campaignId: string) => {
+    try {
+      await fetchWithAuth(`/api/assets/${assetId}/campaign/${campaignId}`, {
+        method: 'PUT'
+      });
+      fetchAllData();
+    } catch (err) {
+      console.error('Failed to associate asset:', err);
+    }
+  };
+
+  // Handle removing an asset from its campaign
+  const handleUnassociateAsset = async (assetId: string) => {
+    try {
+      await fetchWithAuth(`/api/assets/${assetId}/unassociate`, {
+        method: 'PUT'
+      });
+      fetchAllData();
+    } catch (err) {
+      console.error('Failed to unassociate asset:', err);
     }
   };
 
@@ -398,8 +405,8 @@ export default function App() {
       });
       setRejectionReason('');
       // Force refresh of surfaces list
-      const updated = await fetchWithAuth(`/api/scenes/${selectedSceneId}/surfaces`).then(r => r.json());
-      setSurfacesForScene(updated);
+      const rawUpdated = await fetchWithAuth(`/api/scenes/${selectedSceneId}/surfaces`).then(r => r.json()) as SurfaceItemResponse[];
+      setSurfacesForScene(rawUpdated.map(parseSurfaceItem));
       fetchAllData();
     } catch (err) {
       console.error(err);
@@ -883,6 +890,8 @@ export default function App() {
             <CampaignsTab
               campaignList={campaignList}
               assetList={assetList}
+              selectedCampaignId={selectedCampaignId}
+              setSelectedCampaignId={setSelectedCampaignId}
               newCampaignName={newCampaignName}
               setNewCampaignName={setNewCampaignName}
               newCampaignCode={newCampaignCode}
@@ -900,6 +909,8 @@ export default function App() {
               newAssetCategory={newAssetCategory}
               setNewAssetCategory={setNewAssetCategory}
               handleCreateAsset={handleUploadAsset}
+              handleAssociateAsset={handleAssociateAsset}
+              handleUnassociateAsset={handleUnassociateAsset}
               handleDeleteCampaign={handleDeleteCampaign}
               handleDeleteAsset={handleDeleteAsset}
             />

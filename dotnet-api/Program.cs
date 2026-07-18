@@ -2,7 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Afrobotics.Bit.Api.Data;
 using Afrobotics.Bit.Api.Repositories;
 using Afrobotics.Bit.Api.Services;
@@ -10,11 +10,16 @@ using Afrobotics.Bit.Api.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Use camelCase for JSON property names (e.g., "fullName" instead of "FullName")
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    });
 
 // Configure EF Core with PostgreSQL (MReq 25)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
-    ?? "Host=localhost;Database=afrobotics_bit;Username=postgres;Password=postgres";
+    ?? "Host=localhost;Database=afrobotics_bit;Username=postgres;Password=Password@1";
 builder.Services.AddDbContext<PostgresDbContext>(options =>
     options.UseNpgsql(connectionString));
 
@@ -61,6 +66,8 @@ builder.Services.AddScoped<IContentRepository, ContentRepository>();
 builder.Services.AddScoped<ISurfaceRepository, SurfaceRepository>();
 builder.Services.AddScoped<IRenderRepository, RenderRepository>();
 builder.Services.AddScoped<IAlarmRepository, AlarmRepository>();
+builder.Services.AddScoped<IAssetRepository, AssetRepository>();
+builder.Services.AddScoped<ILogRepository, LogRepository>();
 
 // Register operational Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -69,6 +76,9 @@ builder.Services.AddScoped<IContentService, ContentService>();
 builder.Services.AddScoped<ISurfaceService, SurfaceService>();
 builder.Services.AddScoped<IRenderService, RenderService>();
 builder.Services.AddScoped<IAlarmService, AlarmService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IAssetService, AssetService>();
+builder.Services.AddScoped<ILogService, LogService>();
 
 var app = builder.Build();
 
@@ -85,20 +95,35 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Seed initial database records (Users, sample metadata) if database is empty
+// Apply EF Core migrations on startup & seed initial data if database is empty
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    var context = services.GetRequiredService<PostgresDbContext>();
+
+    // Step 1: apply pending EF Core migrations
     try
     {
-        var context = services.GetRequiredService<PostgresDbContext>();
-        context.Database.EnsureCreated(); // Auto-migrate or ensure schema is populated
-        // DbSeeder.SeedInitialRecords(context);
+        context.Database.Migrate();
+        logger.LogInformation("Database migrations applied successfully.");
     }
     catch (Exception ex)
     {
-        var logger = services.GetRequiredService<ILogger<Program>>();
-        logger.LogError(ex, "An error occurred during database migration/seeding.");
+        // Tables may already exist from a previous EnsureCreated() call.
+        // Log a warning and continue — the seed step below will still run.
+        logger.LogWarning(ex, "Migration failed (tables may already exist). Continuing to seed step.");
+    }
+
+    // Step 2: seed initial data (only inserts if tables are empty)
+    try
+    {
+        DbSeeder.SeedInitialRecords(context);
+        logger.LogInformation("Database seeding completed.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred during database seeding.");
     }
 }
 

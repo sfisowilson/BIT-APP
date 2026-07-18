@@ -10,6 +10,7 @@ namespace Afrobotics.Bit.Api.Services
     {
         Task<IEnumerable<AlarmItem>> GetAlarmsAsync();
         Task<AlarmItem?> ClearAlarmAsync(string id);
+        Task<AlarmItem> CreateAlarmAsync(AlarmItem alarm);
     }
 
     public class AlarmService : IAlarmService
@@ -33,6 +34,18 @@ namespace Afrobotics.Bit.Api.Services
 
             alarm.IsActive = false;
             await _alarmRepository.UpdateAsync(alarm);
+            await _alarmRepository.SaveChangesAsync();
+
+            return alarm;
+        }
+
+        public async Task<AlarmItem> CreateAlarmAsync(AlarmItem alarm)
+        {
+            alarm.Id = "al-" + Guid.NewGuid().ToString().Substring(0, 4);
+            alarm.Timestamp = DateTime.UtcNow;
+            alarm.IsActive = true;
+
+            await _alarmRepository.AddAsync(alarm);
             await _alarmRepository.SaveChangesAsync();
 
             return alarm;

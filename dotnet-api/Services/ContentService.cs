@@ -12,6 +12,7 @@ namespace Afrobotics.Bit.Api.Services
         Task<IEnumerable<ContentItem>> GetContentAsync();
         Task<ContentItem> IngestVideoAsync(IngestVideoDto dto);
         Task<IEnumerable<SceneItem>> GetScenesAsync(string contentId);
+        Task<bool> DeleteContentAsync(string id);
     }
 
     public class ContentService : IContentService
@@ -57,6 +58,16 @@ namespace Afrobotics.Bit.Api.Services
         public async Task<IEnumerable<SceneItem>> GetScenesAsync(string contentId)
         {
             return await _contentRepository.GetScenesByContentIdAsync(contentId);
+        }
+
+        public async Task<bool> DeleteContentAsync(string id)
+        {
+            var content = await _contentRepository.GetByIdAsync(id);
+            if (content == null) return false;
+
+            await _contentRepository.DeleteAsync(content);
+            await _contentRepository.SaveChangesAsync();
+            return true;
         }
     }
 }

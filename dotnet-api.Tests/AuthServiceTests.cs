@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using Moq;
 using Xunit;
 using Afrobotics.Bit.Api.DTOs;
@@ -12,12 +13,14 @@ namespace Afrobotics.Bit.Tests
     public class AuthServiceTests
     {
         private readonly Mock<IUserRepository> _mockUserRepo;
+        private readonly Mock<IConfiguration> _mockConfig;
         private readonly AuthService _service;
 
         public AuthServiceTests()
         {
             _mockUserRepo = new Mock<IUserRepository>();
-            _service = new AuthService(_mockUserRepo.Object);
+            _mockConfig = new Mock<IConfiguration>();
+            _service = new AuthService(_mockUserRepo.Object, _mockConfig.Object);
         }
 
         [Fact]

@@ -52,5 +52,23 @@ namespace Afrobotics.Bit.Api.Controllers
             var scenes = await _contentService.GetScenesAsync(contentId);
             return Ok(scenes);
         }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteContent(string id)
+        {
+            try
+            {
+                var deleted = await _contentService.DeleteContentAsync(id);
+                if (!deleted)
+                {
+                    return NotFound(new { error = "Content not found" });
+                }
+                return Ok(new { success = true });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
     }
 }

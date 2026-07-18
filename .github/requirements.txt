@@ -1,0 +1,438 @@
+
+Afrobotics BIT │ Requirement Specification │ Afrobotics – Confidential
+REQUIREMENT SPECIFICATION Afrobotics Brand Insertion Technology (BIT) – Release 1
+Project Name:
+Afrobotics Brand Insertion Technology (BIT) – Dynamic Virtual Product Placement & In-Content Advertising Platform
+Revision:
+0.2 Draft
+Author:
+Kevin Edson – Afrobotics
+Date Created:
+26 June 2026
+REVISION HISTORY
+REVISION NUMBER
+REVISION DATE
+LATEST CHANGE AUTHOR
+0.2
+2026/06/29
+Initial document (Kevin Edson)
+System Requirements Specification: Afrobotics Brand Insertion Technology (BIT) Page 1
+Afrobotics BIT │ Requirement Specification │ Afrobotics – Confidential
+TABLE OF CONTENTS
+List of Abbreviations 3
+Introduction 3
+Background 3
+Project Objective 4
+Main Subsystems 4
+Purpose 4
+Scope of the Specification 5
+Description of Requirements 5
+General Functionality 5
+MReq 1: Content Ingestion 5
+MReq 2: Scene Analysis and Surface Detection 5
+MReq 3: Placement Recommendation and Scoring 5
+MReq 4: Brand-Safety Enforcement (Permanent Exclusion List) 6
+MReq 5: Motion Tracking 6
+MReq 6: Compositing and Realism 6
+MReq 7: Rendering and Output 6
+User, Security and Campaign Management 7
+MReq 8: Authentication, Authorisation and Security 7
+MReq 9: User Roles and Profile Management 7
+MReq 10: Campaign and Inventory Management 7
+MReq 11: Approval Workflow 7
+MReq 12: Notifications – SMS and Email 7
+Downstream and External Interfaces 8
+MReq 13: Interface – Object Storage 8
+MReq 14: Interface – GPU Render Service 8
+MReq 15: Interface – SMTP and SMS 8
+MReq 16: Interface – Distribution / DSP 8
+Platform Methods (Service Management) 8
+Failure Mode Operation 9
+MReq 17: System Redundancy 9
+Operations, Administration, Maintenance 9
+MReq 18: Web-Based Administration Interface 9
+MReq 19: BI / Statistics 9
+MReq 20: Events 9
+MReq 21: Alarms 9
+MReq 22: Usage Record Support 9
+Capacity 10
+MReq 23: Processing and Render Throughput 10
+MReq 24: Daily Processing Volume 10
+Database Requirements 10
+MReq 25: Data Persistence and Model 10
+Core Data Entities (Summary) 11
+Implementation Architecture 11
+System Requirement Specification Sign-off 12
+System Requirements Specification: Afrobotics Brand Insertion Technology (BIT) Page 2
+Afrobotics BIT │ Requirement Specification │ Afrobotics – Confidential
+List of Abbreviations
+Abbreviation
+Meaning
+VPP
+Virtual Product Placement
+BIT
+Brand Insertion Technology
+CMS
+Content Management System
+CV
+Computer Vision
+SAM
+Segment Anything Model (segmentation model)
+VOD
+Video on Demand
+SVOD / AVOD
+Subscription / Advertising Video on Demand
+DSP
+Demand-Side Platform
+CPM
+Cost per Mille (cost per thousand impressions)
+API
+Application Programming Interface
+GPU
+Graphics Processing Unit
+S3
+Object storage service (asset and render storage)
+MReq
+Mandatory Requirement (numbered, testable)
+RBAC
+Role-Based Access Control
+Introduction
+Afrobotics Brand Insertion Technology (BIT) is an AI-powered video inventory creation platform. It enables brands to be inserted into existing video content after production, transforming suitable surfaces inside that content – billboards, screens, walls, signage, product spaces – into monetisable advertising inventory, while appearing native and visually indistinguishable from the original scene.
+This Requirement Specification captures the mandatory feature list and requirements of the platform to be delivered as part of Release 1. It is intended as the primary input to the project work schedule and downstream design, build and test activities.
+Background
+Once video content is produced, the visual environment inside it becomes static. A billboard, a television screen, or a product on a table remains the same for the life of that content. Advertising is therefore confined to ad breaks, pre-rolls, mid-rolls and sponsorships, all of which interrupt the viewing experience and are increasingly skipped, blocked or ignored.
+Content producers and broadcasters hold large libraries of premium video whose internal visual real estate currently generates no revenue. Afrobotics BIT addresses this gap by creating a new, non-interruptive advertising layer inside the content itself, targeted initially at African broadcasters, streaming platforms and production houses.
+System Requirements Specification: Afrobotics Brand Insertion Technology (BIT) Page 3
+Afrobotics BIT │ Requirement Specification │ Afrobotics – Confidential
+Project Objective
+The project aims to provide the requirement from which the platform will be developed. The architecture shall provide the following functionality:
+• Ingest existing video content and segment it into scenes for analysis.
+• Detect candidate advertising surfaces inside video using computer-vision models.
+• Track detected surfaces through camera motion so an inserted asset remains locked in place.
+• Composite branded assets into the scene matching perspective, lighting, motion blur and shadow.
+• Render baked output for broadcast, streaming and social distribution formats.
+• Enforce a permanent brand-safety exclusion list at the point of placement.
+• Manage advertising campaigns, creative assets, scheduling and regional targeting.
+• Measure exposure and report inventory performance to advertisers and content owners.
+• Provide secure authentication, authorisation and role-based access for all users.
+• Operate as a modular system that can be scaled and extended as required.
+The platform shall initially expose a web-based management interface and a processing pipeline. The key goal is to allow content owners to register content, have advertising opportunities identified, allow advertisers to purchase those opportunities, render branded versions of the content, and report on exposure – all without disrupting the viewer experience.
+Main Subsystems
+The platform comprises the following main functional components:
+• Ingestion Subsystem – Accepts source content, transcodes it, extracts metadata and segments it into scenes.
+• Scene Analysis Subsystem – Runs computer-vision models to detect objects and candidate advertising surfaces per frame.
+• Placement Recommendation Subsystem – Scores each candidate surface for viability and value and applies brand-safety filtering.
+• Motion Tracking Subsystem – Locks a placement to a surface across camera movement using planar / point tracking.
+• Compositing & Rendering Subsystem – Warps, light-matches, blurs and shadows the asset, then renders final output on GPU.
+• Campaign Subsystem – Manages advertisers, campaigns, creative assets, scheduling and regional targeting.
+• Analytics Subsystem – Measures exposure and produces inventory and performance reporting.
+• Database Subsystem – Persists content, scene metadata, ad-slot definitions, campaigns, assets and audit data.
+Purpose
+This Requirement Specification captures the basic feature list and requirements of Afrobotics BIT to be delivered as part of this project. It is intended as the main input to the work schedule. Other documents required as part of the project include:
+• Master System document (this document), used as the baseline for future development.
+• Functional Specification (screen-level detail, in the house functional-spec format).
+• Testing Manual.
+• Support Documentation. System Requirements Specification: Afrobotics Brand Insertion Technology (BIT) Page 4
+Afrobotics BIT │ Requirement Specification │ Afrobotics – Confidential
+Scope of the Specification
+This specification describes at a high level the required functionality of Afrobotics BIT under the following categories:
+• Interfaces
+• General Functionality
+• Failure Mode Operation / Redundancy
+• Operations, Administration, Maintenance
+• Capacity
+Description of Requirements
+Afrobotics BIT requirements are numbered with MReq and are mandatory. Each MReq must be tested in the acceptance testing phase of the project. The platform shall comprise functionalities as per the requirements below, within the proposed architecture. General Functionality
+Link to product reference: https://www.mirriad.com/
+MReq 1: Content Ingestion
+The platform shall accept and prepare source video content for analysis.
+• The system shall accept upload of source content in MP4, MOV, MXF and AVI formats.
+• The system shall transcode ingested content to a normalised working format.
+• The system shall extract content metadata (duration, resolution, frame rate, source).
+• The system shall perform scene-cut detection and index each scene for downstream analysis.
+• If an upload is invalid or unsupported, the system shall reject it with an appropriate error message.
+• System shall collate already transcoded content metadata for scene Quality Assuarance (QA).
+• The system shal allow pre-loaded/pre-loading of inventory of products and assets cartegorised per client, brand, dimension etc for use and recommendations within the system.
+• The system shall be restricted from changing duration of content or mophing anything in content as provided in asset. The system maintain integrity of ingested footage.
+• The system shall have strict rules/parameters for campaign naming and structure. UZ01EP12_COKE GEN23EP100_UNIL
+MReq 2: Scene Analysis and Surface Detection
+The platform shall analyse content to identify where advertising can be placed.
+• The system shall detect objects and surfaces per frame using computer-vision models (e.g. SAM 2, YOLO, Detectron2).
+• The system shall identify candidate advertising surfaces including billboards, screens, walls, signage, posters, stadium boards and product packaging.
+• The system shall produce a per-scene map of candidate surfaces with their boundaries.
+• The system shall estimate surface depth and orientation to support realistic placement.
+• The system shall flag surfaces that are non-viable (e.g. windows) and exclude prohibited surfaces (see MReq 4).
+MReq 3: Placement Recommendation and Scoring System Requirements Specification: Afrobotics Brand Insertion Technology (BIT) Page 5
+Afrobotics BIT │ Requirement Specification │ Afrobotics – Confidential
+The platform shall recommend and score advertising opportunities.
+• The system shall assign a viability and value score to each candidate surface.
+• The system shall rank candidate surfaces within a scene by score.
+• The system shall present recommended placements for review and approval before rendering.
+• The system shall retain placement decisions against the scene for audit and reuse.
+• The system shall identify competitive separation and analyse already existing products within a scene and detect existing branding.
+• The system shall have the ability to detect brand in text, image, logo and category for the purpose of placement recommendation and scoring in relation to competitive separation algorith.
+• The system shall have a codec feature to resize, (content, aspect ration adaptation.)
+MReq 4: Brand-Safety Enforcement (Permanent Exclusion List)
+The platform shall enforce a permanent, non-negotiable brand-safety exclusion list at the point of placement. This requirement is mandatory and shall not be bypassed.
+• The system shall never place an advertisement on a human face.
+• The system shall never place an advertisement on a child or on a child’s clothing or property.
+• The system shall never place an advertisement on emergency vehicles or government insignia.
+• The system shall never place an advertisement on religious symbols or within religious spaces.
+• The system shall require human approval of every placement before output is finalised; approval shall be a permanent control and shall not be removed.
+• The exclusion list shall be configurable to add new prohibited categories, but categories shall only be added, never silently removed.
+MReq 5: Motion Tracking
+The platform shall lock placements to surfaces through camera movement.
+• The system shall track a selected surface across camera movement, zoom and rotation.
+• The system shall keep an inserted asset locked to the surface frame to frame, without slip or drift.
+• The system shall support planar tracking, with a fallback method for harder shots.
+• The system shall re-validate placement quality after tracking on moving footage.
+MReq 6: Compositing and Realism
+The platform shall composite branded assets so they appear native to the scene.
+• The system shall warp the asset to the surface perspective using a homography solve.
+• The system shall match the asset to scene lighting, colour temperature and brightness.
+• The system shall apply matching motion blur, grain and soft shadow to the asset.
+• The system shall support image, logo, video and animated asset types.
+• The composited result shall pass a quality gate before it is accepted (see MReq 18).
+MReq 7: Rendering and Output
+The platform shall generate final distributable content. System Requirements Specification: Afrobotics Brand Insertion Technology (BIT) Page 6
+Afrobotics BIT │ Requirement Specification │ Afrobotics – Confidential
+• The system shall render baked output using GPU acceleration.
+• The system shall support batch rendering across multiple clips.
+• The system shall produce broadcast, streaming and social export presets.
+• The system shall store rendered output and link it to the originating content and campaign.
+User, Security and Campaign Management
+MReq 8: Authentication, Authorisation and Security
+Access to the platform shall be authenticated and authorised before any request is processed.
+• Authentication shall occur over HTTPS before a request is processed.
+• All requests shall be authorised; the system shall verify the user is registered and permitted to perform the request.
+• The system shall enforce role-based access control (RBAC) across all functions.
+• After a period of inactivity, a user shall be automatically logged out.
+• The system shall validate all mandatory request fields and respond with an appropriate error message on failure.
+MReq 9: User Roles and Profile Management
+The platform shall manage users and their roles.
+• The system shall support the following roles at minimum: Administrator, Content Owner, Advertiser, Agency, Editor / Approver.
+• The system shall allow administrators to create, modify and deactivate user accounts.
+• The system shall store user profile details and the roles assigned to each user.
+• The system shall allow users to request additional roles, subject to administrator approval.
+MReq 10: Campaign and Inventory Management (PHase 2)
+The platform shall convert approved placements into purchasable advertising inventory.
+• The system shall allow advertisers and agencies to create campaigns.
+• The system shall allow upload and management of creative assets in an asset library.
+• The system shall assign campaigns to available ad slots within content.
+• The system shall support campaign scheduling with start and end dates.
+• The system shall support regional targeting so that the same content can carry a different brand by market.
+• The system shall route every assignment through the brand-safety control in MReq 4.
+MReq 11: Approval Workflow
+The platform shall require approval before content modifications are finalized.
+• The system shall present each recommended placement to an authorized approver. System Requirements Specification: Afrobotics Brand Insertion Technology (BIT) Page 7
+Afrobotics BIT │ Requirement Specification │ Afrobotics – Confidential
+• The approver shall be able to approve or reject a placement, with a recorded reason on rejection.
+• The system shall not finalize or render output for a rejected placement.
+• The system shall record an audit trail of every approval and rejection.
+MReq 12: Notifications – SMS and Email
+The platform shall notify users of relevant events via SMS and email.
+• The system shall send email notification when a render or report is ready.
+• The system shall send notification on key campaign events (assignment, approval, completion).
+• The system shall store a record of each notification sent in the database.
+Downstream and External Interfaces
+MReq 13: Interface – Object Storage
+The platform shall provide a native interface to object storage (e.g. S3 / Azure Blob) for source content, creative assets and rendered output.
+• The system shall store and retrieve source content, assets and renders via object storage.
+• The system shall reference stored objects by key and version.
+MReq 14: Interface – GPU Render Service
+The platform shall provide an interface to a GPU render service (e.g. RunPod / EC2 GPU) for compositing and rendering workloads.
+• The system shall dispatch render jobs to GPU compute.
+• The system shall track render job status and return results to the pipeline.
+MReq 15: Interface – SMTP and SMS
+The platform shall provide native interfaces to email (SMTP) and SMS services for notifications.
+• The system shall send email via an SMTP interface.
+• The system shall send SMS via an SMS gateway interface.
+MReq 16: Interface – Distribution / DSP
+The platform shall integrate with broadcaster, streaming or demand-side platforms for the delivery and, where applicable, dynamic serving of inventory.
+• The system shall expose ad-slot metadata for content delivered to integrated platforms.
+• All web-service requests shall be orchestrated as per the API to be provided by the integrated platform.
+System Requirements Specification: Afrobotics Brand Insertion Technology (BIT) Page 8
+Afrobotics BIT │ Requirement Specification │ Afrobotics – Confidential
+Platform Methods (Service Management)
+The platform shall provide the following methods using its service interfaces:
+Content & Placement
+Description
+Ingest Content
+Accepts a source video, transcodes it, extracts metadata and segments it into scenes.
+Mandatory parameter: source file. The system shall confirm successful ingestion or return an error.
+Analyse Content
+Runs scene analysis and returns candidate surfaces with scores.
+Mandatory parameter: content identifier.
+Create Placement
+Defines an ad slot against a scored surface.
+Mandatory parameters: content identifier, surface identifier.
+Render Output
+Composites and renders approved placements into a distributable file.
+Mandatory parameter: placement / campaign identifier.
+Campaign & Reporting
+Description
+Create Campaign
+Creates an advertising campaign.
+Mandatory parameters: advertiser, creative asset, schedule.
+Assign Campaign
+Assigns a campaign to one or more ad slots, subject to brand-safety and approval.
+Query Inventory
+Returns available ad slots and their status for a given content set or market.
+Generate Report
+Produces an exposure / performance report for a campaign or content owner over a date range.
+Failure Mode Operation
+MReq 17: System Redundancy
+The platform shall operate in redundancy mode to allow continuity in the event of failure.
+• Core services shall be deployed redundantly so a single node failure does not stop processing.
+• In-progress render jobs shall be recoverable or re-queued after a failure.
+Operations, Administration, Maintenance
+MReq 18: Web-Based Administration Interface
+The platform shall be administered through a web-based user interface providing a central point of administration.
+• Multiple users shall be able to log in at the same time.
+• Configuration changes shall be logged to a file.
+• Security and authentication shall be enforced on the administration interface.
+• Administrators shall be able to manage users, roles, campaigns, content and the brand-safety exclusion list.
+• Administrators shall be able to check upstream and downstream interface status.
+MReq 19: BI / Statistics
+The platform shall export statistics at a configurable period to a specified destination, including (but not limited to):
+• Number of content items ingested, analysed and rendered.
+• Number of ad slots created and assigned.
+• Estimated impressions and exposure duration per placement. System Requirements Specification: Afrobotics Brand Insertion Technology (BIT) Page 9
+Afrobotics BIT │ Requirement Specification │ Afrobotics – Confidential
+• Peak and average processing and render times.
+• Real-time analytics on a web-based dashboard, accessible from a standard browser.
+MReq 20: Events
+The platform shall produce events for various occurrences.
+• The system shall log events such as an interface being unavailable or a render job failing.
+• Events shall be logged to a specified log file.
+• Event entries shall include at minimum: timestamp, event description, error code, originating module and user (if applicable).
+MReq 21: Alarms
+The platform shall process generated events to produce alarms.
+• The system shall generate alarms on raised events such as an unavailable or timed-out service.
+• When the alarm condition clears, the system shall generate a clear event.
+• Alarm entries shall include at minimum: alarm name, class, severity (minor | major | critical), date/timestamp, reason text and additional info.
+• Unavailable object storage, GPU render service, notification service or database shall each result in an alarm.
+MReq 22: Usage Record Support
+The platform shall record usage records of successful and unsuccessful requests.
+• Usage records shall include at minimum: date/time, user, request type and request status (successful / failed).
+• The system shall collate usage records into a single data file at a configurable period.
+• The system shall periodically transfer usage record files to a server for archival.
+Capacity
+MReq 23: Processing and Render Throughput
+The platform, running on appropriately provisioned virtual and GPU infrastructure, shall be capable of the following concurrently (target values to be confirmed during sizing):
+• A steady state of [xxx] minutes of content analysed per hour per node.
+• Short processing bursts of up to [xxx] concurrent render jobs.
+• Unit render cost per minute of content shall remain below the inventory value earned (cost control requirement).
+• Cartegorising processes per job type and duration.
+MReq 24: Daily Processing Volume
+One platform node running on a cloud server shall process an average daily total of [xxx] minutes of content. Target value to be confirmed during sizing.
+• The system shall report processed volume against this target.
+System Requirements Specification: Afrobotics Brand Insertion Technology (BIT) Page 10
+Afrobotics BIT │ Requirement Specification │ Afrobotics – Confidential
+Database Requirements
+This type of solution requires a database. The platform shall persist all content metadata, scene analysis, ad-slot definitions, campaigns, creative assets, users and audit data in a relational database (e.g. PostgreSQL), with large binary objects (source video, assets, renders) held in object storage and referenced from the database.
+MReq 25: Data Persistence and Model
+The platform shall persist the following core entities. Each entity shall carry a unique identifier, creation and modification timestamps, and an audit trail.
+• Content – source video items and their metadata.
+• Scene – detected scenes and frame index per content item.
+• Surface – candidate advertising surfaces detected per scene, with score and status.
+• Ad Slot – approved placement definitions derived from surfaces (the monetisable inventory).
+• Campaign – advertiser campaigns, schedules and targeting.
+• Creative Asset – brand assets in the asset library.
+• Render – rendered output linked to content, ad slot and campaign.
+• User & Role – user accounts, roles and permissions.
+• Approval – approval / rejection records with reason and approver.
+• Brand-Safety Rule – the permanent exclusion list entries.
+• Notification & Usage Record – notifications sent and usage / audit records.
+Core Data Entities (Summary)
+Entity
+Purpose
+Key Fields (at least)
+Content
+Source video and metadata
+duration, resolution, frame rate, source channel, status
+Scene
+Detected scene within content
+content id, start frame, end frame, index
+Surface
+Candidate ad surface in a scene
+scene id, type, boundary, depth, score, viability
+Ad Slot
+Approved monetisable placement
+surface id, status, market, value
+Campaign
+Advertiser campaign
+advertiser id, schedule, targeting, status
+Creative Asset
+Brand asset for placement
+advertiser id, type, storage key, dimensions
+Render
+Rendered output file
+content id, ad slot id, campaign id, preset, storage key
+User / Role
+Account and permissions
+name, email, roles, status
+Approval
+Placement approval record
+ad slot id, approver, decision, reason, timestamp
+Brand-Safety Rule
+Permanent exclusion entry
+category, description, active
+System Requirements Specification: Afrobotics Brand Insertion Technology (BIT) Page 11
+Afrobotics BIT │ Requirement Specification │ Afrobotics – Confidential
+Implementation Architecture
+The platform shall be deployed on the cloud as a virtual environment, with GPU compute provisioned for the compositing and rendering workload. The main goal of the proposed architecture is to provide a flexible, extensible and distributed system.
+The recommended technology stack is as follows. Where a proven model exists for a computer-vision function, it shall be wrapped rather than rebuilt; engineering effort shall be concentrated on the compositing layer and the product.
+Layer
+Technology
+Build / Wrap
+Ingestion
+FFmpeg, scene-detection library
+Build
+Segmentation
+SAM 2 (wrapped)
+Wrap
+Tracking
+OpenCV planar tracker, with fallback
+Wrap
+Compositing
+Homography solve plus custom relight / blur / shadow
+Build
+Rendering
+GPU compute (RunPod / EC2 GPU), FFmpeg, Blender
+Build
+Backend / API
+Python, FastAPI/ Express
+Build
+Database
+PostgreSQL
+Build
+Object Storage
+S3 / Azure Blob
+Configure
+Frontend
+React / Next.js
+Build
+Version Control
+Github / GIT
+Existing
+The compositing layer carries the core technical risk and shall receive the most senior computer-vision and VFX effort. Detection, tracking and the campaign / reporting layers are standard engineering that can be scheduled with confidence.
+System Requirement Specification Sign-off
+The following signatories hereby declare their acceptance of this System Requirement Specification and agree that this document is an accurate definition of the requirements for Afrobotics Brand Insertion Technology (BIT).
+On behalf of Afrobotics:
+Name
+Name
+Date
+Date
+Signature
+Signature
+On behalf of ____________________________ (Partner / Broadcaster):
+Name
+Name
+Date
+Date
+Signature
+Signature
+System Requirements Specification: Afrobotics Brand Insertion Technology (BIT) Page 12
+
+

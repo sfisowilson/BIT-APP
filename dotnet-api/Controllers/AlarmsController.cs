@@ -44,5 +44,19 @@ namespace Afrobotics.Bit.Api.Controllers
                 return StatusCode(500, new { error = ex.Message });
             }
         }
+
+        [HttpPost("trigger")]
+        public async Task<IActionResult> TriggerAlarm([FromBody] AlarmItem request)
+        {
+            try
+            {
+                var alarm = await _alarmService.CreateAlarmAsync(request);
+                return Ok(alarm);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
     }
 }
