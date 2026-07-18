@@ -56,6 +56,8 @@ namespace Afrobotics.Bit.Api.Models
         [Required]
         public string IngestionStatus { get; set; } = "Staging"; // Staging, Transcoding, SceneDetecting, Completed, Failed
         
+        public string? CampaignId { get; set; }  // MReq 10: video ingested for a specific campaign
+        
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 

@@ -64,6 +64,7 @@ namespace Afrobotics.Bit.Api.Services
                 SourceChannel = dto.SourceChannel,
                 StorageKey = storageKey,
                 IngestionStatus = "Staging",
+                CampaignId = dto.CampaignId,
                 CreatedAt = DateTime.UtcNow
             };
 

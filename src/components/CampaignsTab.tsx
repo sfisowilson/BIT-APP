@@ -75,14 +75,20 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
       <div className="lg:col-span-12 bg-blue-50 border border-blue-100 rounded-2xl p-5 text-xs text-blue-800 flex items-start gap-3 shadow-xs">
         <Sliders className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
         <div>
-          <h4 className="font-bold text-sm text-blue-900">Step 1: Campaign Planner &amp; Asset Staging</h4>
+          <h4 className="font-bold text-sm text-blue-900">
+            {selectedCampaignId ? `Assets: ${selectedCampaign?.name || 'Campaign'}` : 'Step 1: Campaign Planner & Asset Staging'}
+          </h4>
           <p className="mt-1 text-blue-700 leading-normal">
-            <strong>Select a campaign</strong> to view and manage its creative assets. Create advertiser campaigns with strict naming codes (<strong>MReq 10</strong>), then stage brand overlays and assign them to campaigns. Unassigned assets appear in the staging area.
+            {selectedCampaignId
+              ? <>Managing creative assets for <strong>{selectedCampaign?.name}</strong> ({selectedCampaign?.namingStructureCode}). Stage brand overlays and assign them to this campaign per <strong>MReq 10</strong>.</>
+              : <><strong>Select a campaign</strong> to view and manage its creative assets. Create advertiser campaigns with strict naming codes (<strong>MReq 10</strong>), then stage brand overlays and assign them to campaigns. Unassigned assets appear in the staging area.</>
+            }
           </p>
         </div>
       </div>
 
-      {/* ── LEFT: Campaign Creation + Campaign List ── */}
+      {/* ── LEFT: Campaign Creation + Campaign List (only when no campaign selected) ── */}
+      {!selectedCampaignId && (
       <div className="lg:col-span-7 space-y-6">
         {/* Campaign Creation Form */}
         <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm">
@@ -228,9 +234,10 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
           </div>
         </div>
       </div>
+      )}
 
       {/* ── RIGHT: Campaign Asset Manager ── */}
-      <div className="lg:col-span-5 space-y-6">
+      <div className={`${selectedCampaignId ? 'lg:col-span-12' : 'lg:col-span-5'} space-y-6`}>
         {/* Selected Campaign Detail + Its Assets */}
         {selectedCampaign ? (
           <>

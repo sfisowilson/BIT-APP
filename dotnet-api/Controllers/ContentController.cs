@@ -42,6 +42,7 @@ namespace Afrobotics.Bit.Api.Controllers
             [FromForm] int frameRate,
             [FromForm] string duration,
             [FromForm] string sourceChannel,
+            [FromForm] string? campaignId,
             IFormFile? file)
         {
             try
@@ -71,7 +72,8 @@ namespace Afrobotics.Bit.Api.Controllers
                     FrameRate = frameRate,
                     Duration = duration,
                     SourceChannel = sourceChannel,
-                    StorageKey = storageKey
+                    StorageKey = storageKey,
+                    CampaignId = campaignId
                 };
 
                 var content = await _contentService.IngestVideoAsync(dto);

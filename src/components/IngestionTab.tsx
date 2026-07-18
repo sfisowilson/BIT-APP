@@ -22,9 +22,12 @@ interface IngestionTabProps {
   setNewVideoFile: (f: File | null) => void;
   handleIngestVideo: (e: React.FormEvent) => void;
   ingestError: string | null;
+  ingesting: boolean;
   handleDeleteContent?: (id: string) => void;
   handleAiSplitAnalyze?: (contentId: string, videoTitle: string) => Promise<void>;
   aiAnalyzingVideoId?: string | null;
+  selectedCampaignId?: string | null;
+  campaignList?: { id: string; name: string }[];
 }
 
 /** Pipeline stage display order with icons and labels */
@@ -86,13 +89,67 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
   setNewVideoFile,
   handleIngestVideo,
   ingestError,
+  ingesting,
   handleDeleteContent,
   handleAiSplitAnalyze,
   aiAnalyzingVideoId,
+  selectedCampaignId,
+  campaignList,
 }) => {
+  // MReq 10: Show only videos linked to the selected campaign
+  const filteredContent = selectedCampaignId
+    ? contentList.filter(v => v.campaignId === selectedCampaignId)
+    : contentList;
+  const selectedCampaignName = campaignList?.find(c => c.id === selectedCampaignId)?.name;
+
   const sceneCountByVideo: Record<string, number> = {};
   contentList.forEach(v => { sceneCountByVideo[v.id] = 0; });
-  // Note: scenesForVideo only has scenes for the currently selected video
+
+  // MReq 1: Extract metadata from uploaded video file
+  const [metadataExtracted, setMetadataExtracted] = React.useState(false);
+  const videoRef = React.useRef<HTMLVideoElement | null>(null);
+
+  const extractVideoMetadata = (file: File) => {
+    setMetadataExtracted(false);
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    videoRef.current = video;
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      const seconds = video.duration;
+      if (seconds && isFinite(seconds)) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        setNewVideoDuration(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
+      }
+      if (video.videoWidth && video.videoHeight) {
+        const w = video.videoWidth;
+        const h = video.videoHeight;
+        if (w >= 3840) setNewVideoRes('3840x2160 (4K)');
+        else if (w >= 1920) setNewVideoRes('1920x1080 (1080p)');
+        else if (w >= 1280) setNewVideoRes('1280x720');
+        else setNewVideoRes(`${w}x${h}`);
+      }      // MReq 1: FPS not available from browser API — default to broadcast standard
+      setNewVideoFps(25);      setMetadataExtracted(true);
+      URL.revokeObjectURL(url);
+    };
+    video.onerror = () => {
+      setMetadataExtracted(false);
+      URL.revokeObjectURL(url);
+    };
+    video.src = url;
+  };
+
+  // Auto-extract metadata when file changes
+  React.useEffect(() => {
+    if (newVideoFile) {
+      setNewVideoTitle(newVideoFile.name.replace(/\.[^.]+$/, ''));
+      extractVideoMetadata(newVideoFile);
+    } else {
+      setMetadataExtracted(false);
+    }
+  }, [newVideoFile]);
 
   return (
     <motion.div
@@ -106,13 +163,20 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
       <div className="lg:col-span-3 bg-blue-50 border border-blue-100 rounded-2xl p-5 text-xs text-blue-800 flex items-start gap-3 shadow-xs">
         <Video className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
         <div>
-          <h4 className="font-bold text-sm text-blue-900">Step 2: Video Ingestion — MReq 1 Pipeline</h4>
+          <h4 className="font-bold text-sm text-blue-900">
+            {selectedCampaignId && selectedCampaignName
+              ? `Content for: ${selectedCampaignName}`
+              : 'Step 2: Video Ingestion — MReq 1 Pipeline'}
+          </h4>
           <p className="mt-1 text-blue-700 leading-normal">
-            <strong>1. Register</strong> video metadata (title, duration, resolution, frame rate, source).{' '}
+            {selectedCampaignId
+              ? <>Videos ingested for <strong>{selectedCampaignName}</strong>. New uploads will be automatically linked to this campaign per <strong>MReq 10</strong>.</>
+              : <><strong>1. Register</strong> video metadata (title, duration, resolution, frame rate, source).{' '}
             <strong>2. System auto-transcodes</strong> to a normalised working format.{' '}
             <strong>3. Scene-cut detection</strong> splits footage into indexed segments.{' '}
             <strong>4. Ready for QA</strong> — scenes flow into the QA Workbench for surface approval.
-            Watch the pipeline indicator {">"} track progress for each video.
+            Watch the pipeline indicator {">"} track progress for each video.</>
+            }
           </p>
         </div>
       </div>
@@ -122,56 +186,52 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
         <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm">
           <h2 className="text-lg font-bold text-slate-800 font-display mb-2">Register Video Metadata</h2>
           <p className="text-xs text-slate-500 mb-6 font-sans">
-            Per <strong>MReq 1</strong>, provide the extracted metadata for the source broadcast feed. 
-            The system will automatically begin transcoding and scene detection.
+            Per <strong>MReq 1</strong>, attach a video file to auto-extract metadata. Fields are populated from the source file.
           </p>
 
           <form onSubmit={handleIngestVideo} className="space-y-4">
             <div>
-              <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Video Title / Broadcast Name</label>
+              <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
+                Video Title / Broadcast Name (auto from file)
+              </label>
               <input 
                 type="text" 
-                value={newVideoTitle} 
-                onChange={(e) => setNewVideoTitle(e.target.value)} 
-                placeholder="e.g., EPL Matchday 25 - Chelsea vs Arsenal"
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
-                required
+                value={newVideoTitle || 'Select a video file to auto-populate'}
+                readOnly
+                className="w-full border rounded-lg px-3 py-1.5 text-xs bg-slate-100 border-slate-200 text-slate-500 pointer-events-none select-none"
               />
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Target Native Resolution</label>
-              <select 
-                value={newVideoRes} 
-                onChange={(e) => setNewVideoRes(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
-              >
-                <option value="1920x1080 (1080p)">1920x1080 (1080p Broadcast Proxy)</option>
-                <option value="3840x2160 (4K)">3840x2160 (4K Cinema Master)</option>
-                <option value="1280x720">1280x720 (Web streaming)</option>
-              </select>
+              <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
+                Target Native Resolution (auto-detected)
+              </label>
+              <input 
+                type="text"
+                value={newVideoRes || '—'}
+                readOnly
+                className="w-full border rounded-lg px-2 py-1.5 text-xs font-mono bg-slate-100 border-slate-200 text-slate-500 pointer-events-none select-none"
+              />
             </div>
 
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Duration (HH:MM:SS)</label>
+                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
+                  Duration HH:MM:SS (auto)
+                </label>
                 <input 
                   type="text" 
-                  value={newVideoDuration} 
-                  onChange={(e) => setNewVideoDuration(e.target.value)} 
-                  placeholder="00:05:00"
-                  pattern="^\\d{2}:[0-5]\\d:[0-5]\\d$"
-                  title="MReq 1: Perfect HH:MM:SS format required"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors font-mono"
-                  required
+                  value={newVideoDuration || '00:00:00'}
+                  readOnly
+                  className="w-full border rounded-lg px-2 py-1.5 text-xs font-mono bg-slate-100 border-slate-200 text-slate-500 pointer-events-none select-none"
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Native FPS</label>
+                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Native FPS (default)</label>
                 <select
                   value={newVideoFps}
-                  onChange={(e) => setNewVideoFps(Number(e.target.value))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors font-mono"
+                  disabled
+                  className="w-full border rounded-lg px-2 py-1.5 text-xs font-mono bg-slate-100 border-slate-200 text-slate-500 pointer-events-none"
                 >
                   <option value={24}>24 FPS (Cinema)</option>
                   <option value={25}>25 FPS (PAL Broadcast)</option>
@@ -181,7 +241,9 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Source Channel</label>
+                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
+                  Source Channel
+                </label>
                 <input 
                   type="text" 
                   value={newVideoChannel} 
@@ -210,10 +272,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
               <input type="file" accept="video/*,.mxf,.mov,.mp4,.avi" className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) {
-                    setNewVideoFile(file);
-                    if (!newVideoTitle) setNewVideoTitle(file.name.replace(/\.[^.]+$/, ''));
-                  }
+                  if (file) setNewVideoFile(file);
                 }} />
             </label>
 
@@ -221,12 +280,26 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
               <p className="text-2xs text-red-600 font-semibold font-mono bg-red-50 p-2.5 rounded-lg border border-red-100">{ingestError}</p>
             )}
 
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
+              <Sparkles className="h-3 w-3" /> MReq 1: Metadata auto-extracted from video file. Select a file below to populate all fields.
+            </div>
+
             <button 
               type="submit" 
-              className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer"
+              disabled={ingesting}
+              className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer ${ingesting ? 'bg-blue-400 cursor-wait' : 'bg-blue-600 hover:bg-blue-500'}`}
             >
-              <Plus className="h-3.5 w-3.5" />
-              Register &amp; Start Pipeline
+              {ingesting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Uploading &amp; Starting Pipeline...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-3.5 w-3.5" />
+                  Register &amp; Start Pipeline
+                </>
+              )}
             </button>
           </form>
         </div>
@@ -361,19 +434,33 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
 
         <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 font-display">Video Pipeline Catalog</h3>
-            <span className="text-[10px] text-slate-400 font-mono">{contentList.length} video{contentList.length !== 1 ? 's' : ''} registered</span>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 font-display">
+              {selectedCampaignId ? `Campaign Videos` : 'Video Pipeline Catalog'}
+            </h3>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {filteredContent.length} video{filteredContent.length !== 1 ? 's' : ''}
+              {selectedCampaignId && contentList.length !== filteredContent.length && ` (of ${contentList.length} total)`}
+            </span>
           </div>
           
           <div className="space-y-4">
-            {contentList.length === 0 && (
+            {filteredContent.length === 0 && (
               <div className="text-center py-12 text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                 <Film className="h-8 w-8 mx-auto mb-2 text-slate-300" />
-                <p>No videos registered yet.</p>
-                <p className="text-[10px] mt-1">Use the form to register broadcast feed metadata and start the pipeline.</p>
+                {selectedCampaignId ? (
+                  <>
+                    <p>No videos linked to this campaign yet.</p>
+                    <p className="text-[10px] mt-1">Use the form to upload a video — it will be automatically linked to {selectedCampaignName}.</p>
+                  </>
+                ) : (
+                  <>
+                    <p>No videos registered yet.</p>
+                    <p className="text-[10px] mt-1">Use the form to register broadcast feed metadata and start the pipeline.</p>
+                  </>
+                )}
               </div>
             )}
-            {contentList.map(video => {
+            {filteredContent.map(video => {
               const isSelected = selectedVideo === video.id;
               const isComplete = video.ingestionStatus === 'Completed';
               return (

@@ -7,6 +7,7 @@ export interface ContentItem {
   sourceChannel: string;
   storageKey: string;
   ingestionStatus: "Staging" | "Transcoding" | "SceneDetecting" | "Completed" | "Failed";
+  campaignId?: string;  // MReq 10: video linked to a campaign
   createdAt: string;
 }
 

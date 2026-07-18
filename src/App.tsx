@@ -16,7 +16,8 @@ import {
   KeyRound,
   Users,
   Code2,
-  LogOut
+  LogOut,
+  Package
 } from 'lucide-react';
 
 import { 
@@ -42,9 +43,12 @@ import { EditorTab } from './components/EditorTab';
 import { ComposerTab } from './components/ComposerTab';
 import { TelemetryTab } from './components/TelemetryTab';
 import { AdminConsoleTab } from './components/AdminConsoleTab';
+import { CampaignSelector } from './components/CampaignSelector';
+import { CampaignSidebar, type SidebarView } from './components/CampaignSidebar';
+import { CampaignDashboard } from './components/CampaignDashboard';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'campaigns' | 'ingestion' | 'editor' | 'composer' | 'telemetry' | 'admin'>('campaigns');
+  const [activeView, setActiveView] = useState<SidebarView>('dashboard');
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [downloading, setDownloading] = useState<boolean>(false);
 
@@ -91,6 +95,7 @@ export default function App() {
   const [newVideoChannel, setNewVideoChannel] = useState<string>('SuperSport Variety');
   const [newVideoFile, setNewVideoFile] = useState<File | null>(null);
   const [ingestError, setIngestError] = useState<string | null>(null);
+  const [ingesting, setIngesting] = useState<boolean>(false);
 
   // Dispatch Composite Renders
   const [composerCampaignId, setComposerCampaignId] = useState<string>('');
@@ -252,6 +257,13 @@ export default function App() {
       });
   }, [selectedSceneId]);
 
+  // Sync composer campaign with selected campaign context (MReq 10)
+  useEffect(() => {
+    if (selectedCampaignId && !composerCampaignId) {
+      setComposerCampaignId(selectedCampaignId);
+    }
+  }, [selectedCampaignId]);
+
   // Handle Campaign Creation
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -374,8 +386,9 @@ export default function App() {
   // Handle Content Upload (MReq 1: real file upload with metadata)
   const handleIngestVideo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newVideoTitle) return;
+    if (!newVideoTitle || ingesting) return;
     setIngestError(null);
+    setIngesting(true);
     try {
       const formData = new FormData();
       formData.append('title', newVideoTitle);
@@ -383,6 +396,9 @@ export default function App() {
       formData.append('frameRate', String(newVideoFps));
       formData.append('duration', newVideoDuration);
       formData.append('sourceChannel', newVideoChannel);
+      if (selectedCampaignId) {
+        formData.append('campaignId', selectedCampaignId);
+      }
       if (newVideoFile) {
         formData.append('file', newVideoFile);
       }
@@ -397,15 +413,21 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) {
         setIngestError(data.error || 'Ingestion failed.');
+        setIngesting(false);
         return;
       }
       setNewVideoTitle('');
       setNewVideoDuration('00:05:00');
       setNewVideoFile(null);
+      setNewVideoRes('1920x1080 (1080p)');
+      setNewVideoFps(50);
+      setNewVideoChannel('SuperSport Variety');
+      setIngesting(false);
       fetchAllData();
     } catch (err) {
       console.error(err);
       setIngestError('API communication failure.');
+      setIngesting(false);
     }
   };
 
@@ -773,31 +795,41 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50/70 text-slate-700 font-sans antialiased pb-12" id="app_root">
       {/* HEADER BANNER */}
-      <header className="border-b border-slate-200 bg-white px-6 py-5 sticky top-0 z-50 shadow-xs" id="portal_header">
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="inline-flex h-2 w-2 rounded-full bg-blue-600 animate-pulse"></span>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600 font-mono">Afrobotics BIT Production Console</span>
+      <header className="border-b border-slate-200 bg-white px-6 py-4 sticky top-0 z-50 shadow-xs" id="portal_header">
+        <div className="max-w-full mx-auto flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="inline-flex h-2 w-2 rounded-full bg-blue-600 animate-pulse"></span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600 font-mono">Afrobotics BIT</span>
+              </div>
+              <h1 className="text-base font-extrabold text-slate-900 tracking-tight font-display">
+                Brand Insertion Technology
+              </h1>
             </div>
-            <h1 className="text-xl lg:text-2xl font-extrabold text-slate-900 tracking-tight font-display">
-              Brand Insertion Technology (BIT) Platform
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Operational Workspace — Live REST APIs, Campaign Planners, Video Ingest &amp; GPU render queues
-            </p>
+            {/* Campaign Selector — always visible */}
+            <div className="pl-4 border-l border-slate-200">
+              <CampaignSelector
+                campaigns={campaignList}
+                selectedId={selectedCampaignId}
+                onSelect={(id) => { setSelectedCampaignId(id); setActiveView('dashboard'); }}
+                onCreateNew={() => { setSelectedCampaignId(null); setActiveView('assets'); }}
+                assetCounts={Object.fromEntries(assetList.reduce((acc, a) => {
+                  if (a.campaignId) acc.set(a.campaignId, (acc.get(a.campaignId) || 0) + 1);
+                  return acc;
+                }, new Map<string, number>()))}
+              />
+            </div>
           </div>
           
           <div className="flex flex-wrap items-center gap-4">
-            {/* Active alarms indicator */}
             {alarmList.some(a => a.isActive) && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-600 text-xs font-semibold animate-pulse">
                 <AlertTriangle className="h-4 w-4 text-red-500" />
-                {alarmList.filter(a => a.isActive).length} CRITICAL ALARMS
+                {alarmList.filter(a => a.isActive).length}
               </span>
             )}
 
-            {/* Current logged-in user info */}
             {user && (
               <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
                 <div className="text-right">
@@ -813,13 +845,7 @@ export default function App() {
                   </div>
                   <div className="text-[10px] text-slate-400 font-mono">{user.email}</div>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-all border border-slate-200 hover:border-red-100"
-                  title="Logout / Switch Account"
-                >
+                <button onClick={handleLogout} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-all border border-slate-200 hover:border-red-100" title="Logout">
                   <LogOut className="h-4 w-4" />
                 </button>
               </div>
@@ -828,202 +854,214 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 lg:px-6 mt-8" id="main_content">
-        
-        {/* INTERACTIVE WORKFLOW PIPELINE PROGRESS GUIDE */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 mb-8 shadow-sm" id="pipeline_wizard">
-          <div className="flex items-center gap-2 mb-4">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white text-[10px] font-bold">✓</span>
-            <h3 className="text-xs font-extrabold text-slate-800 uppercase tracking-widest font-display">Interactive Platform Flow Pipeline</h3>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 lg:grid-cols-5 gap-3">
-            {[
-              { id: 'campaigns', step: '1', title: '1. Campaign Planner', desc: 'Define campaigns & assets', count: `${campaignList.length} Active` },
-              { id: 'ingestion', step: '2', title: '2. Video Ingest', desc: 'Ingest feeds & index cuts', count: `${contentList.length} Ingested` },
-              { id: 'editor', step: '3', title: '3. QA Workbench', desc: 'Approve or exclude slots', count: `Interactive Player` },
-              { id: 'composer', step: '4', title: '4. Compositor', desc: 'Warp overlays & render', count: `${renderList.length} Dispatch jobs` },
-              { id: 'telemetry', step: '5', title: '5. Alarms & Logs', desc: 'CSV audits & telemetry', count: `${logList.length} Events` }
-            ].map((stepItem) => {
-              const isActive = activeTab === stepItem.id;
-              return (
-                <button
-                  key={stepItem.id}
-                  onClick={() => setActiveTab(stepItem.id as any)}
-                  className={`p-3.5 rounded-xl border text-left cursor-pointer transition-all ${
-                    isActive 
-                      ? 'bg-blue-50/70 border-blue-500 shadow-xs ring-1 ring-blue-500/10' 
-                      : 'bg-slate-50/60 hover:bg-slate-100/50 border-slate-200/70'
-                  }`}
-                  id={`pipeline_step_${stepItem.id}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className={`text-[9px] font-mono font-bold px-1 py-0.5 rounded ${
-                      isActive ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'
-                    }`}>
-                      STEP 0{stepItem.step}
-                    </span>
-                    <span className="text-[9px] text-slate-400 font-mono font-medium">{stepItem.count}</span>
-                  </div>
-                  <h4 className={`text-xs font-bold mt-2 ${isActive ? 'text-blue-700' : 'text-slate-800'}`}>
-                    {stepItem.title}
-                  </h4>
-                  <p className="text-[10px] text-slate-500 mt-1 leading-normal">{stepItem.desc}</p>
-                </button>
-              );
-            })}
-          </div>
+      <div className="flex gap-0 max-w-full mx-auto" id="app_body">
+        {/* LEFT SIDEBAR */}
+        <div className="border-r border-slate-200 bg-white px-4 py-6 min-h-[calc(100vh-140px)] sticky top-[73px] self-start" id="sidebar_wrapper">
+          <CampaignSidebar
+            activeView={activeView}
+            onNavigate={setActiveView}
+            campaignSelected={!!selectedCampaignId}
+            userRole={user?.role || 'Editor'}
+            campaignAssetCount={selectedCampaignId ? assetList.filter(a => a.campaignId === selectedCampaignId).length : 0}
+            contentCount={contentList.filter(v => v.ingestionStatus === 'Completed' && (!selectedCampaignId || v.campaignId === selectedCampaignId)).length}
+            renderCount={renderList.filter(r => !selectedCampaignId || r.campaignId === selectedCampaignId).length}
+          />
         </div>
 
-        {/* TABS SELECTOR */}
-        <div className="flex border-b border-slate-200 overflow-x-auto gap-1 mb-8" id="tab_navigation">
-          {[
-            { id: 'campaigns', label: 'Campaigns & Assets', icon: Sliders },
-            { id: 'ingestion', label: 'Video Ingestion', icon: Video },
-            { id: 'editor', label: 'Approvals Workbench', icon: Tv },
-            { id: 'composer', label: 'GPU Composite', icon: Cpu },
-            { id: 'telemetry', label: 'O&M & Telemetry', icon: Activity },
-            { id: 'admin', label: 'User Admin (RBAC)', icon: Users },
-          ].map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-4 py-3 text-xs lg:text-sm font-semibold tracking-tight whitespace-nowrap transition-all border-b-2 cursor-pointer ${
-                  isActive 
-                    ? 'border-blue-600 text-blue-600 bg-blue-50/30' 
-                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-100/40'
-                }`}
-                id={`tab_button_${tab.id}`}
-              >
-                <Icon className={`h-4 w-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
+        {/* MAIN CONTENT */}
+        <main className="flex-1 px-6 py-6 overflow-auto" id="main_content">
+          <AnimatePresence mode="wait">
+            {/* No campaign selected — landing page */}
+            {!selectedCampaignId ? (
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto space-y-8 py-12" key="no_campaign">
+                <div className="text-center">
+                  <Package className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+                  <h2 className="text-2xl font-extrabold text-slate-800 font-display">Select or Create a Campaign</h2>
+                  <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
+                    All platform features are organized around campaigns. Choose an existing campaign or create a new one to begin.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
+                  {campaignList.map(c => {
+                    const assetCount = assetList.filter(a => a.campaignId === c.id).length;
+                    return (
+                      <button key={c.id} onClick={() => { setSelectedCampaignId(c.id); setActiveView('dashboard'); }}
+                        className="bg-white border border-slate-200 rounded-xl p-5 text-left hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
+                        <span className={`inline-block h-2.5 w-2.5 rounded-full mb-2 ${
+                          c.status === 'Active' ? 'bg-emerald-500' : c.status === 'Draft' ? 'bg-blue-500' : 'bg-slate-400'
+                        }`} />
+                        <h3 className="text-sm font-bold text-slate-800">{c.name}</h3>
+                        <p className="text-[10px] text-slate-400 font-mono mt-1">{c.namingStructureCode}</p>
+                        <div className="flex items-center gap-3 mt-3 text-[10px] text-slate-500">
+                          <span>{c.targetRegion}</span>
+                          <span>{assetCount} assets</span>
+                          <span className="font-bold">${c.totalBudget.toLocaleString()}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            ) : (
+              /* Campaign selected — render the active view */
+              <>
+                {activeView === 'dashboard' && (
+                  <CampaignDashboard
+                    campaign={campaignList.find(c => c.id === selectedCampaignId)!}
+                    assets={assetList.filter(a => a.campaignId === selectedCampaignId)}
+                    contentList={contentList}
+                    renders={renderList}
+                    onNavigate={setActiveView}
+                  />
+                )}
 
-        {/* TAB CONTENTS RENDER BLOCK WITH TRANSITIONS */}
-        <AnimatePresence mode="wait">
-          {activeTab === 'campaigns' && (
-            <CampaignsTab
-              campaignList={campaignList}
-              assetList={assetList}
-              selectedCampaignId={selectedCampaignId}
-              setSelectedCampaignId={setSelectedCampaignId}
-              newCampaignName={newCampaignName}
-              setNewCampaignName={setNewCampaignName}
-              newCampaignCode={newCampaignCode}
-              setNewCampaignCode={setNewCampaignCode}
-              newCampaignBudget={newCampaignBudget}
-              setNewCampaignBudget={setNewCampaignBudget}
-              newCampaignRegion={newCampaignRegion}
-              setNewCampaignRegion={setNewCampaignRegion}
-              handleCreateCampaign={handleCreateCampaign}
-              campaignError={campaignError}
-              newAssetName={newAssetName}
-              setNewAssetName={setNewAssetName}
-              newAssetType={newAssetType}
-              setNewAssetType={setNewAssetType}
-              newAssetCategory={newAssetCategory}
-              setNewAssetCategory={setNewAssetCategory}
-              handleCreateAsset={handleUploadAsset}
-              handleAssociateAsset={handleAssociateAsset}
-              handleUnassociateAsset={handleUnassociateAsset}
-              handleDeleteCampaign={handleDeleteCampaign}
-              handleDeleteAsset={handleDeleteAsset}
-            />
-          )}
+                {activeView === 'assets' && (
+                  <CampaignsTab
+                    campaignList={campaignList}
+                    assetList={assetList}
+                    selectedCampaignId={selectedCampaignId}
+                    setSelectedCampaignId={setSelectedCampaignId}
+                    newCampaignName={newCampaignName}
+                    setNewCampaignName={setNewCampaignName}
+                    newCampaignCode={newCampaignCode}
+                    setNewCampaignCode={setNewCampaignCode}
+                    newCampaignBudget={newCampaignBudget}
+                    setNewCampaignBudget={setNewCampaignBudget}
+                    newCampaignRegion={newCampaignRegion}
+                    setNewCampaignRegion={setNewCampaignRegion}
+                    handleCreateCampaign={handleCreateCampaign}
+                    campaignError={campaignError}
+                    newAssetName={newAssetName}
+                    setNewAssetName={setNewAssetName}
+                    newAssetType={newAssetType}
+                    setNewAssetType={setNewAssetType}
+                    newAssetCategory={newAssetCategory}
+                    setNewAssetCategory={setNewAssetCategory}
+                    handleCreateAsset={handleUploadAsset}
+                    handleAssociateAsset={handleAssociateAsset}
+                    handleUnassociateAsset={handleUnassociateAsset}
+                    handleDeleteCampaign={handleDeleteCampaign}
+                    handleDeleteAsset={handleDeleteAsset}
+                  />
+                )}
 
-          {activeTab === 'ingestion' && (
-            <IngestionTab
-              contentList={contentList}
-              selectedVideo={selectedVideo}
-              setSelectedVideo={setSelectedVideo}
-              scenesForVideo={scenesForVideo}
-              newVideoTitle={newVideoTitle}
-              setNewVideoTitle={setNewVideoTitle}
-              newVideoRes={newVideoRes}
-              setNewVideoRes={setNewVideoRes}
-              newVideoFps={newVideoFps}
-              setNewVideoFps={setNewVideoFps}
-              newVideoDuration={newVideoDuration}
-              setNewVideoDuration={setNewVideoDuration}
-              newVideoChannel={newVideoChannel}
-              setNewVideoChannel={setNewVideoChannel}
-              newVideoFile={newVideoFile}
-              setNewVideoFile={setNewVideoFile}
-              handleIngestVideo={handleIngestVideo}
-              ingestError={ingestError}
-              handleDeleteContent={handleDeleteContent}
-              handleAiSplitAnalyze={handleAiSplitAnalyze}
-              aiAnalyzingVideoId={aiAnalyzingVideoId}
-            />
-          )}
+                {activeView === 'content' && (
+                  <IngestionTab
+                    contentList={contentList}
+                    selectedVideo={selectedVideo}
+                    setSelectedVideo={setSelectedVideo}
+                    scenesForVideo={scenesForVideo}
+                    newVideoTitle={newVideoTitle}
+                    setNewVideoTitle={setNewVideoTitle}
+                    newVideoRes={newVideoRes}
+                    setNewVideoRes={setNewVideoRes}
+                    newVideoFps={newVideoFps}
+                    setNewVideoFps={setNewVideoFps}
+                    newVideoDuration={newVideoDuration}
+                    setNewVideoDuration={setNewVideoDuration}
+                    newVideoChannel={newVideoChannel}
+                    setNewVideoChannel={setNewVideoChannel}
+                    newVideoFile={newVideoFile}
+                    setNewVideoFile={setNewVideoFile}
+                    handleIngestVideo={handleIngestVideo}
+                    ingestError={ingestError}
+                    ingesting={ingesting}
+                    handleDeleteContent={handleDeleteContent}
+                    handleAiSplitAnalyze={handleAiSplitAnalyze}
+                    aiAnalyzingVideoId={aiAnalyzingVideoId}
+                    selectedCampaignId={selectedCampaignId}
+                    campaignList={campaignList.map(c => ({ id: c.id, name: c.name }))}
+                  />
+                )}
 
-          {activeTab === 'editor' && (
-            <EditorTab
-              contentList={contentList}
-              selectedVideo={selectedVideo}
-              setSelectedVideo={setSelectedVideo}
-              selectedSceneId={selectedSceneId}
-              setSelectedSceneId={setSelectedSceneId}
-              scenesForVideo={scenesForVideo}
-              surfacesForScene={surfacesForScene}
-              selectedSurfaceId={selectedSurfaceId}
-              setSelectedSurfaceId={setSelectedSurfaceId}
-              rejectionReason={rejectionReason}
-              setRejectionReason={setRejectionReason}
-              handleSurfaceDecision={handleSurfaceDecision}
-              currentSurface={currentSurface}
-              handleAiCustomizeScene={handleAiCustomizeScene}
-              assetList={assetList}
-              campaignList={campaignList}
-            />
-          )}
+                {activeView === 'placements' && (
+                  <EditorTab
+                    contentList={contentList}
+                    selectedVideo={selectedVideo}
+                    setSelectedVideo={setSelectedVideo}
+                    selectedSceneId={selectedSceneId}
+                    setSelectedSceneId={setSelectedSceneId}
+                    scenesForVideo={scenesForVideo}
+                    surfacesForScene={surfacesForScene}
+                    selectedSurfaceId={selectedSurfaceId}
+                    setSelectedSurfaceId={setSelectedSurfaceId}
+                    rejectionReason={rejectionReason}
+                    setRejectionReason={setRejectionReason}
+                    handleSurfaceDecision={handleSurfaceDecision}
+                    currentSurface={currentSurface}
+                    handleAiCustomizeScene={handleAiCustomizeScene}
+                    assetList={assetList}
+                    campaignList={campaignList}
+                  />
+                )}
 
-          {activeTab === 'composer' && (
-            <ComposerTab
-              selectedSurfaceId={selectedSurfaceId}
-              selectedVideo={selectedVideo}
-              campaignList={campaignList}
-              composerCampaignId={composerCampaignId}
-              setComposerCampaignId={setComposerCampaignId}
-              assetList={assetList}
-              composerAssetId={composerAssetId}
-              setComposerAssetId={setComposerAssetId}
-              composerPreset={composerPreset}
-              setComposerPreset={setComposerPreset}
-              handleQueueRender={handleQueueRender}
-              renderList={renderList}
-              scenesForVideo={scenesForVideo}
-            />
-          )}
+                {activeView === 'renders' && (
+                  <ComposerTab
+                    selectedSurfaceId={selectedSurfaceId}
+                    selectedVideo={selectedVideo}
+                    campaignList={campaignList}
+                    composerCampaignId={composerCampaignId}
+                    setComposerCampaignId={setComposerCampaignId}
+                    assetList={assetList}
+                    composerAssetId={composerAssetId}
+                    setComposerAssetId={setComposerAssetId}
+                    composerPreset={composerPreset}
+                    setComposerPreset={setComposerPreset}
+                    handleQueueRender={handleQueueRender}
+                    renderList={renderList}
+                    scenesForVideo={scenesForVideo}
+                  />
+                )}
 
-          {activeTab === 'telemetry' && (
-            <TelemetryTab
-              logList={logList}
-              alarmList={alarmList}
-              handleClearAlarm={handleClearAlarm}
-              handleSimulateAlarm={handleSimulateAlarm}
-              alarmSimSeverity={alarmSimSeverity}
-              setAlarmSimSeverity={setAlarmSimSeverity}
-              alarmSimSource={alarmSimSource}
-              setAlarmSimSource={setAlarmSimSource}
-              alarmSimDesc={alarmSimDesc}
-              setAlarmSimDesc={setAlarmSimDesc}
-            />
-          )}
+                {activeView === 'reports' && (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto py-8 text-center" key="reports">
+                    <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                    <h3 className="text-lg font-bold text-slate-800 font-display">Campaign Reports</h3>
+                    <p className="text-sm text-slate-500 mt-2">Billing, exposure analytics, and audit logs for this campaign.</p>
+                    <div className="mt-6 p-6 bg-white border border-slate-200 rounded-xl shadow-sm text-left space-y-2">
+                      <div className="text-xs font-mono text-slate-600 flex justify-between">
+                        <span>Campaign Budget:</span>
+                        <span className="font-bold">${campaignList.find(c => c.id === selectedCampaignId)?.totalBudget.toLocaleString()}</span>
+                      </div>
+                      <div className="text-xs font-mono text-slate-600 flex justify-between">
+                        <span>Assets Staged:</span>
+                        <span className="font-bold">{assetList.filter(a => a.campaignId === selectedCampaignId).length}</span>
+                      </div>
+                      <div className="text-xs font-mono text-slate-600 flex justify-between">
+                        <span>Renders Completed:</span>
+                        <span className="font-bold">{renderList.filter(r => r.renderStatus === 'Finished').length}</span>
+                      </div>
+                      <div className="text-xs font-mono text-slate-600 flex justify-between">
+                        <span>Total Processing Time:</span>
+                        <span className="font-bold">{(renderList.reduce((sum, r) => sum + r.processingDurationMs, 0) / 1000).toFixed(1)}s</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
 
-          {activeTab === 'admin' && (
-            <AdminConsoleTab
-              onTriggerLog={handleTriggerLog}
-              currentUser={user}
-            />
-          )}
-        </AnimatePresence>
-      </main>
+                {activeView === 'admin' && (
+                  <AdminConsoleTab onTriggerLog={handleTriggerLog} currentUser={user} />
+                )}
+
+                {activeView === 'telemetry' && (
+                  <TelemetryTab
+                    logList={logList}
+                    alarmList={alarmList}
+                    handleClearAlarm={handleClearAlarm}
+                    handleSimulateAlarm={handleSimulateAlarm}
+                    alarmSimSeverity={alarmSimSeverity}
+                    setAlarmSimSeverity={setAlarmSimSeverity}
+                    alarmSimSource={alarmSimSource}
+                    setAlarmSimSource={setAlarmSimSource}
+                    alarmSimDesc={alarmSimDesc}
+                    setAlarmSimDesc={setAlarmSimDesc}
+                  />
+                )}
+              </>
+            )}
+          </AnimatePresence>
+        </main>
+      </div>
 
       {/* FOOTER */}
       <footer className="max-w-7xl mx-auto px-6 mt-12 pt-6 border-t border-slate-200 text-center text-xs text-slate-400 font-mono" id="portal_footer">
