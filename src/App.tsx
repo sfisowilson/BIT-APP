@@ -951,6 +951,9 @@ export default function App() {
                     selectedVideo={selectedVideo}
                     setSelectedVideo={setSelectedVideo}
                     scenesForVideo={scenesForVideo}
+                    selectedSceneId={selectedSceneId}
+                    setSelectedSceneId={setSelectedSceneId}
+                    onNavigateToPlacements={() => setActiveView('placements')}
                     newVideoTitle={newVideoTitle}
                     setNewVideoTitle={setNewVideoTitle}
                     newVideoRes={newVideoRes}

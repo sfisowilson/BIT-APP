@@ -8,6 +8,9 @@ interface IngestionTabProps {
   selectedVideo: string;
   setSelectedVideo: (v: string) => void;
   scenesForVideo: SceneItem[];
+  selectedSceneId: string;
+  setSelectedSceneId: (v: string) => void;
+  onNavigateToPlacements: () => void;
   newVideoTitle: string;
   setNewVideoTitle: (v: string) => void;
   newVideoRes: string;
@@ -75,6 +78,9 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
   selectedVideo,
   setSelectedVideo,
   scenesForVideo,
+  selectedSceneId,
+  setSelectedSceneId,
+  onNavigateToPlacements,
   newVideoTitle,
   setNewVideoTitle,
   newVideoRes,
@@ -398,10 +404,12 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                         const totalFrames = scenesForVideo.reduce((max, s) => Math.max(max, s.endFrame), 1);
                         const leftPct = (scene.startFrame / totalFrames) * 100;
                         const widthPct = ((scene.endFrame - scene.startFrame) / totalFrames) * 100;
+                        const isActive = scene.id === selectedSceneId;
                         return (
                           <div
                             key={scene.id}
-                            className={`absolute top-0 h-full ${colors[idx % colors.length]} border-r border-white/20 flex items-center px-1.5 cursor-pointer hover:brightness-125 transition-all`}
+                            onClick={(e) => { e.stopPropagation(); setSelectedSceneId(scene.id); }}
+                            className={`absolute top-0 h-full ${colors[idx % colors.length]} border-r border-white/20 flex items-center px-1.5 cursor-pointer hover:brightness-125 transition-all ${isActive ? 'ring-2 ring-yellow-400 brightness-125 z-10' : ''}`}
                             style={{ left: `${leftPct}%`, width: `${Math.max(widthPct, 2)}%` }}
                             title={`Scene #${scene.sceneIndex}: ${scene.durationSeconds}s (frames ${scene.startFrame}–${scene.endFrame})`}
                           >
@@ -519,7 +527,8 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                             const widthPct = Math.max(((scene.endFrame - scene.startFrame) / totalFrames) * 100, 1.5);
                             return (
                               <div key={scene.id}
-                                className={`absolute top-0 h-full ${colors[idx % colors.length]} opacity-70`}
+                                onClick={(e) => { e.stopPropagation(); setSelectedSceneId(scene.id); onNavigateToPlacements(); }}
+                                className={`absolute top-0 h-full ${colors[idx % colors.length]} opacity-70 cursor-pointer hover:opacity-100 transition-opacity`}
                                 style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
                               />
                             );
@@ -583,7 +592,15 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                       ) : (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                           {scenesForVideo.map(scene => (
-                            <div key={scene.id} className="bg-white border border-slate-200/80 rounded-lg p-2.5 font-mono text-[10px] hover:border-blue-300 transition-colors">
+                            <div
+                              key={scene.id}
+                              onClick={() => { setSelectedSceneId(scene.id); onNavigateToPlacements(); }}
+                              className={`bg-white border rounded-lg p-2.5 font-mono text-[10px] transition-all cursor-pointer ${
+                                scene.id === selectedSceneId
+                                  ? 'border-blue-400 bg-blue-50 shadow-sm ring-1 ring-blue-300'
+                                  : 'border-slate-200/80 hover:border-blue-300 hover:bg-blue-50/30'
+                              }`}
+                            >
                               <div className="text-slate-800 font-bold">Scene #{scene.sceneIndex}</div>
                               <div className="text-slate-400 mt-1">Frames: {scene.startFrame}–{scene.endFrame}</div>
                               <div className="text-slate-400">{scene.durationSeconds}s</div>
@@ -592,6 +609,9 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                                 scene.qaStatus === 'Flagged' ? 'text-red-500' : 'text-slate-400'
                               }`}>
                                 {scene.qaStatus}
+                              </div>
+                              <div className="text-[8px] text-blue-400 mt-1.5 font-sans flex items-center gap-0.5">
+                                <Eye className="h-2.5 w-2.5" /> Click to review surfaces
                               </div>
                             </div>
                           ))}
