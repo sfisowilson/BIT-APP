@@ -6,3 +6,128 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --font-display: "Space Grotesk", sans-serif;
 }
+
+/* Elegant Dark Theme overrides */
+html.dark, .dark {
+  color-scheme: dark;
+}
+
+.dark #app_root {
+  background-color: #0b0f19 !important; /* Very dark slate-950 */
+  color: #cbd5e1 !important; /* slate-300 */
+}
+
+/* Headers, Sidebars and Navs */
+.dark #portal_header,
+.dark header {
+  background-color: #111827 !important; /* gray-900 */
+  border-color: #1f2937 !important; /* gray-800 */
+}
+
+.dark #sidebar_wrapper {
+  background-color: #111827 !important;
+  border-color: #1f2937 !important;
+}
+
+/* Primary cards and white containers */
+.dark .bg-white,
+.dark [class*="bg-white"] {
+  background-color: #111827 !important; /* gray-900 */
+  color: #e5e7eb !important; /* gray-200 */
+}
+
+/* Reset sub-component backgrounds */
+.dark .bg-slate-50,
+.dark .bg-slate-50\/70,
+.dark .bg-slate-100 {
+  background-color: #1f2937 !important; /* gray-800 */
+}
+
+/* Borders */
+.dark .border-slate-200,
+.dark .border-slate-150,
+.dark .border-slate-100,
+.dark .border-slate-300 {
+  border-color: #374151 !important; /* gray-700 */
+}
+
+/* Text color overrides */
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700,
+.dark .text-slate-600 {
+  color: #f3f4f6 !important; /* gray-100 */
+}
+
+.dark .text-slate-500,
+.dark .text-slate-400 {
+  color: #9ca3af !important; /* gray-400 */
+}
+
+/* Forms & Inputs */
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: #1f2937 !important; /* gray-800 */
+  border-color: #374151 !important; /* gray-700 */
+  color: #f3f4f6 !important; /* gray-100 */
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #6b7280 !important; /* gray-500 */
+}
+
+/* Table styling */
+.dark tr:hover {
+  background-color: #1f2937 !important;
+}
+
+/* Hover effects */
+.dark .hover\:bg-slate-50:hover {
+  background-color: #1f2937 !important;
+}
+
+/* Blue banners */
+.dark .bg-blue-50 {
+  background-color: #1e3a8a !important; /* dark blue-900 */
+  border-color: #1e40af !important;
+  color: #93c5fd !important;
+}
+
+.dark .text-blue-600 {
+  color: #60a5fa !important;
+}
+
+.dark .text-blue-900 {
+  color: #bfdbfe !important;
+}
+
+/* Alerts and Alarms */
+.dark .bg-red-50 {
+  background-color: #7f1d1d !important; /* dark red-900 */
+  border-color: #991b1b !important;
+  color: #fca5a5 !important;
+}
+
+.dark .text-red-600 {
+  color: #f87171 !important;
+}
+
+/* Active links or selections */
+.dark .bg-blue-500,
+.dark .bg-blue-600 {
+  background-color: #2563eb !important;
+}
+
+.dark .text-blue-700 {
+  color: #93c5fd !important;
+}
+
+.dark .text-emerald-600 {
+  color: #34d399 !important;
+}
+
+.dark .text-amber-600 {
+  color: #fbbf24 !important;
+}

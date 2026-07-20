@@ -17,18 +17,27 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
     });
 
-// Configure EF Core with PostgreSQL (MReq 25)
+// Configure EF Core (MReq 25) - Dynamic selection for local environment support
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
     ?? "Host=localhost;Database=afrobotics_bit;Username=postgres;Password=Password@1";
-builder.Services.AddDbContext<PostgresDbContext>(options =>
-    options.UseNpgsql(connectionString));
+
+if (Environment.GetEnvironmentVariable("USE_SQLITE") == "true")
+{
+    builder.Services.AddDbContext<PostgresDbContext>(options =>
+        options.UseSqlite("Data Source=afrobotics_bit.db"));
+}
+else
+{
+    builder.Services.AddDbContext<PostgresDbContext>(options =>
+        options.UseNpgsql(connectionString));
+}
 
 // Add CORS Policy for Vue.js Frontend client interaction
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontendClient", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "https://*.run.app")
+        policy.SetIsOriginAllowed(origin => true)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -107,17 +116,25 @@ using (var scope = app.Services.CreateScope())
     var logger = services.GetRequiredService<ILogger<Program>>();
     var context = services.GetRequiredService<PostgresDbContext>();
 
-    // Step 1: apply pending EF Core migrations
+    // Step 1: apply pending EF Core migrations or ensure created for SQLite
     try
     {
-        context.Database.Migrate();
-        logger.LogInformation("Database migrations applied successfully.");
+        if (context.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            context.Database.EnsureCreated();
+            logger.LogInformation("SQLite Database created/ensured successfully.");
+        }
+        else
+        {
+            context.Database.Migrate();
+            logger.LogInformation("Database migrations applied successfully.");
+        }
     }
     catch (Exception ex)
     {
         // Tables may already exist from a previous EnsureCreated() call.
         // Log a warning and continue — the seed step below will still run.
-        logger.LogWarning(ex, "Migration failed (tables may already exist). Continuing to seed step.");
+        logger.LogWarning(ex, "Database initialization warning/failed. Continuing to seed step.");
     }
 
     // Step 2: seed initial data (only inserts if tables are empty)

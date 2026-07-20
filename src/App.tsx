@@ -19,7 +19,9 @@ import {
   Code2,
   LogOut,
   Package,
-  Plus
+  Plus,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 import { 
@@ -89,6 +91,21 @@ export default function App() {
 
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [downloading, setDownloading] = useState<boolean>(false);
+
+  // Theme state (MReq: Dark / Light Mode Switcher)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    return (localStorage.getItem('bit_theme') as 'light' | 'dark') || 'light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('bit_theme', theme);
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [theme]);
 
   // Authentication & RBAC States (MReq 8, 9)
   const [user, setUser] = useState<{ id: string; fullName: string; email: string; role: 'Admin' | 'Editor' | 'Advertiser' } | null>(null);
@@ -1084,14 +1101,22 @@ export default function App() {
       <header className="border-b border-slate-200 bg-white px-6 py-4 sticky top-0 z-50 shadow-xs" id="portal_header">
         <div className="max-w-full mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="inline-flex h-2 w-2 rounded-full bg-blue-600 animate-pulse"></span>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-blue-600 font-mono">Afrobotics BIT</span>
+            <div className="flex items-center gap-3">
+              <img 
+                src="https://static.wixstatic.com/media/b8640c_265e3e68123947c9a20bcbc636f9d98e~mv2.png/v1/fill/w_172,h_196,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/afrobotic%20l-03_green.png" 
+                alt="Afrobotics Logo" 
+                className="h-10 w-auto object-contain shrink-0"
+                referrerPolicy="no-referrer"
+              />
+              <div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 font-mono">Afrobotics BIT</span>
+                </div>
+                <h1 className="text-base font-extrabold text-slate-900 tracking-tight font-display">
+                  Brand Insertion Technology
+                </h1>
               </div>
-              <h1 className="text-base font-extrabold text-slate-900 tracking-tight font-display">
-                Brand Insertion Technology
-              </h1>
             </div>
             {/* Campaign Selector — always visible */}
             <div className="pl-4 border-l border-slate-200">
@@ -1131,6 +1156,16 @@ export default function App() {
                   </div>
                   <div className="text-[10px] text-slate-400 font-mono">{user.email}</div>
                 </div>
+                
+                {/* Theme Switcher Button */}
+                <button 
+                  onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} 
+                  className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-all border border-slate-200 dark:border-slate-700" 
+                  title={theme === 'light' ? "Switch to Dark Mode" : "Switch to Light Mode"}
+                >
+                  {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                </button>
+
                 <button onClick={handleLogout} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-all border border-slate-200 hover:border-red-100" title="Logout">
                   <LogOut className="h-4 w-4" />
                 </button>
