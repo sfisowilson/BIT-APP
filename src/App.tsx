@@ -1103,7 +1103,7 @@ export default function App() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
               <img 
-                src="https://static.wixstatic.com/media/b8640c_265e3e68123947c9a20bcbc636f9d98e~mv2.png/v1/fill/w_172,h_196,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/afrobotic%20l-03_green.png" 
+                src="https://static.wixstatic.com/media/b8640c_265e3e68123947c9a20bcbc636f9d98e~mv2.png" 
                 alt="Afrobotics Logo" 
                 className="h-10 w-auto object-contain shrink-0"
                 referrerPolicy="no-referrer"
