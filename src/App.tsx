@@ -977,6 +977,14 @@ export default function App() {
           {/* Brand Info Panel */}
           <div className="md:col-span-5 flex flex-col justify-between p-8 bg-gradient-to-br from-blue-700 to-indigo-900 rounded-2xl shadow-2xl text-white">
             <div>
+              <div className="mb-6 flex items-center">
+                <img 
+                  src="https://static.wixstatic.com/media/b8640c_265e3e68123947c9a20bcbc636f9d98e~mv2.png" 
+                  alt="Afrobotics Logo" 
+                  className="h-14 w-auto object-contain brightness-0 invert"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-bold uppercase tracking-wider mb-6">
                 <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 IDENTITY SERVICES GATEWAY
