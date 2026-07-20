@@ -9,9 +9,11 @@ namespace Afrobotics.Bit.Api.Services
 {
     public interface IAssetService
     {
-        Task<IEnumerable<CreativeAsset>> GetAssetsAsync();
+        Task<IEnumerable<CreativeAsset>> GetAssetsAsync(string? campaignId = null);
         Task<IEnumerable<CreativeAsset>> GetAssetsByCampaignAsync(string campaignId);
         Task<CreativeAsset> CreateAssetAsync(CreateAssetDto dto);
+        Task<CreativeAsset> CreateAssetWithFileAsync(CreateAssetDto dto, string storageKey, string fileSize, string dimensions);
+        Task<CreativeAsset?> UpdateAssetAsync(string id, UpdateAssetDto dto);
         Task<bool> AssociateAssetWithCampaignAsync(string assetId, string campaignId);
         Task<bool> UnassociateAssetAsync(string assetId);
         Task<bool> DeleteAssetAsync(string id);
@@ -28,9 +30,12 @@ namespace Afrobotics.Bit.Api.Services
             _campaignRepository = campaignRepository;
         }
 
-        public async Task<IEnumerable<CreativeAsset>> GetAssetsAsync()
+        public async Task<IEnumerable<CreativeAsset>> GetAssetsAsync(string? campaignId = null)
         {
-            return await _assetRepository.GetAllAsync();
+            var all = await _assetRepository.GetAllAsync();
+            if (!string.IsNullOrEmpty(campaignId))
+                return all.Where(a => a.CampaignId == campaignId);
+            return all;
         }
 
         public async Task<IEnumerable<CreativeAsset>> GetAssetsByCampaignAsync(string campaignId)
@@ -49,12 +54,46 @@ namespace Afrobotics.Bit.Api.Services
                 FileSize = "0 MB",
                 Dimensions = "1920x1080",
                 BrandCategory = dto.BrandCategory,
-                CampaignId = dto.CampaignId  // MReq 10: associate with campaign at creation
+                CampaignId = dto.CampaignId
             };
 
             await _assetRepository.AddAsync(asset);
             await _assetRepository.SaveChangesAsync();
 
+            return asset;
+        }
+
+        public async Task<CreativeAsset> CreateAssetWithFileAsync(CreateAssetDto dto, string storageKey, string fileSize, string dimensions)
+        {
+            var asset = new CreativeAsset
+            {
+                Id = "as-" + Guid.NewGuid().ToString().Substring(0, 4),
+                Name = dto.Name,
+                Type = dto.Type,
+                StorageKey = storageKey,
+                FileSize = fileSize,
+                Dimensions = dimensions,
+                BrandCategory = dto.BrandCategory,
+                CampaignId = dto.CampaignId
+            };
+
+            await _assetRepository.AddAsync(asset);
+            await _assetRepository.SaveChangesAsync();
+
+            return asset;
+        }
+
+        public async Task<CreativeAsset?> UpdateAssetAsync(string id, UpdateAssetDto dto)
+        {
+            var asset = await _assetRepository.GetByIdAsync(id);
+            if (asset == null) return null;
+
+            if (dto.Name != null) asset.Name = dto.Name;
+            if (dto.Type != null) asset.Type = dto.Type;
+            if (dto.BrandCategory != null) asset.BrandCategory = dto.BrandCategory;
+            if (dto.CampaignId != null) asset.CampaignId = dto.CampaignId;
+
+            await _assetRepository.SaveChangesAsync();
             return asset;
         }
 

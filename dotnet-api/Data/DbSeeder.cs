@@ -49,6 +49,44 @@ namespace Afrobotics.Bit.Api.Data
                 );
             }
 
+            // Safety: ensure the primary admin account always exists and is an active Admin.
+            // This is the root administrative account — it must never be demoted or suspended.
+            var primaryAdmin = context.Users
+                .FirstOrDefault(u => u.Email == "admin@afrobotics.co.za");
+            if (primaryAdmin != null)
+            {
+                if (primaryAdmin.Role != "Admin" || primaryAdmin.AccountStatus != "Active")
+                {
+                    primaryAdmin.Role = "Admin";
+                    primaryAdmin.AccountStatus = "Active";
+                    context.SaveChanges();
+                }
+            }
+
+            // Fallback safety: ensure at least one active admin exists at all times.
+            var activeAdminExists = context.Users.Any(u => u.Role == "Admin" && u.AccountStatus == "Active");
+            if (!activeAdminExists)
+            {
+                // Try to reactivate any suspended admin
+                var anyAdmin = context.Users.OrderBy(u => u.Email)
+                    .FirstOrDefault(u => u.Role == "Admin");
+                if (anyAdmin != null)
+                {
+                    anyAdmin.AccountStatus = "Active";
+                }
+                else
+                {
+                    // No admin at all — promote the first user sorted by email
+                    var firstUser = context.Users.OrderBy(u => u.Email).FirstOrDefault();
+                    if (firstUser != null)
+                    {
+                        firstUser.Role = "Admin";
+                        firstUser.AccountStatus = "Active";
+                    }
+                }
+                context.SaveChanges();
+            }
+
             // ── ContentItems ───────────────────────────────────────
             if (!context.ContentItems.Any())
             {

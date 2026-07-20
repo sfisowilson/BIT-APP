@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Download, 
@@ -17,7 +18,8 @@ import {
   Users,
   Code2,
   LogOut,
-  Package
+  Package,
+  Plus
 } from 'lucide-react';
 
 import { 
@@ -31,6 +33,7 @@ import {
   RenderItem, 
   EventLog, 
   AlarmItem, 
+  SurfaceAssetPair,
   TIMELINE_DATA 
 } from './types';
 import { DOCUMENT_CONTENT } from './document';
@@ -48,7 +51,42 @@ import { CampaignSidebar, type SidebarView } from './components/CampaignSidebar'
 import { CampaignDashboard } from './components/CampaignDashboard';
 
 export default function App() {
-  const [activeView, setActiveView] = useState<SidebarView>('dashboard');
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // ── URL-derived state (enables link sharing & back/forward navigation) ──
+  // URL patterns:
+  //   /                          → landing (no campaign)
+  //   /c/:campaignId             → dashboard for campaign
+  //   /c/:campaignId/:view       → specific view (assets|content|placements|renders|reports)
+  //   /admin                     → admin console
+  //   /telemetry                 → telemetry
+  const { activeView, selectedCampaignId } = useMemo(() => {
+    const parts = location.pathname.split('/').filter(Boolean);
+    if (parts[0] === 'c' && parts[1]) {
+      const view = (parts[2] as SidebarView) || 'dashboard';
+      return { activeView: view, selectedCampaignId: parts[1] };
+    }
+    if (parts[0] === 'admin') return { activeView: 'admin' as SidebarView, selectedCampaignId: null };
+    if (parts[0] === 'telemetry') return { activeView: 'telemetry' as SidebarView, selectedCampaignId: null };
+    return { activeView: null, selectedCampaignId: null };
+  }, [location.pathname]);
+
+  /** Navigate to a specific view, optionally within a campaign context */
+  const navigateTo = useCallback((view: SidebarView | null, campaignId?: string | null) => {
+    if (!view) {
+      navigate('/');
+    } else if (campaignId) {
+      navigate(`/c/${campaignId}${view === 'dashboard' ? '' : `/${view}`}`);
+    } else if (view === 'admin') {
+      navigate('/admin');
+    } else if (view === 'telemetry') {
+      navigate('/telemetry');
+    } else {
+      navigate('/');
+    }
+  }, [navigate]);
+
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [downloading, setDownloading] = useState<boolean>(false);
 
@@ -69,13 +107,19 @@ export default function App() {
   const [alarmList, setAlarmList] = useState<AlarmItem[]>([]);
 
   // Selection / Form states
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
-  const [selectedVideo, setSelectedVideo] = useState<string>('v-01');
+  const [selectedVideo, setSelectedVideo] = useState<string>('');
   const [scenesForVideo, setScenesForVideo] = useState<SceneItem[]>([]);
   const [selectedSceneId, setSelectedSceneId] = useState<string>('');
   const [surfacesForScene, setSurfacesForScene] = useState<SurfaceItem[]>([]);
   const [selectedSurfaceId, setSelectedSurfaceId] = useState<string>('');
   const [rejectionReason, setRejectionReason] = useState<string>('');
+
+  // Phase 2: Asset placement tracking (surfaceId -> assetId)
+  const [surfaceAssetPairs, setSurfaceAssetPairs] = useState<Record<string, string>>({});
+
+  // Phase 3: AI asset suggestion state
+  const [isSuggestingAssets, setIsSuggestingAssets] = useState<Record<string, boolean>>({});
+  const [aiSuggestions, setAiSuggestions] = useState<Record<string, { assetId: string; reason: string }[]>>({});
 
   // Form Submissions
   const [newCampaignName, setNewCampaignName] = useState<string>('');
@@ -87,6 +131,7 @@ export default function App() {
   const [newAssetName, setNewAssetName] = useState<string>('');
   const [newAssetType, setNewAssetType] = useState<"Image" | "Logo" | "Video">('Image');
   const [newAssetCategory, setNewAssetCategory] = useState<string>('Beverages (Non-Alcoholic)');
+  const [newAssetFile, setNewAssetFile] = useState<File | null>(null);
 
   const [newVideoTitle, setNewVideoTitle] = useState<string>('');
   const [newVideoRes, setNewVideoRes] = useState<string>('1920x1080 (1080p)');
@@ -116,8 +161,13 @@ export default function App() {
 
     try {
       const data = await apiLogin({ email, password });
+      // apiLogin already persists token + user to localStorage
+      // Sync React state so the login gate lifts
       setToken(data.token);
       setUser(data.user);
+      // Clear form fields after successful login
+      setLoginEmail('');
+      setLoginPassword('');
     } catch (err: any) {
       console.error(err);
       setAuthError(err.message || "Identity Service connection error.");
@@ -125,14 +175,38 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    // Clear React auth state
     setToken(null);
     setUser(null);
+    // Clear persisted session
     clearToken();
+    // Reset all operational data so next user starts fresh
+    setContentList([]);
+    setCampaignList([]);
+    setAssetList([]);
+    setRenderList([]);
+    setLogList([]);
+    setAlarmList([]);
+    setScenesForVideo([]);
+    setSurfacesForScene([]);
+    setSelectedVideo('');
+    setSelectedSceneId('');
+    setSelectedSurfaceId('');
+    setSurfaceAssetPairs({});
+    setAiSuggestions({});
+    setIsSuggestingAssets({});
+    // Navigate to landing page (clears URL)
+    navigate('/');
   };
 
   // Secure request broker (MReq 8 over secure JWT authorization)
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     const res = await apiFetchWithAuth(url, options);
+    // Auto-logout if token is invalid or expired
+    if (res.status === 401) {
+      handleLogout();
+      throw new Error('Session expired. Please sign in again.');
+    }
     if (!res.ok) {
       const clone = res.clone();
       const text = await clone.text();
@@ -147,16 +221,14 @@ export default function App() {
     return res;
   };
 
-  // Load user session from local storage on load or auto-login (MReq 8)
+  // Restore saved session from localStorage on mount (MReq 8)
+  // No auto-login — user must explicitly authenticate via the login form
   useEffect(() => {
     const savedToken = getToken();
     const savedUser = getSavedUser<UserSession>();
     if (savedToken && savedUser) {
       setToken(savedToken);
       setUser(savedUser);
-    } else {
-      // Auto-login as default editor to ensure out-of-the-box operation (Sfiso Dlamini, Editor)
-      handleLogin(undefined, { email: 'loverboy.sfiso@gmail.com', pass: 'editor123' });
     }
   }, []);
 
@@ -169,6 +241,7 @@ export default function App() {
         return r.json();
       };
 
+      const campaignParam = selectedCampaignId ? `?campaignId=${selectedCampaignId}` : '';
       const [
         contentRes,
         campaignsRes,
@@ -177,10 +250,10 @@ export default function App() {
         logsRes,
         alarmsRes
       ] = await Promise.allSettled([
-        fetchJson('/api/content'),
+        fetchJson(`/api/content${campaignParam}`),
         fetchJson('/api/campaigns'),
-        fetchJson('/api/assets'),
-        fetchJson('/api/renders'),
+        fetchJson(`/api/assets${campaignParam}`),
+        fetchJson(`/api/renders${campaignParam}`),
         fetchJson('/api/logs'),
         fetchJson('/api/alarms')
       ]);
@@ -224,6 +297,58 @@ export default function App() {
     }
   }, [token]);
 
+  // Redirect to landing if the campaign ID in the URL doesn't exist (once campaigns are loaded)
+  useEffect(() => {
+    if (selectedCampaignId && campaignList.length > 0) {
+      const exists = campaignList.some(c => c.id === selectedCampaignId);
+      if (!exists) {
+        navigate('/', { replace: true });
+      }
+    }
+  }, [selectedCampaignId, campaignList, navigate]);
+
+  // Validate that the URL view is a known SidebarView — redirect to dashboard if not
+  const VALID_VIEWS: string[] = ['dashboard', 'assets', 'content', 'placements', 'renders', 'reports', 'admin', 'telemetry'];
+  useEffect(() => {
+    if (activeView && !VALID_VIEWS.includes(activeView)) {
+      if (selectedCampaignId) {
+        navigate(`/c/${selectedCampaignId}`, { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
+    }
+  }, [activeView, selectedCampaignId, navigate]);
+
+  // Update document title based on current route (for link sharing / bookmarks)
+  useEffect(() => {
+    const campaignName = selectedCampaignId
+      ? campaignList.find(c => c.id === selectedCampaignId)?.name
+      : null;
+    const viewLabel = activeView
+      ? activeView.charAt(0).toUpperCase() + activeView.slice(1)
+      : '';
+    if (campaignName && viewLabel) {
+      document.title = `${campaignName} · ${viewLabel} — Afrobotics BIT`;
+    } else if (campaignName) {
+      document.title = `${campaignName} — Afrobotics BIT`;
+    } else if (activeView) {
+      document.title = `${viewLabel} — Afrobotics BIT`;
+    } else {
+      document.title = 'Afrobotics BIT — Brand Insertion Technology';
+    }
+  }, [activeView, selectedCampaignId, campaignList]);
+
+  // Auto-select first completed video when contentList loads and no valid video is selected
+  useEffect(() => {
+    if (!token || contentList.length === 0) return;
+    const completed = contentList.filter(v => v.ingestionStatus === 'Completed');
+    if (completed.length === 0) return;
+    const exists = completed.some(v => v.id === selectedVideo);
+    if (!selectedVideo || !exists) {
+      setSelectedVideo(completed[0].id);
+    }
+  }, [contentList, token]);
+
   // Fetch scenes when selected video changes
   useEffect(() => {
     if (!selectedVideo || !token) return;
@@ -238,8 +363,14 @@ export default function App() {
           setSurfacesForScene([]);
           setSelectedSurfaceId('');
         }
+      })
+      .catch(() => {
+        setScenesForVideo([]);
+        setSelectedSceneId('');
+        setSurfacesForScene([]);
+        setSelectedSurfaceId('');
       });
-  }, [selectedVideo, contentList, token]);
+  }, [selectedVideo, token]);
 
   // Fetch surfaces when selected scene changes
   useEffect(() => {
@@ -265,8 +396,8 @@ export default function App() {
   }, [selectedCampaignId]);
 
   // Handle Campaign Creation
-  const handleCreateCampaign = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateCampaign = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setCampaignError(null);
     try {
       const res = await fetchWithAuth('/api/campaigns', {
@@ -296,25 +427,73 @@ export default function App() {
     }
   };
 
-  // Handle Asset library upload (MReq 10: optional campaign association)
+  // Handle Asset library upload (MReq 10: with real file upload support)
   const handleUploadAsset = async (e: React.FormEvent, campaignId?: string) => {
     e.preventDefault();
     if (!newAssetName) return;
     try {
-      await fetchWithAuth('/api/assets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newAssetName,
-          type: newAssetType,
-          brandCategory: newAssetCategory,
-          campaignId: campaignId || null
-        })
-      });
+      if (newAssetFile) {
+        // File upload via multipart form
+        const formData = new FormData();
+        formData.append('name', newAssetName);
+        formData.append('type', newAssetType);
+        formData.append('brandCategory', newAssetCategory);
+        if (campaignId) formData.append('campaignId', campaignId);
+        formData.append('file', newAssetFile);
+
+        const token = getToken();
+        await fetch('/api/assets/upload', {
+          method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          body: formData,
+        });
+      } else {
+        // JSON-only creation
+        await fetchWithAuth('/api/assets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newAssetName,
+            type: newAssetType,
+            brandCategory: newAssetCategory,
+            campaignId: campaignId || null
+          })
+        });
+      }
       setNewAssetName('');
+      setNewAssetFile(null);
       fetchAllData();
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // Handle updating an existing asset
+  const handleUpdateAsset = async (assetId: string, data: { name?: string; type?: string; brandCategory?: string; file?: File }) => {
+    try {
+      if (data.file) {
+        const formData = new FormData();
+        if (data.name) formData.append('name', data.name);
+        if (data.type) formData.append('type', data.type);
+        if (data.brandCategory) formData.append('brandCategory', data.brandCategory);
+        formData.append('file', data.file);
+
+        const token = getToken();
+        await fetch(`/api/assets/${assetId}/upload`, {
+          method: 'PUT',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          body: formData,
+        });
+      } else {
+        await fetchWithAuth(`/api/assets/${assetId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+      }
+      fetchAllData();
+    } catch (err) {
+      console.error('Failed to update asset:', err);
     }
   };
 
@@ -478,76 +657,52 @@ export default function App() {
     }
   };
 
-  // Handle AI Scene Customization (Pre-Stitch model prompts)
-  const handleAiCustomizeScene = async (sceneId: string, prompt: string) => {
-    if (!sceneId || !prompt) return;
+  // Handle compositing preview (MReq 6: generate composite frame for QA)
+  const [compositePreview, setCompositePreview] = useState<string | null>(null);
+  const [compositingPreview, setCompositingPreview] = useState(false);
 
-    // Immediately set state to processing for instant visual feedback
-    setScenesForVideo(prev => prev.map(s => s.id === sceneId ? { ...s, aiPrompt: prompt, aiStatus: 'processing' } : s));
-
+  const handlePreviewComposite = async (surfaceId: string, assetId: string) => {
+    setCompositingPreview(true);
     try {
-      const selectedScene = scenesForVideo.find(s => s.id === sceneId);
-      const selectedVideoTitle = contentList.find(v => v.id === selectedVideo)?.title || "";
+      const surface = surfacesForScene.find(s => s.id === surfaceId);
+      if (!surface) return;
 
-      // Call our real Express server with the prompt & metadata
-      const res = await fetchWithAuth('/api/scenes/ai-modify', {
+      const res = await fetchWithAuth('/api/compositing/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sceneId,
-          prompt,
-          videoTitle: selectedVideoTitle,
-          sceneIndex: selectedScene?.sceneIndex
+          surfaceId,
+          assetId,
+          contentId: selectedVideo,
+          frameNumber: 0,
+          boundaryCoordinatesJson: JSON.stringify(surface.boundaryCoordinates)
         })
       });
 
-      if (!res.ok) {
-        throw new Error("AI Scene customization request failed.");
-      }
+      const data = await res.json();
+      setCompositePreview(data.imageBase64);
+    } catch (err) {
+      console.error('Compositing preview failed:', err);
+    } finally {
+      setCompositingPreview(false);
+    }
+  };
 
-      const responseData = await res.json();
-      const data = responseData.data;
-
-      // Save properties locally to our mock persistence DB
-      await fetchWithAuth('/api/scenes/update', {
+  // Handle scene-level approval (approve scene with its placed assets for rendering)
+  const handleSceneApprove = async (sceneId: string) => {
+    try {
+      await fetchWithAuth(`/api/scenes/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: sceneId,
-          aiPrompt: prompt,
-          aiStatus: 'completed',
-          aiOutputDescription: data.description,
-          aiModelUsed: 'gemini-3.5-flash'
-        })
+        body: JSON.stringify({ id: sceneId, qaStatus: 'Approved' })
       });
-
-      // Refresh scene list
       if (selectedVideo) {
         const refreshed = await fetchWithAuth(`/api/content/${selectedVideo}/scenes`).then(r => r.json());
         setScenesForVideo(refreshed);
       }
-
-      // Record in system event log
-      handleTriggerLog(
-        "SCENE_AI_PROCESSED",
-        "Info",
-        "CompositingAI",
-        user?.email || "loverboy.sfiso@gmail.com",
-        `AI pre-stitch update applied to Scene #${selectedScene?.sceneIndex}: "${data.description.slice(0, 80)}..."`
-      );
-    } catch (err: any) {
-      console.error("AI customization error:", err);
-
-      setScenesForVideo(prev => prev.map(s => s.id === sceneId ? { ...s, aiStatus: 'failed' } : s));
-
-      await fetchWithAuth('/api/scenes/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: sceneId,
-          aiStatus: 'failed'
-        })
-      });
+      fetchAllData();
+    } catch (err) {
+      console.error('Failed to approve scene:', err);
     }
   };
 
@@ -641,6 +796,137 @@ export default function App() {
       console.error("Failed to post log:", err);
     }
   };
+
+  // Phase 2: Place an asset on a surface
+  const handlePlaceAsset = (surfaceId: string, assetId: string) => {
+    setSurfaceAssetPairs(prev => ({ ...prev, [surfaceId]: assetId }));
+  };
+
+  // Phase 2: Remove an asset from a surface
+  const handleRemoveAsset = (surfaceId: string) => {
+    setSurfaceAssetPairs(prev => {
+      const next = { ...prev };
+      delete next[surfaceId];
+      return next;
+    });
+  };
+
+  // Phase 2: Submit a surface+asset placement for rendering
+  const handleSubmitPlacement = async (surfaceId: string, assetId: string, campaignId: string) => {
+    if (!selectedVideo) return;
+    try {
+      await fetchWithAuth('/api/renders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contentId: selectedVideo,
+          surfaceId,
+          campaignId: campaignId || composerCampaignId,
+          assetId,
+          exportPreset: composerPreset
+        })
+      });
+      fetchAllData();
+    } catch (err) {
+      console.error('Failed to submit placement:', err);
+    }
+  };
+
+  // Phase 3: AI-powered asset suggestion with smart category matching
+  const handleAiSuggestAssets = async (surfaceId: string) => {
+    const surface = surfacesForScene.find(s => s.id === surfaceId);
+    if (!surface) return;
+
+    setIsSuggestingAssets(prev => ({ ...prev, [surfaceId]: true }));
+
+    // Smart matching: surface type keywords -> recommended brand categories
+    const surfaceLower = surface.surfaceType.toLowerCase();
+    const categoryScores: Record<string, number> = {};
+
+    // Score each brand category based on surface type relevance
+    const isOutdoor = /billboard|hoarding|wall|building|facade|outdoor|street/i.test(surfaceLower);
+    const isScreen = /screen|tv|monitor|display|led|lcd|digital/i.test(surfaceLower);
+    const isField = /field|pitch|grass|stadium|ground|court/i.test(surfaceLower);
+    const isProduct = /product|table|shelf|counter|bar|desk/i.test(surfaceLower);
+    const isVehicle = /vehicle|car|bus|taxi|truck|van/i.test(surfaceLower);
+    const isSignage = /sign|banner|poster|flag/i.test(surfaceLower);
+
+    for (const asset of assetList) {
+      let score = surface.viabilityScore * 100; // base score from viability
+      const cat = asset.brandCategory;
+
+      if (isOutdoor && /Apparel|Automotive|Beverage|Telecom|Retail|Insurance/i.test(cat)) score += 30;
+      if (isScreen && /Electronics|Gaming|Streaming|Software|Telecom/i.test(cat)) score += 35;
+      if (isField && /Sports|Beverage|Apparel|Automotive|Energy/i.test(cat)) score += 30;
+      if (isProduct && /FMCG|Beverage|Beauty|Luxury|Electronics/i.test(cat)) score += 30;
+      if (isVehicle && /Automotive|Motoring|Logistics|Energy|Insurance/i.test(cat)) score += 35;
+      if (isSignage && /Retail|Entertainment|Streaming|Gaming|Real Estate/i.test(cat)) score += 25;
+
+      categoryScores[asset.id] = score;
+    }
+
+    // Try server first, fall back to scored local matching
+    try {
+      const res = await fetchWithAuth('/api/scenes/ai-suggest-assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          surfaceType: surface.surfaceType,
+          confidenceScore: surface.confidenceScore,
+          viabilityScore: surface.viabilityScore,
+          campaignId: selectedCampaignId
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.suggestions && data.suggestions.length > 0) {
+          setAiSuggestions(prev => ({ ...prev, [surfaceId]: data.suggestions }));
+          setIsSuggestingAssets(prev => ({ ...prev, [surfaceId]: false }));
+          return;
+        }
+      }
+    } catch { /* fall through to local scoring */ }
+
+    // Intelligent local scoring fallback
+    const campaignAssets = selectedCampaignId
+      ? assetList.filter(a => a.campaignId === selectedCampaignId)
+      : assetList;
+
+    const suggestions = campaignAssets
+      .map(a => ({
+        assetId: a.id,
+        score: categoryScores[a.id] || surface.viabilityScore * 100,
+        reason: generateMatchReason(a, surface)
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map(({ assetId, reason }) => ({ assetId, reason }));
+
+    setAiSuggestions(prev => ({ ...prev, [surfaceId]: suggestions }));
+    setIsSuggestingAssets(prev => ({ ...prev, [surfaceId]: false }));
+  };
+
+  /** Generate a human-readable reason why this asset matches this surface */
+  function generateMatchReason(asset: CreativeAsset, surface: SurfaceItem): string {
+    const surfaceLower = surface.surfaceType.toLowerCase();
+    const reasons: string[] = [];
+
+    if (/billboard|hoarding|wall|building/i.test(surfaceLower))
+      reasons.push(`Outdoor ${surface.surfaceType.toLowerCase()} — high visibility for ${asset.brandCategory} brands`);
+    else if (/screen|tv|monitor|display/i.test(surfaceLower))
+      reasons.push(`Digital ${surface.surfaceType.toLowerCase()} — ideal for ${asset.brandCategory} content`);
+    else if (/field|pitch|stadium/i.test(surfaceLower))
+      reasons.push(`Sports ${surface.surfaceType.toLowerCase()} — strong ${asset.brandCategory} audience fit`);
+    else
+      reasons.push(`${surface.surfaceType} surface — compatible with ${asset.brandCategory}`);
+
+    reasons.push(`${Math.round(surface.confidenceScore * 100)}% detection confidence`);
+    reasons.push(`${Math.round(surface.viabilityScore * 100)}% viability score`);
+    reasons.push(`${asset.type} · ${asset.dimensions}`);
+
+    return reasons.join(' · ');
+  }
 
   const handleDownloadDoc = () => {
     setDownloading(true);
@@ -763,7 +1049,7 @@ export default function App() {
                     role: 'Advertiser', 
                     name: 'Thabo Ndlovu', 
                     email: 'advertiser@afrobotics.co.za', 
-                    pass: 'adv123',
+                    pass: 'advertiser123',
                     badge: 'bg-purple-500/10 text-purple-400 border-purple-500/20'
                   }
                 ].map((cred) => (
@@ -812,8 +1098,8 @@ export default function App() {
               <CampaignSelector
                 campaigns={campaignList}
                 selectedId={selectedCampaignId}
-                onSelect={(id) => { setSelectedCampaignId(id); setActiveView('dashboard'); }}
-                onCreateNew={() => { setSelectedCampaignId(null); setActiveView('assets'); }}
+                onSelect={(id) => navigateTo('dashboard', id)}
+                onCreateNew={() => navigate('/')}
                 assetCounts={Object.fromEntries(assetList.reduce((acc, a) => {
                   if (a.campaignId) acc.set(a.campaignId, (acc.get(a.campaignId) || 0) + 1);
                   return acc;
@@ -858,9 +1144,7 @@ export default function App() {
         {/* LEFT SIDEBAR */}
         <div className="border-r border-slate-200 bg-white px-4 py-6 min-h-[calc(100vh-140px)] sticky top-[73px] self-start" id="sidebar_wrapper">
           <CampaignSidebar
-            activeView={activeView}
-            onNavigate={setActiveView}
-            campaignSelected={!!selectedCampaignId}
+            selectedCampaignId={selectedCampaignId}
             userRole={user?.role || 'Editor'}
             campaignAssetCount={selectedCampaignId ? assetList.filter(a => a.campaignId === selectedCampaignId).length : 0}
             contentCount={contentList.filter(v => v.ingestionStatus === 'Completed' && (!selectedCampaignId || v.campaignId === selectedCampaignId)).length}
@@ -871,37 +1155,126 @@ export default function App() {
         {/* MAIN CONTENT */}
         <main className="flex-1 px-6 py-6 overflow-auto" id="main_content">
           <AnimatePresence mode="wait">
-            {/* No campaign selected — landing page */}
+            {/* No campaign selected — landing page, admin, or telemetry */}
             {!selectedCampaignId ? (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto space-y-8 py-12" key="no_campaign">
-                <div className="text-center">
-                  <Package className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-                  <h2 className="text-2xl font-extrabold text-slate-800 font-display">Select or Create a Campaign</h2>
-                  <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
-                    All platform features are organized around campaigns. Choose an existing campaign or create a new one to begin.
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
-                  {campaignList.map(c => {
-                    const assetCount = assetList.filter(a => a.campaignId === c.id).length;
-                    return (
-                      <button key={c.id} onClick={() => { setSelectedCampaignId(c.id); setActiveView('dashboard'); }}
-                        className="bg-white border border-slate-200 rounded-xl p-5 text-left hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
-                        <span className={`inline-block h-2.5 w-2.5 rounded-full mb-2 ${
-                          c.status === 'Active' ? 'bg-emerald-500' : c.status === 'Draft' ? 'bg-blue-500' : 'bg-slate-400'
-                        }`} />
-                        <h3 className="text-sm font-bold text-slate-800">{c.name}</h3>
-                        <p className="text-[10px] text-slate-400 font-mono mt-1">{c.namingStructureCode}</p>
-                        <div className="flex items-center gap-3 mt-3 text-[10px] text-slate-500">
-                          <span>{c.targetRegion}</span>
-                          <span>{assetCount} assets</span>
-                          <span className="font-bold">${c.totalBudget.toLocaleString()}</span>
+              <>
+                {activeView === 'admin' && user?.role === 'Admin' && (
+                  <AdminConsoleTab onTriggerLog={handleTriggerLog} currentUser={user} />
+                )}
+                {activeView === 'admin' && user?.role !== 'Admin' && (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto py-12 text-center" key="admin_unauthorized">
+                    <div className="p-12 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                      <Shield className="h-12 w-12 text-rose-400 mx-auto mb-4" />
+                      <h2 className="text-xl font-bold text-slate-800 mb-2">Access Denied</h2>
+                      <p className="text-sm text-slate-500">You do not have administrator privileges. Only users with the Admin role can access this section.</p>
+                    </div>
+                  </motion.div>
+                )}
+                {activeView === 'telemetry' && (
+                  <TelemetryTab
+                    logList={logList}
+                    alarmList={alarmList}
+                    handleClearAlarm={handleClearAlarm}
+                    handleSimulateAlarm={handleSimulateAlarm}
+                    alarmSimSeverity={alarmSimSeverity}
+                    setAlarmSimSeverity={setAlarmSimSeverity}
+                    alarmSimSource={alarmSimSource}
+                    setAlarmSimSource={setAlarmSimSource}
+                    alarmSimDesc={alarmSimDesc}
+                    setAlarmSimDesc={setAlarmSimDesc}
+                  />
+                )}
+                {!activeView && (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto space-y-8 py-12" key="no_campaign">
+                    <div className="text-center">
+                      <Package className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+                      <h2 className="text-2xl font-extrabold text-slate-800 font-display">Select or Create a Campaign</h2>
+                      <p className="text-sm text-slate-500 mt-2 max-w-md mx-auto">
+                        All platform features are organized around campaigns. Choose an existing campaign or create a new one to begin.
+                      </p>
+                    </div>
+
+                    {/* Campaign Creation Form */}
+                    <div className="bg-white border-2 border-blue-300 rounded-2xl p-6 shadow-sm max-w-2xl mx-auto">
+                      <h3 className="text-sm font-bold text-slate-800 font-display mb-1 flex items-center gap-2">
+                        <Plus className="h-4 w-4 text-blue-600" />
+                        Create New Campaign
+                      </h3>
+                      <p className="text-xs text-slate-500 mb-5">Define campaign schedules, regions and budgets (<strong>MReq 10</strong>).</p>
+                      <form onSubmit={(e) => { e.preventDefault(); handleCreateCampaign(e); }} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Campaign Name</label>
+                            <input type="text" value={newCampaignName} onChange={(e) => setNewCampaignName(e.target.value)}
+                              placeholder="e.g., Coke Zero Summer"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors" required />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Naming Code (MReq 10)</label>
+                            <input type="text" value={newCampaignCode} onChange={(e) => setNewCampaignCode(e.target.value)}
+                              placeholder="e.g., UZ01EP12_COKE"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors" required />
+                          </div>
                         </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </motion.div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Budget (USD)</label>
+                            <input type="number" value={newCampaignBudget} onChange={(e) => setNewCampaignBudget(e.target.value)}
+                              placeholder="e.g., 15000"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors" required />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Target Region</label>
+                            <select value={newCampaignRegion} onChange={(e) => setNewCampaignRegion(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors">
+                              <option value="SADC Region">SADC Region (Southern Africa)</option>
+                              <option value="East Africa proxy">East Africa Broadcast proxy</option>
+                              <option value="Global Streaming stream">Global Streaming streams</option>
+                            </select>
+                          </div>
+                        </div>
+                        {campaignError && (
+                          <p className="text-2xs text-red-600 font-semibold font-mono bg-red-50 p-2.5 rounded-lg border border-red-100">{campaignError}</p>
+                        )}
+                        <button type="submit"
+                          className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-lg transition-all cursor-pointer">
+                          <Plus className="h-4 w-4" />
+                          Register Brand Campaign
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* Existing Campaigns */}
+                    {campaignList.length > 0 && (
+                      <>
+                        <div className="text-center">
+                          <p className="text-xs text-slate-400 font-mono uppercase tracking-wider">Or select an existing campaign</p>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
+                          {campaignList.map(c => {
+                            const assetCount = assetList.filter(a => a.campaignId === c.id).length;
+                            return (
+                              <button key={c.id} onClick={() => navigateTo('dashboard', c.id)}
+                                className="bg-white border border-slate-200 rounded-xl p-5 text-left hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
+                                <span className={`inline-block h-2.5 w-2.5 rounded-full mb-2 ${
+                                  c.status === 'Active' ? 'bg-emerald-500' : c.status === 'Draft' ? 'bg-blue-500' : 'bg-slate-400'
+                                }`} />
+                                <h3 className="text-sm font-bold text-slate-800">{c.name}</h3>
+                                <p className="text-[10px] text-slate-400 font-mono mt-1">{c.namingStructureCode}</p>
+                                <div className="flex items-center gap-3 mt-3 text-[10px] text-slate-500">
+                                  <span>{c.targetRegion}</span>
+                                  <span>{assetCount} assets</span>
+                                  <span className="font-bold">${c.totalBudget.toLocaleString()}</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </motion.div>
+                )}
+              </>
             ) : (
               /* Campaign selected — render the active view */
               <>
@@ -909,9 +1282,9 @@ export default function App() {
                   <CampaignDashboard
                     campaign={campaignList.find(c => c.id === selectedCampaignId)!}
                     assets={assetList.filter(a => a.campaignId === selectedCampaignId)}
-                    contentList={contentList}
-                    renders={renderList}
-                    onNavigate={setActiveView}
+                    contentList={contentList.filter(v => !selectedCampaignId || v.campaignId === selectedCampaignId)}
+                    renders={renderList.filter(r => r.campaignId === selectedCampaignId)}
+                    onNavigate={(view) => navigateTo(view, selectedCampaignId)}
                   />
                 )}
 
@@ -920,17 +1293,7 @@ export default function App() {
                     campaignList={campaignList}
                     assetList={assetList}
                     selectedCampaignId={selectedCampaignId}
-                    setSelectedCampaignId={setSelectedCampaignId}
-                    newCampaignName={newCampaignName}
-                    setNewCampaignName={setNewCampaignName}
-                    newCampaignCode={newCampaignCode}
-                    setNewCampaignCode={setNewCampaignCode}
-                    newCampaignBudget={newCampaignBudget}
-                    setNewCampaignBudget={setNewCampaignBudget}
-                    newCampaignRegion={newCampaignRegion}
-                    setNewCampaignRegion={setNewCampaignRegion}
-                    handleCreateCampaign={handleCreateCampaign}
-                    campaignError={campaignError}
+                    setSelectedCampaignId={(id) => id ? navigateTo('assets', id) : navigate('/')}
                     newAssetName={newAssetName}
                     setNewAssetName={setNewAssetName}
                     newAssetType={newAssetType}
@@ -938,10 +1301,13 @@ export default function App() {
                     newAssetCategory={newAssetCategory}
                     setNewAssetCategory={setNewAssetCategory}
                     handleCreateAsset={handleUploadAsset}
+                    handleUpdateAsset={handleUpdateAsset}
                     handleAssociateAsset={handleAssociateAsset}
                     handleUnassociateAsset={handleUnassociateAsset}
                     handleDeleteCampaign={handleDeleteCampaign}
                     handleDeleteAsset={handleDeleteAsset}
+                    newAssetFile={newAssetFile}
+                    setNewAssetFile={setNewAssetFile}
                   />
                 )}
 
@@ -953,7 +1319,7 @@ export default function App() {
                     scenesForVideo={scenesForVideo}
                     selectedSceneId={selectedSceneId}
                     setSelectedSceneId={setSelectedSceneId}
-                    onNavigateToPlacements={() => setActiveView('placements')}
+                    onNavigateToPlacements={() => navigateTo('placements', selectedCampaignId)}
                     newVideoTitle={newVideoTitle}
                     setNewVideoTitle={setNewVideoTitle}
                     newVideoRes={newVideoRes}
@@ -992,9 +1358,33 @@ export default function App() {
                     setRejectionReason={setRejectionReason}
                     handleSurfaceDecision={handleSurfaceDecision}
                     currentSurface={currentSurface}
-                    handleAiCustomizeScene={handleAiCustomizeScene}
+                    handleSceneApprove={handleSceneApprove}
+                    onPreviewComposite={handlePreviewComposite}
+                    onClearCompositePreview={() => setCompositePreview(null)}
+                    compositingPreview={compositingPreview}
+                    compositePreviewImage={compositePreview}
                     assetList={assetList}
                     campaignList={campaignList}
+                    // Phase 1
+                    handleAiSplitAnalyze={handleAiSplitAnalyze}
+                    aiAnalyzingVideoId={aiAnalyzingVideoId}
+                    // Phase 2
+                    selectedCampaignId={selectedCampaignId ?? undefined}
+                    surfaceAssetPairs={surfaceAssetPairs}
+                    onPlaceAsset={handlePlaceAsset}
+                    onRemoveAsset={handleRemoveAsset}
+                    onSubmitPlacement={handleSubmitPlacement}
+                    // Phase 3
+                    onAiSuggestAssets={handleAiSuggestAssets}
+                    isSuggestingAssets={isSuggestingAssets}
+                    aiSuggestions={aiSuggestions}
+                    // Phase 4
+                    onNavigateToRenders={() => navigateTo('renders', selectedCampaignId)}
+                    onNavigateToContent={() => navigateTo('content', selectedCampaignId)}
+                    hasContentIngested={contentList.some(v => v.ingestionStatus === 'Completed')}
+                    hasSurfacesDetected={scenesForVideo.length > 0 && surfacesForScene.length > 0}
+                    hasPlacedAssets={Object.keys(surfaceAssetPairs).length > 0}
+                    hasRenders={renderList.filter(r => !selectedCampaignId || r.campaignId === selectedCampaignId).length > 0}
                   />
                 )}
 
@@ -1011,7 +1401,7 @@ export default function App() {
                     composerPreset={composerPreset}
                     setComposerPreset={setComposerPreset}
                     handleQueueRender={handleQueueRender}
-                    renderList={renderList}
+                    renderList={renderList.filter(r => !selectedCampaignId || r.campaignId === selectedCampaignId)}
                     scenesForVideo={scenesForVideo}
                   />
                 )}
@@ -1032,33 +1422,14 @@ export default function App() {
                       </div>
                       <div className="text-xs font-mono text-slate-600 flex justify-between">
                         <span>Renders Completed:</span>
-                        <span className="font-bold">{renderList.filter(r => r.renderStatus === 'Finished').length}</span>
+                        <span className="font-bold">{renderList.filter(r => r.renderStatus === 'Finished' && r.campaignId === selectedCampaignId).length}</span>
                       </div>
                       <div className="text-xs font-mono text-slate-600 flex justify-between">
                         <span>Total Processing Time:</span>
-                        <span className="font-bold">{(renderList.reduce((sum, r) => sum + r.processingDurationMs, 0) / 1000).toFixed(1)}s</span>
+                        <span className="font-bold">{(renderList.filter(r => r.campaignId === selectedCampaignId).reduce((sum, r) => sum + r.processingDurationMs, 0) / 1000).toFixed(1)}s</span>
                       </div>
                     </div>
                   </motion.div>
-                )}
-
-                {activeView === 'admin' && (
-                  <AdminConsoleTab onTriggerLog={handleTriggerLog} currentUser={user} />
-                )}
-
-                {activeView === 'telemetry' && (
-                  <TelemetryTab
-                    logList={logList}
-                    alarmList={alarmList}
-                    handleClearAlarm={handleClearAlarm}
-                    handleSimulateAlarm={handleSimulateAlarm}
-                    alarmSimSeverity={alarmSimSeverity}
-                    setAlarmSimSeverity={setAlarmSimSeverity}
-                    alarmSimSource={alarmSimSource}
-                    setAlarmSimSource={setAlarmSimSource}
-                    alarmSimDesc={alarmSimDesc}
-                    setAlarmSimDesc={setAlarmSimDesc}
-                  />
                 )}
               </>
             )}

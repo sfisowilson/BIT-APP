@@ -200,6 +200,13 @@ export interface AdSlotItem {
   createdAt: string;
 }
 
+/** Tracks which brand asset has been placed on which surface during the placement workflow */
+export interface SurfaceAssetPair {
+  surfaceId: string;
+  assetId: string;
+  placedAt: string; // ISO datetime
+}
+
 export interface ApprovalItem {
   id: string;
   adSlotId: string;

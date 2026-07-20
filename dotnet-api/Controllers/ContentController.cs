@@ -27,9 +27,9 @@ namespace Afrobotics.Bit.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ContentItem>>> GetContent()
+        public async Task<ActionResult<IEnumerable<ContentItem>>> GetContent([FromQuery] string? campaignId = null)
         {
-            var content = await _contentService.GetContentAsync();
+            var content = await _contentService.GetContentAsync(campaignId);
             return Ok(content);
         }
 

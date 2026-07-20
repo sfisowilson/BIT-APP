@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Package, Film, Tv, Cpu, FileText, Users, Activity, 
   LayoutDashboard 
@@ -12,38 +13,54 @@ interface SidebarItem {
   icon: React.FC<{ className?: string }>;
   requiresCampaign: boolean;
   role?: 'Admin' | 'Editor' | 'Advertiser';
+  /** URL path relative to root, use :campaignId placeholder */
+  getPath: (campaignId: string | null) => string;
 }
 
 const ALL_ITEMS: SidebarItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, requiresCampaign: true },
-  { id: 'assets', label: 'Assets', icon: Package, requiresCampaign: true },
-  { id: 'content', label: 'Content', icon: Film, requiresCampaign: true },
-  { id: 'placements', label: 'Placements', icon: Tv, requiresCampaign: true },
-  { id: 'renders', label: 'Renders', icon: Cpu, requiresCampaign: true },
-  { id: 'reports', label: 'Reports', icon: FileText, requiresCampaign: true },
-  { id: 'admin', label: 'Admin', icon: Users, requiresCampaign: false, role: 'Admin' },
-  { id: 'telemetry', label: 'Telemetry', icon: Activity, requiresCampaign: false },
+  { id: 'dashboard',  label: 'Dashboard',   icon: LayoutDashboard, requiresCampaign: true,  getPath: (cid) => `/c/${cid}` },
+  { id: 'assets',     label: 'Assets',      icon: Package,         requiresCampaign: true,  getPath: (cid) => `/c/${cid}/assets` },
+  { id: 'content',    label: 'Content',     icon: Film,            requiresCampaign: true,  getPath: (cid) => `/c/${cid}/content` },
+  { id: 'placements', label: 'Placements',  icon: Tv,              requiresCampaign: true,  getPath: (cid) => `/c/${cid}/placements` },
+  { id: 'renders',    label: 'Renders',     icon: Cpu,             requiresCampaign: true,  getPath: (cid) => `/c/${cid}/renders` },
+  { id: 'reports',    label: 'Reports',     icon: FileText,        requiresCampaign: true,  getPath: (cid) => `/c/${cid}/reports` },
+  { id: 'admin',      label: 'Admin',       icon: Users,           requiresCampaign: false, role: 'Admin', getPath: () => '/admin' },
+  { id: 'telemetry',  label: 'Telemetry',   icon: Activity,        requiresCampaign: false, getPath: () => '/telemetry' },
 ];
 
 interface CampaignSidebarProps {
-  activeView: SidebarView;
-  onNavigate: (view: SidebarView) => void;
-  campaignSelected: boolean;
+  selectedCampaignId: string | null;
   userRole: 'Admin' | 'Editor' | 'Advertiser';
   campaignAssetCount: number;
   contentCount: number;
   renderCount: number;
 }
 
+/** Derive the current active view from the URL path */
+function useActiveView(): SidebarView | null {
+  const location = useLocation();
+  return useMemo(() => {
+    const parts = location.pathname.split('/').filter(Boolean);
+    if (parts[0] === 'c' && parts[1]) {
+      return (parts[2] as SidebarView) || 'dashboard';
+    }
+    if (parts[0] === 'admin') return 'admin' as SidebarView;
+    if (parts[0] === 'telemetry') return 'telemetry' as SidebarView;
+    return null;
+  }, [location.pathname]);
+}
+
 export const CampaignSidebar: React.FC<CampaignSidebarProps> = ({
-  activeView,
-  onNavigate,
-  campaignSelected,
+  selectedCampaignId,
   userRole,
   campaignAssetCount,
   contentCount,
   renderCount,
 }) => {
+  const navigate = useNavigate();
+  const activeView = useActiveView();
+  const campaignSelected = !!selectedCampaignId;
+
   const campaignItems = ALL_ITEMS.filter(i => i.requiresCampaign);
   const platformItems = ALL_ITEMS.filter(i => !i.requiresCampaign && (!i.role || i.role === userRole));
 
@@ -53,11 +70,12 @@ export const CampaignSidebar: React.FC<CampaignSidebarProps> = ({
     const count = item.id === 'assets' ? campaignAssetCount :
                   item.id === 'content' ? contentCount :
                   item.id === 'renders' ? renderCount : undefined;
+    const path = disabled ? '#' : item.getPath(selectedCampaignId);
 
     return (
       <button
         key={item.id}
-        onClick={() => !disabled && onNavigate(item.id)}
+        onClick={() => !disabled && navigate(path)}
         disabled={disabled}
         className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer text-left ${
           isActive

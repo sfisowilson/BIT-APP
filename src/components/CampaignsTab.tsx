@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Sliders, Plus, Upload, Trash2, Link2, Link2Off, Eye, Package, ArrowRightLeft } from 'lucide-react';
+import { Sliders, Plus, Upload, Trash2, Link2, Link2Off, Eye, Package, ArrowRightLeft, Edit3, Check, X } from 'lucide-react';
 import { CampaignItem, CreativeAsset, BRAND_CATEGORIES } from '../types';
 import { FilterableSelect } from './FilterableSelect';
 
@@ -9,16 +9,6 @@ interface CampaignsTabProps {
   assetList: CreativeAsset[];
   selectedCampaignId: string | null;
   setSelectedCampaignId: (id: string | null) => void;
-  newCampaignName: string;
-  setNewCampaignName: (v: string) => void;
-  newCampaignCode: string;
-  setNewCampaignCode: (v: string) => void;
-  newCampaignBudget: string;
-  setNewCampaignBudget: (v: string) => void;
-  newCampaignRegion: string;
-  setNewCampaignRegion: (v: string) => void;
-  handleCreateCampaign: (e: React.FormEvent) => void;
-  campaignError: string | null;
   newAssetName: string;
   setNewAssetName: (v: string) => void;
   newAssetType: "Image" | "Logo" | "Video";
@@ -26,10 +16,13 @@ interface CampaignsTabProps {
   newAssetCategory: string;
   setNewAssetCategory: (v: string) => void;
   handleCreateAsset: (e: React.FormEvent, campaignId?: string) => void;
+  handleUpdateAsset?: (assetId: string, data: { name?: string; type?: string; brandCategory?: string; file?: File }) => void;
   handleAssociateAsset: (assetId: string, campaignId: string) => Promise<void>;
   handleUnassociateAsset: (assetId: string) => Promise<void>;
   handleDeleteCampaign?: (id: string) => void;
   handleDeleteAsset?: (id: string) => void;
+  newAssetFile: File | null;
+  setNewAssetFile: (f: File | null) => void;
 }
 
 export const CampaignsTab: React.FC<CampaignsTabProps> = ({
@@ -37,16 +30,6 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
   assetList,
   selectedCampaignId,
   setSelectedCampaignId,
-  newCampaignName,
-  setNewCampaignName,
-  newCampaignCode,
-  setNewCampaignCode,
-  newCampaignBudget,
-  setNewCampaignBudget,
-  newCampaignRegion,
-  setNewCampaignRegion,
-  handleCreateCampaign,
-  campaignError,
   newAssetName,
   setNewAssetName,
   newAssetType,
@@ -54,14 +37,47 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
   newAssetCategory,
   setNewAssetCategory,
   handleCreateAsset,
+  handleUpdateAsset,
   handleAssociateAsset,
   handleUnassociateAsset,
   handleDeleteCampaign,
   handleDeleteAsset,
+  newAssetFile,
+  setNewAssetFile,
 }) => {
+  const [editingAssetId, setEditingAssetId] = React.useState<string | null>(null);
+  const [editName, setEditName] = React.useState('');
+  const [editType, setEditType] = React.useState<'Image' | 'Logo' | 'Video'>('Image');
+  const [editCategory, setEditCategory] = React.useState('');
+  const [editFile, setEditFile] = React.useState<File | null>(null);
+
   const selectedCampaign = campaignList.find(c => c.id === selectedCampaignId);
   const campaignAssets = assetList.filter(a => a.campaignId === selectedCampaignId);
   const unassignedAssets = assetList.filter(a => !a.campaignId);
+
+  const startEditing = (asset: CreativeAsset) => {
+    setEditingAssetId(asset.id);
+    setEditName(asset.name);
+    setEditType(asset.type as 'Image' | 'Logo' | 'Video');
+    setEditCategory(asset.brandCategory);
+    setEditFile(null);
+  };
+
+  const cancelEditing = () => {
+    setEditingAssetId(null);
+    setEditFile(null);
+  };
+
+  const saveEdit = async () => {
+    if (!editingAssetId || !handleUpdateAsset) return;
+    await handleUpdateAsset(editingAssetId, {
+      name: editName,
+      type: editType,
+      brandCategory: editCategory,
+      file: editFile || undefined
+    });
+    cancelEditing();
+  };
 
   return (
     <motion.div
@@ -87,80 +103,9 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
         </div>
       </div>
 
-      {/* ── LEFT: Campaign Creation + Campaign List (only when no campaign selected) ── */}
+      {/* ── LEFT: Campaign Library (only when no campaign selected) ── */}
       {!selectedCampaignId && (
       <div className="lg:col-span-7 space-y-6">
-        {/* Campaign Creation Form */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm">
-          <h2 className="text-lg font-bold text-slate-800 font-display mb-2">Define Brand Campaign</h2>
-          <p className="text-xs text-slate-500 mb-6">Create campaign schedules, regions and budgets to support automated relational ad placements (<strong>MReq 10</strong>).</p>
-
-          <form onSubmit={handleCreateCampaign} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Campaign Name</label>
-                <input 
-                  type="text" 
-                  value={newCampaignName} 
-                  onChange={(e) => setNewCampaignName(e.target.value)} 
-                  placeholder="e.g., Coke Zero Summer"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Naming Code (MReq 10)</label>
-                <input 
-                  type="text" 
-                  value={newCampaignCode} 
-                  onChange={(e) => setNewCampaignCode(e.target.value)} 
-                  placeholder="e.g., UZ01EP12_COKE"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Allocation Budget (USD)</label>
-                <input 
-                  type="number" 
-                  value={newCampaignBudget} 
-                  onChange={(e) => setNewCampaignBudget(e.target.value)} 
-                  placeholder="e.g., 15000"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Broadcast Target Territory</label>
-                <select 
-                  value={newCampaignRegion} 
-                  onChange={(e) => setNewCampaignRegion(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
-                >
-                  <option value="SADC Region">SADC Region (Southern Africa)</option>
-                  <option value="East Africa proxy">East Africa Broadcast proxy</option>
-                  <option value="Global Streaming stream">Global Streaming streams</option>
-                </select>
-              </div>
-            </div>
-
-            {campaignError && (
-              <p className="text-2xs text-red-600 font-semibold font-mono bg-red-50 p-2.5 rounded-lg border border-red-100">{campaignError}</p>
-            )}
-
-            <button 
-              type="submit" 
-              className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Register Brand Campaign
-            </button>
-          </form>
-        </div>
-
         {/* Campaign Library — Selectable Cards */}
         <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm">
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 font-display">
@@ -293,34 +238,67 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
               ) : (
                 <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                   {campaignAssets.map(as => (
-                    <div key={as.id} className="bg-blue-50/40 border border-blue-100 rounded-lg p-3 flex items-center justify-between group">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-2xs font-bold text-slate-800 truncate">{as.name}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[8px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-mono">{as.type}</span>
-                          <span className="text-[8px] text-slate-400 font-mono">{as.brandCategory}</span>
+                    <div key={as.id} className="bg-blue-50/40 border border-blue-100 rounded-lg p-3">
+                      {editingAssetId === as.id ? (
+                        /* Inline Edit Form */
+                        <div className="space-y-2">
+                          <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+                            className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs" />
+                          <div className="grid grid-cols-2 gap-1">
+                            <select value={editType} onChange={(e) => setEditType(e.target.value as any)}
+                              className="bg-white border border-slate-200 rounded px-1 py-1 text-[10px]">
+                              <option value="Image">PNG Image</option>
+                              <option value="Logo">Alpha Logo</option>
+                              <option value="Video">MP4 Overlay</option>
+                            </select>
+                            <FilterableSelect value={editCategory} onChange={setEditCategory}
+                              options={BRAND_CATEGORIES} placeholder="Category..." />
+                          </div>
+                          <label className="border border-dashed border-slate-200 rounded p-1.5 text-center cursor-pointer block">
+                            <span className="text-[9px] text-slate-400">{editFile ? editFile.name : 'Replace file (optional)'}</span>
+                            <input type="file" accept="image/png,image/jpeg" className="hidden"
+                              onChange={(e) => { const f = e.target.files?.[0]; if (f) setEditFile(f); }} />
+                          </label>
+                          <div className="flex gap-1">
+                            <button onClick={saveEdit} className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded cursor-pointer">
+                              <Check className="h-3 w-3" /> Save
+                            </button>
+                            <button onClick={cancelEditing} className="flex-1 flex items-center justify-center gap-1 px-2 py-1 bg-slate-200 text-slate-600 text-[10px] font-bold rounded cursor-pointer">
+                              <X className="h-3 w-3" /> Cancel
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {handleDeleteAsset && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteAsset(as.id)}
-                            className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors opacity-0 group-hover:opacity-100"
-                            title="Delete Asset"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleUnassociateAsset(as.id)}
-                          className="p-1 rounded text-slate-400 hover:text-amber-500 hover:bg-amber-50 cursor-pointer transition-colors"
-                          title="Remove from campaign"
-                        >
-                          <Link2Off className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
+                      ) : (
+                        /* Normal display */
+                        <div className="flex items-center justify-between group">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-2xs font-bold text-slate-800 truncate">{as.name}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[8px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-mono">{as.type}</span>
+                              <span className="text-[8px] text-slate-400 font-mono">{as.brandCategory}</span>
+                              <span className="text-[8px] text-slate-300 font-mono">{as.dimensions}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {handleUpdateAsset && (
+                              <button type="button" onClick={() => startEditing(as)}
+                                className="p-1 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 cursor-pointer transition-colors opacity-0 group-hover:opacity-100" title="Edit">
+                                <Edit3 className="h-3 w-3" />
+                              </button>
+                            )}
+                            {handleDeleteAsset && (
+                              <button type="button" onClick={() => handleDeleteAsset(as.id)}
+                                className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors opacity-0 group-hover:opacity-100" title="Delete">
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
+                            <button type="button" onClick={() => handleUnassociateAsset(as.id)}
+                              className="p-1 rounded text-slate-400 hover:text-amber-500 hover:bg-amber-50 cursor-pointer transition-colors" title="Remove from campaign">
+                              <Link2Off className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -356,6 +334,15 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                       required
                     />
                   </div>
+                  <label className="border border-dashed border-slate-200 rounded-lg p-2 bg-slate-50/50 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors block">
+                    {newAssetFile ? (
+                      <span className="text-[10px] text-blue-600 font-medium">✓ {newAssetFile.name}</span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400">+ Attach file (optional)</span>
+                    )}
+                    <input type="file" accept="image/png,image/jpeg" className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) setNewAssetFile(f); }} />
+                  </label>
                   <button 
                     type="submit" 
                     className="w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer"
@@ -464,12 +451,24 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                   />
                 </div>
                 <label className="border border-dashed border-slate-200 rounded-lg p-3 bg-slate-50/50 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors block">
-                  <Upload className="h-5 w-5 text-slate-400 mx-auto mb-1" />
-                  <span className="text-[10px] text-slate-400 block">Drag &amp; drop or click to upload</span>
+                  {newAssetFile ? (
+                    <div className="flex items-center justify-center gap-2 text-xs text-blue-600 font-medium">
+                      <Check className="h-4 w-4" />
+                      {newAssetFile.name} ({(newAssetFile.size / 1024).toFixed(0)} KB)
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="h-5 w-5 text-slate-400 mx-auto mb-1" />
+                      <span className="text-[10px] text-slate-400 block">Drag &amp; drop or click to upload</span>
+                    </>
+                  )}
                   <input type="file" accept="image/png,image/jpeg,video/mp4" className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file && !newAssetName) setNewAssetName(file.name.replace(/\.[^.]+$/, ''));
+                      if (file) {
+                        setNewAssetFile(file);
+                        if (!newAssetName) setNewAssetName(file.name.replace(/\.[^.]+$/, ''));
+                      }
                     }} />
                 </label>
                 <button 

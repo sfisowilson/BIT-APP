@@ -6,3 +6,12 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# .NET build artifacts
+bin/
+obj/
+.vs/
+*.user
+
+# Uploaded media
+Uploads/

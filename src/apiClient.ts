@@ -95,13 +95,29 @@ export interface LoginResponse {
 }
 
 export async function login(credentials: LoginRequest): Promise<LoginResponse> {
-  const res = await fetchPublic('/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify(credentials),
-  });
+  let res: Response;
+  try {
+    res = await fetchPublic('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    });
+  } catch (err: any) {
+    throw new Error('Unable to reach the identity service. Is the server running?');
+  }
+
+  // Handle non-JSON responses gracefully
+  const contentType = res.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await res.text();
+    throw new Error(`Unexpected server response (HTTP ${res.status}): ${text.substring(0, 100)}`);
+  }
+
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.error || 'Authentication failed');
+    throw new Error(data.error || 'Authentication failed — invalid credentials.');
+  }
+  if (!data.token || !data.user) {
+    throw new Error('Authentication response is missing token or user data.');
   }
   // Persist session
   setToken(data.token);

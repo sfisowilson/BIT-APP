@@ -12,7 +12,8 @@ import {
   XCircle, 
   Settings, 
   Check, 
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
 import { User } from '../types';
 
@@ -35,8 +36,14 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
 
   // Edit states
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editFullName, setEditFullName] = useState<string>('');
+  const [editEmail, setEditEmail] = useState<string>('');
   const [editRole, setEditRole] = useState<"Admin" | "Editor" | "Advertiser">('Editor');
   const [editStatus, setEditStatus] = useState<"Active" | "Suspended">('Active');
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Delete confirmation state
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const getToken = () => localStorage.getItem('bit_token');
 
@@ -147,57 +154,114 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
         })
       });
 
-      if (res.ok) {
-        fetchUsers();
-        if (onTriggerLog) {
-          onTriggerLog(
-            "USER_STATUS_CHANGE", 
-            "Warning", 
-            "IdentityGateway", 
-            currentUser?.email || "admin@afrobotics.co.za", 
-            `Changed status of ${userToUpdate.fullName} to ${nextStatus}.`
-          );
-        }
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to update user status.");
+        return;
+      }
+
+      fetchUsers();
+      if (onTriggerLog) {
+        onTriggerLog(
+          "USER_STATUS_CHANGE", 
+          "Warning", 
+          "IdentityGateway", 
+          currentUser?.email || "admin@afrobotics.co.za", 
+          `Changed status of ${userToUpdate.fullName} to ${nextStatus}.`
+        );
       }
     } catch (err) {
       console.error(err);
     }
   };
 
-  // Handle Save edits (Role/Status)
-  const handleSaveEdits = async (userId: string) => {
+  // Handle Delete User
+  const handleDeleteUser = async (userId: string) => {
+    if (deleteConfirmId !== userId) {
+      // First click — ask for confirmation
+      setDeleteConfirmId(userId);
+      return;
+    }
+
+    // Second click — execute deletion
     try {
-      const res = await fetchWithAuth('/api/users/update', {
-        method: 'POST',
-        body: JSON.stringify({
-          id: userId,
-          role: editRole,
-          accountStatus: editStatus
-        })
+      const res = await fetchWithAuth(`/api/users/${userId}`, {
+        method: 'DELETE'
       });
 
-      if (res.ok) {
-        setEditingUserId(null);
-        fetchUsers();
-        if (onTriggerLog) {
-          onTriggerLog(
-            "USER_ROLE_CHANGE", 
-            "Info", 
-            "IdentityGateway", 
-            currentUser?.email || "admin@afrobotics.co.za", 
-            `Updated profile config of user ID: ${userId}.`
-          );
-        }
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to delete user.");
+        setDeleteConfirmId(null);
+        return;
+      }
+
+      setDeleteConfirmId(null);
+      fetchUsers();
+      if (onTriggerLog) {
+        onTriggerLog(
+          "USER_DELETED", 
+          "Major", 
+          "IdentityGateway", 
+          currentUser?.email || "admin@afrobotics.co.za", 
+          `Deleted user ID: ${userId}.`
+        );
       }
     } catch (err) {
       console.error(err);
+      alert("API communications protocol error.");
+      setDeleteConfirmId(null);
+    }
+  };
+
+  // Handle Save edits (FullName, Email, Role, Status)
+  const handleSaveEdits = async (userId: string) => {
+    setEditError(null);
+    try {
+      const body: Record<string, string> = { id: userId };
+
+      if (editFullName.trim()) body.fullName = editFullName.trim();
+      if (editEmail.trim()) body.email = editEmail.trim().toLowerCase();
+      if (editRole) body.role = editRole;
+      if (editStatus) body.accountStatus = editStatus;
+
+      const res = await fetchWithAuth('/api/users/update', {
+        method: 'POST',
+        body: JSON.stringify(body)
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setEditError(data.error || "Failed to update user profile.");
+        return;
+      }
+
+      setEditingUserId(null);
+      setEditError(null);
+      fetchUsers();
+      if (onTriggerLog) {
+        onTriggerLog(
+          "USER_ROLE_CHANGE", 
+          "Info", 
+          "IdentityGateway", 
+          currentUser?.email || "admin@afrobotics.co.za", 
+          `Updated profile config of user ID: ${userId}.`
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      setEditError("API communications protocol error.");
     }
   };
 
   const startEditing = (userItem: User) => {
     setEditingUserId(userItem.id);
+    setEditFullName(userItem.fullName);
+    setEditEmail(userItem.email);
     setEditRole(userItem.role);
     setEditStatus(userItem.accountStatus);
+    setEditError(null);
+    setDeleteConfirmId(null);
   };
 
   // Filter users based on query
@@ -320,11 +384,32 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                       return (
                         <tr key={item.id} className="hover:bg-slate-50/30 transition-colors">
                           <td className="p-4 pl-6">
-                            <div className="font-semibold text-slate-900">{item.fullName}</div>
-                            <div className="text-slate-400 font-mono text-[11px] mt-0.5 flex items-center gap-1">
-                              <Mail className="h-3 w-3 text-slate-300" />
-                              {item.email}
-                            </div>
+                            {isEditing ? (
+                              <div className="space-y-2">
+                                <input
+                                  type="text"
+                                  value={editFullName}
+                                  onChange={(e) => setEditFullName(e.target.value)}
+                                  placeholder="Full Name"
+                                  className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                                />
+                                <input
+                                  type="email"
+                                  value={editEmail}
+                                  onChange={(e) => setEditEmail(e.target.value)}
+                                  placeholder="Email Address"
+                                  className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-blue-500 font-mono text-[11px]"
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                <div className="font-semibold text-slate-900">{item.fullName}</div>
+                                <div className="text-slate-400 font-mono text-[11px] mt-0.5 flex items-center gap-1">
+                                  <Mail className="h-3 w-3 text-slate-300" />
+                                  {item.email}
+                                </div>
+                              </>
+                            )}
                           </td>
                           <td className="p-4">
                             {isEditing ? (
@@ -378,20 +463,25 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                           </td>
                           <td className="p-4 pr-6 text-right">
                             {isEditing ? (
-                              <div className="flex justify-end gap-1.5">
-                                <button
-                                  onClick={() => handleSaveEdits(item.id)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-500 text-white rounded-md font-semibold font-mono text-[10px]"
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                  SAVE
-                                </button>
-                                <button
-                                  onClick={() => setEditingUserId(null)}
-                                  className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md font-semibold font-mono text-[10px]"
-                                >
-                                  CANCEL
-                                </button>
+                              <div className="space-y-2">
+                                {editError && (
+                                  <p className="text-[10px] text-red-600 font-medium bg-red-50 border border-red-200 rounded-md px-2 py-1">{editError}</p>
+                                )}
+                                <div className="flex justify-end gap-1.5">
+                                  <button
+                                    onClick={() => handleSaveEdits(item.id)}
+                                    className="inline-flex items-center gap-1 px-2 py-1 bg-green-600 hover:bg-green-500 text-white rounded-md font-semibold font-mono text-[10px]"
+                                  >
+                                    <Check className="h-3.5 w-3.5" />
+                                    SAVE
+                                  </button>
+                                  <button
+                                    onClick={() => { setEditingUserId(null); setEditError(null); setDeleteConfirmId(null); }}
+                                    className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-md font-semibold font-mono text-[10px]"
+                                  >
+                                    CANCEL
+                                  </button>
+                                </div>
                               </div>
                             ) : (
                               <div className="flex justify-end gap-2">
@@ -421,6 +511,18 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                                       Activate
                                     </>
                                   )}
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteUser(item.id)}
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-bold border transition-colors ${
+                                    deleteConfirmId === item.id
+                                      ? 'bg-red-600 hover:bg-red-500 text-white border-red-600'
+                                      : 'bg-white hover:bg-red-50 text-red-500 border-red-200'
+                                  }`}
+                                  title={deleteConfirmId === item.id ? "Click again to confirm deletion" : "Delete user"}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  {deleteConfirmId === item.id ? 'Confirm?' : 'Delete'}
                                 </button>
                               </div>
                             )}

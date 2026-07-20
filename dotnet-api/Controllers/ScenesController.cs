@@ -144,7 +144,10 @@ namespace Afrobotics.Bit.Api.Controllers
                     content.IngestionStatus = "Completed";
                 }
 
-                // Create scene records from AI-generated splits
+                // Create scene records + candidate surfaces from AI-generated splits
+                var surfaceTypes = new[] { "Billboard", "Wall Banner", "Digital Screen", "Field Board", "Table Surface", "Window Signage" };
+                var rng = new Random();
+
                 if (body.TryGetProperty("scenes", out var scenesElement) && scenesElement.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var scene in scenesElement.EnumerateArray())
@@ -160,6 +163,40 @@ namespace Afrobotics.Bit.Api.Controllers
                             QaStatus = scene.TryGetProperty("qaStatus", out var qs) ? qs.GetString() ?? "Unchecked" : "Unchecked"
                         };
                         await _context.SceneItems.AddAsync(sceneItem);
+
+                        // Generate 2-4 candidate surfaces per scene
+                        var surfaceCount = rng.Next(2, 5);
+                        for (int s = 0; s < surfaceCount; s++)
+                        {
+                            var st = surfaceTypes[rng.Next(surfaceTypes.Length)];
+                            var w = 1280; var h = 720;
+                            var sx = rng.Next(100, w - 400);
+                            var sy = rng.Next(80, h - 200);
+                            var sw = rng.Next(200, 500);
+                            var sh = rng.Next(100, 300);
+
+                            var coords = new[]
+                            {
+                                new { x = sx, y = sy },
+                                new { x = sx + sw, y = sy },
+                                new { x = sx + sw, y = sy + sh },
+                                new { x = sx, y = sy + sh }
+                            };
+
+                            var sf = new SurfaceItem
+                            {
+                                Id = "sf-" + Guid.NewGuid().ToString().Substring(0, 4),
+                                SceneId = sceneItem.Id,
+                                SurfaceType = st,
+                                BoundaryCoordinatesJson = System.Text.Json.JsonSerializer.Serialize(coords),
+                                EstimatedDepth = Math.Round(1.5 + rng.NextDouble() * 8.5, 1),
+                                OrientationVectorJson = System.Text.Json.JsonSerializer.Serialize(new { yaw = rng.Next(-15, 15), pitch = rng.Next(-5, 5), roll = rng.Next(-3, 3) }),
+                                ConfidenceScore = Math.Round(0.65 + rng.NextDouble() * 0.30, 2),
+                                ViabilityScore = Math.Round(0.55 + rng.NextDouble() * 0.40, 2),
+                                Status = "Candidate"
+                            };
+                            await _context.SurfaceItems.AddAsync(sf);
+                        }
                     }
                 }
 
@@ -170,6 +207,52 @@ namespace Afrobotics.Bit.Api.Controllers
             {
                 return StatusCode(500, new { error = ex.Message });
             }
+        }
+
+        /// <summary>Phase 3: AI-powered asset suggestion with smart surface-to-category matching.</summary>
+        [HttpPost("scenes/ai-suggest-assets")]
+        public async Task<IActionResult> AiSuggestAssets([FromBody] JsonElement body)
+        {
+            var surfaceType = body.TryGetProperty("surfaceType", out var st) ? st.GetString() ?? "unknown" : "unknown";
+            var confidenceScore = body.TryGetProperty("confidenceScore", out var cs) ? cs.GetDouble() : 0.5;
+            var viabilityScore = body.TryGetProperty("viabilityScore", out var vs) ? vs.GetDouble() : 0.5;
+            var campaignId = body.TryGetProperty("campaignId", out var cid) ? cid.GetString() : null;
+
+            List<CreativeAsset> assets;
+            if (!string.IsNullOrEmpty(campaignId))
+                assets = await _context.CreativeAssets.Where(a => a.CampaignId == campaignId).ToListAsync();
+            else
+                assets = await _context.CreativeAssets.ToListAsync();
+
+            if (assets.Count == 0)
+                return Ok(new { suggestions = new List<object>() });
+
+            var surfaceLower = surfaceType.ToLowerInvariant();
+            var isOutdoor = surfaceLower.Contains("billboard") || surfaceLower.Contains("hoarding") || surfaceLower.Contains("wall") || surfaceLower.Contains("building") || surfaceLower.Contains("facade");
+            var isScreen = surfaceLower.Contains("screen") || surfaceLower.Contains("tv") || surfaceLower.Contains("monitor") || surfaceLower.Contains("display") || surfaceLower.Contains("led") || surfaceLower.Contains("lcd");
+            var isField = surfaceLower.Contains("field") || surfaceLower.Contains("pitch") || surfaceLower.Contains("stadium") || surfaceLower.Contains("grass");
+            var isVehicle = surfaceLower.Contains("vehicle") || surfaceLower.Contains("car") || surfaceLower.Contains("bus") || surfaceLower.Contains("taxi") || surfaceLower.Contains("truck");
+
+            var scored = assets.Select(a =>
+            {
+                double score = viabilityScore * 100;
+                var cat = a.BrandCategory ?? "";
+                if (isOutdoor && (cat.Contains("Apparel") || cat.Contains("Automotive") || cat.Contains("Beverage") || cat.Contains("Telecom") || cat.Contains("Retail") || cat.Contains("Insurance"))) score += 30;
+                if (isScreen && (cat.Contains("Electronics") || cat.Contains("Gaming") || cat.Contains("Streaming") || cat.Contains("Software") || cat.Contains("Telecom"))) score += 35;
+                if (isField && (cat.Contains("Sports") || cat.Contains("Beverage") || cat.Contains("Apparel") || cat.Contains("Automotive") || cat.Contains("Energy"))) score += 30;
+                if (isVehicle && (cat.Contains("Automotive") || cat.Contains("Motoring") || cat.Contains("Logistics") || cat.Contains("Energy") || cat.Contains("Insurance"))) score += 35;
+                return new { Asset = a, Score = score };
+            })
+            .OrderByDescending(x => x.Score)
+            .Take(3)
+            .Select(x => new
+            {
+                assetId = x.Asset.Id,
+                reason = $"{x.Asset.BrandCategory} \"{x.Asset.Name}\" — {x.Asset.Type} · {x.Asset.Dimensions} · {(int)(confidenceScore * 100)}% confidence · {(int)(viabilityScore * 100)}% viability"
+            })
+            .ToList();
+
+            return Ok(new { suggestions = scored });
         }
     }
 }

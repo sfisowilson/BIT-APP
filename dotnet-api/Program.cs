@@ -80,6 +80,11 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAssetService, AssetService>();
 builder.Services.AddScoped<ILogService, LogService>();
 
+// Compositing pipeline — swap implementation to change AI engine
+// Current:  BasicCompositingService (System.Drawing)
+// Future:   builder.Services.AddScoped<ICompositingService, RunwayCompositingService>();
+builder.Services.AddScoped<ICompositingService, BasicCompositingService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

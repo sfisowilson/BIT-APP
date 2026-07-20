@@ -9,7 +9,7 @@ namespace Afrobotics.Bit.Api.Services
 {
     public interface IRenderService
     {
-        Task<IEnumerable<RenderItem>> GetRendersAsync();
+        Task<IEnumerable<RenderItem>> GetRendersAsync(string? campaignId = null);
         Task<RenderItem> DispatchRenderAsync(CreateRenderDto dto);
     }
 
@@ -22,9 +22,12 @@ namespace Afrobotics.Bit.Api.Services
             _renderRepository = renderRepository;
         }
 
-        public async Task<IEnumerable<RenderItem>> GetRendersAsync()
+        public async Task<IEnumerable<RenderItem>> GetRendersAsync(string? campaignId = null)
         {
-            return await _renderRepository.GetAllAsync();
+            var all = await _renderRepository.GetAllAsync();
+            if (!string.IsNullOrEmpty(campaignId))
+                return all.Where(r => r.CampaignId == campaignId);
+            return all;
         }
 
         public async Task<RenderItem> DispatchRenderAsync(CreateRenderDto dto)
