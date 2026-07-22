@@ -1592,8 +1592,8 @@ export default function App() {
             selectedCampaignId={selectedCampaignId}
             userRole={user?.role || 'Editor'}
             campaignAssetCount={selectedCampaignId ? assetList.filter(a => a.campaignId === selectedCampaignId).length : 0}
-            contentCount={contentList.filter(v => v.ingestionStatus === 'Completed' && (!selectedCampaignId || v.campaignId === selectedCampaignId)).length}
-            renderCount={renderList.filter(r => !selectedCampaignId || r.campaignId === selectedCampaignId).length}
+            contentCount={selectedCampaignId ? contentList.filter(v => v.ingestionStatus === 'Completed' && v.campaignId === selectedCampaignId).length : 0}
+            renderCount={selectedCampaignId ? renderList.filter(r => r.campaignId === selectedCampaignId).length : 0}
           />
         </div>
 
@@ -1730,7 +1730,7 @@ export default function App() {
                   <CampaignDashboard
                     campaign={campaignList.find(c => c.id === selectedCampaignId)!}
                     assets={assetList.filter(a => a.campaignId === selectedCampaignId)}
-                    contentList={contentList.filter(v => !selectedCampaignId || v.campaignId === selectedCampaignId)}
+                    contentList={contentList.filter(v => selectedCampaignId && v.campaignId === selectedCampaignId)}
                     renders={renderList.filter(r => r.campaignId === selectedCampaignId)}
                     onNavigate={(view) => navigateTo(view, selectedCampaignId)}
                   />
@@ -1838,7 +1838,7 @@ export default function App() {
                     hasContentIngested={contentList.some(v => v.ingestionStatus === 'Completed')}
                     hasSurfacesDetected={scenesForVideo.length > 0 && surfacesForScene.length > 0}
                     hasPlacedAssets={Object.keys(surfaceAssetPairs).length > 0}
-                    hasRenders={renderList.filter(r => !selectedCampaignId || r.campaignId === selectedCampaignId).length > 0}
+                    hasRenders={renderList.filter(r => selectedCampaignId && r.campaignId === selectedCampaignId).length > 0}
                   />
                 )}
 
@@ -1855,7 +1855,7 @@ export default function App() {
                     composerPreset={composerPreset}
                     setComposerPreset={setComposerPreset}
                     handleQueueRender={handleQueueRender}
-                    renderList={renderList.filter(r => !selectedCampaignId || r.campaignId === selectedCampaignId)}
+                    renderList={renderList.filter(r => selectedCampaignId && r.campaignId === selectedCampaignId)}
                     scenesForVideo={scenesForVideo}
                   />
                 )}

@@ -118,7 +118,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   const currentScene = scenesForVideo.find(s => s.id === selectedSceneId);
   const activeVideo = contentList.find(v => v.id === selectedVideo);
   const isLocalVideo = activeVideo?.storageKey?.startsWith('/api/content/file/');
-  const hasCompletedVideos = contentList.some(v => v.ingestionStatus === 'Completed' && (!selectedCampaignId || v.campaignId === selectedCampaignId));
+  const hasCompletedVideos = contentList.some(v => v.ingestionStatus === 'Completed' && selectedCampaignId && v.campaignId === selectedCampaignId);
   const hasScenes = scenesForVideo.length > 0;
 
   const campaignAssets = selectedCampaignId
@@ -158,7 +158,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
           <div className={`rounded-lg p-2.5 ${hasCompletedVideos ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
             <div className={`text-lg font-bold ${hasCompletedVideos ? 'text-emerald-600' : 'text-red-500'}`}>
-              {contentList.filter(v => v.ingestionStatus === 'Completed' && (!selectedCampaignId || v.campaignId === selectedCampaignId)).length}
+              {contentList.filter(v => v.ingestionStatus === 'Completed' && selectedCampaignId && v.campaignId === selectedCampaignId).length}
             </div>
             <div className="text-[10px] font-mono font-bold uppercase text-slate-500">Videos Ready</div>
           </div>
@@ -355,7 +355,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     onChange={(e) => setSelectedVideo(e.target.value)}
                     className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:outline-none"
                   >
-                    {contentList.filter(v => v.ingestionStatus === 'Completed' && (!selectedCampaignId || v.campaignId === selectedCampaignId)).map(v => (
+                    {contentList.filter(v => v.ingestionStatus === 'Completed' && selectedCampaignId && v.campaignId === selectedCampaignId).map(v => (
                       <option key={v.id} value={v.id}>{v.title}</option>
                     ))}
                   </select>
