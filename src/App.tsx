@@ -1632,7 +1632,7 @@ export default function App() {
                 {activeView === 'analytics' && (
                   <AnalyticsTab summary={statsSummary} loading={statsLoading} />
                 )}
-                {!activeView && (
+                {!activeView && (location.pathname === '/' || location.pathname === '') && (
                   <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto space-y-8 py-12" key="no_campaign">
                     <div className="text-center">
                       <Package className="h-16 w-16 text-slate-300 mx-auto mb-4" />
@@ -1890,7 +1890,7 @@ export default function App() {
           </AnimatePresence>
 
           {/* 404 — no matching route for authenticated users */}
-          {user && !activeView && location.pathname !== '/' && location.pathname !== '' && <NotFoundPage />}
+          {user && !activeView && location.pathname !== '/' && <NotFoundPage />}
         </main>
       </div>
 
