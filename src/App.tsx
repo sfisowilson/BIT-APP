@@ -58,6 +58,7 @@ import { CampaignDashboard } from './components/CampaignDashboard';
 import { AnalyticsTab } from './components/AnalyticsTab';
 import { useIdleTimer } from './hooks/useIdleTimer';
 import { NotificationPreferencesPanel } from './components/NotificationPreferencesPanel';
+import { AttentionBell } from './components/AttentionBell';
 
 export default function App() {
   const navigate = useNavigate();
@@ -1402,6 +1403,9 @@ export default function App() {
                 >
                   {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                 </button>
+
+                {/* Attention Bell */}
+                <AttentionBell />
 
                 {/* MReq 9: Role Request */}
                 <button
