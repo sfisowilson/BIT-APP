@@ -52,6 +52,13 @@ public class PlatformSettingsService : IPlatformSettingsService
         ["idle_timeout_minutes"]    = "Session:IdleTimeoutMinutes",
         ["idle_countdown_seconds"]  = "Session:IdleCountdownSeconds",
         ["support_email"]           = "Support:Email",
+        // ── AI Engine configuration ──
+        ["engine_detection"]         = "Engine:Detection",
+        ["engine_brand_analysis"]    = "Engine:BrandAnalysis",
+        ["engine_compositing"]       = "Engine:Compositing",
+        ["replicate_api_key"]        = "Engine:ReplicateApiKey",
+        ["google_vision_api_key"]    = "Engine:GoogleVisionApiKey",
+        ["gemini_api_key"]           = "Engine:GeminiApiKey",
     };
 
     public PlatformSettingsService(PostgresDbContext context, IConfiguration config, ILogger<PlatformSettingsService> logger)

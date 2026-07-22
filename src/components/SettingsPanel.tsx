@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Settings, Mail, Upload, Sliders, Save, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Settings, Mail, Upload, Sliders, Save, Loader2, CheckCircle, AlertCircle, Cpu } from 'lucide-react';
 import { fetchWithAuth } from '../apiClient';
 
 type SettingsMap = Record<string, string>;
@@ -14,7 +14,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [activeTab, setActiveTab] = useState<'smtp' | 'upload' | 'pipeline'>('smtp');
+  const [activeTab, setActiveTab] = useState<'smtp' | 'upload' | 'pipeline' | 'engine'>('smtp');
   const [testEmail, setTestEmail] = useState('');
   const [testingEmail, setTestingEmail] = useState(false);
 
@@ -136,6 +136,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
           { id: 'smtp', label: 'SMTP Email', icon: Mail },
           { id: 'upload', label: 'Upload & Proxy', icon: Upload },
           { id: 'pipeline', label: 'Pipeline', icon: Sliders },
+          { id: 'engine', label: 'AI Engine', icon: Cpu },
         ] as const).map(tab => (
           <button
             key={tab.id}
@@ -247,6 +248,66 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {renderField('jwt_expiry_hours', 'JWT Token Lifetime (hours)', '8', 'number')}
               {renderField('jwt_refresh_window_hours', 'JWT Refresh Window (hours)', '2', 'number')}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'engine' && (
+          <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800">
+              <strong>Engine Selection</strong> — choose which AI service powers each pipeline stage. Switching takes effect on the next content ingestion. API keys are stored encrypted at rest.
+            </div>
+
+            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-2">Detection Engine (MReq 2)</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Engine</label>
+                <select
+                  value={settings['engine_detection'] || 'basic'}
+                  onChange={e => updateField('engine_detection', e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                >
+                  <option value="basic">Basic — Random surfaces (dev)</option>
+                  <option value="replicate">Replicate — SAM 2 segmentation</option>
+                  <option value="google">Google — Cloud Vision</option>
+                </select>
+              </div>
+              {renderField('replicate_api_key', 'Replicate API Key', 'r8_...', 'password')}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-2">Brand Analysis Engine (MReq 3)</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Engine</label>
+                  <select
+                    value={settings['engine_brand_analysis'] || 'basic'}
+                    onChange={e => updateField('engine_brand_analysis', e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  >
+                    <option value="basic">Basic — No analysis (dev)</option>
+                    <option value="google">Google — Cloud Vision (logo + text)</option>
+                    <option value="gemini">Gemini — Vision (multimodal)</option>
+                  </select>
+                </div>
+                {renderField('google_vision_api_key', 'Google Vision API Key', 'AIza...', 'password')}
+              </div>
+              {renderField('gemini_api_key', 'Gemini API Key', 'AIza...', 'password')}
+            </div>
+
+            <div className="pt-3 border-t border-slate-100">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-2">Compositing Engine (MReq 6)</h4>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Engine</label>
+                <select
+                  value={settings['engine_compositing'] || 'basic'}
+                  onChange={e => updateField('engine_compositing', e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                >
+                  <option value="basic">Basic — Placeholder compositing (dev)</option>
+                  <option value="opencv">OpenCV — Homography warp + blend</option>
+                </select>
+              </div>
             </div>
           </div>
         )}
