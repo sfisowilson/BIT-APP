@@ -1,6 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+using Hangfire;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Afrobotics.Bit.Api.Data;
 using Afrobotics.Bit.Api.DTOs;
 using Afrobotics.Bit.Api.Models;
 using Afrobotics.Bit.Api.Repositories;
@@ -9,25 +15,42 @@ namespace Afrobotics.Bit.Api.Services
 {
     public interface IRenderService
     {
-        Task<IEnumerable<RenderItem>> GetRendersAsync(string? campaignId = null);
+        Task<PaginatedResult<RenderItem>> GetRendersAsync(RenderFilterParams filter);
         Task<RenderItem> DispatchRenderAsync(CreateRenderDto dto);
     }
 
     public class RenderService : IRenderService
     {
         private readonly IRenderRepository _renderRepository;
+        private readonly PostgresDbContext _context;
+        private readonly IEventLogService _eventLog;
+        private readonly IEmailService _email;
+        private readonly IConfiguration _config;
 
-        public RenderService(IRenderRepository renderRepository)
+        public RenderService(IRenderRepository renderRepository, PostgresDbContext context, IEventLogService eventLog, IEmailService email, IConfiguration config)
         {
             _renderRepository = renderRepository;
+            _context = context;
+            _eventLog = eventLog;
+            _email = email;
+            _config = config;
         }
 
-        public async Task<IEnumerable<RenderItem>> GetRendersAsync(string? campaignId = null)
+        public async Task<PaginatedResult<RenderItem>> GetRendersAsync(RenderFilterParams filter)
         {
-            var all = await _renderRepository.GetAllAsync();
-            if (!string.IsNullOrEmpty(campaignId))
-                return all.Where(r => r.CampaignId == campaignId);
-            return all;
+            var query = _renderRepository.GetAllQueryable();
+
+            if (!string.IsNullOrEmpty(filter.RenderStatus))
+                query = query.Where(r => r.RenderStatus == filter.RenderStatus);
+            if (!string.IsNullOrEmpty(filter.CampaignId))
+                query = query.Where(r => r.CampaignId == filter.CampaignId);
+
+            if (!string.IsNullOrEmpty(filter.SortBy))
+                query = query.ApplySort(filter.SortBy, filter.SortDescending);
+            else
+                query = query.OrderByDescending(r => r.CreatedAt);
+
+            return await query.ToPaginatedResultAsync(filter.Page, filter.PageSize);
         }
 
         public async Task<RenderItem> DispatchRenderAsync(CreateRenderDto dto)
@@ -37,6 +60,18 @@ namespace Afrobotics.Bit.Api.Services
             {
                 throw new ArgumentException("Missing mandatory compositing target parameters.");
             }
+
+            // MReq 11: Enforce approval gate — render only approved placements
+            var surface = await _context.SurfaceItems.FindAsync(dto.SurfaceId);
+            if (surface == null)
+                throw new ArgumentException("Surface not found.");
+            if (surface.Status != "Approved")
+                throw new InvalidOperationException(
+                    $"Placement not approved. Surface '{surface.SurfaceType}' is '{surface.Status}'. " +
+                    "Only Approved surfaces can be rendered.");
+
+            await _eventLog.LogEventAsync("RenderEngine", "RENDER_QUEUED", "Info",
+                $"Render queued for surface '{surface.SurfaceType}' (campaign {dto.CampaignId}).");
 
             var renderId = "r-" + Guid.NewGuid().ToString().Substring(0, 4);
             var render = new RenderItem
@@ -57,60 +92,8 @@ namespace Afrobotics.Bit.Api.Services
             await _renderRepository.AddAsync(render);
             await _renderRepository.SaveChangesAsync();
 
-            // MReq 7, 14: Simulate GPU render pipeline with realistic incremental progress
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    // Phase 1: Preprocessing (0 → 30%)
-                    for (int p = 5; p <= 30; p += 5)
-                    {
-                        await Task.Delay(400);
-                        render.Progress = p;
-                        await _renderRepository.UpdateAsync(render);
-                        await _renderRepository.SaveChangesAsync();
-                    }
-
-                    // Phase 2: GPU Compositing (30 → 75%)
-                    render.RenderStatus = "Processing";
-                    await _renderRepository.UpdateAsync(render);
-                    await _renderRepository.SaveChangesAsync();
-                    for (int p = 35; p <= 75; p += 5)
-                    {
-                        await Task.Delay(350);
-                        render.Progress = p;
-                        await _renderRepository.UpdateAsync(render);
-                        await _renderRepository.SaveChangesAsync();
-                    }
-
-                    // Phase 3: Encoding & Finalization (75 → 100%)
-                    for (int p = 80; p <= 100; p += 5)
-                    {
-                        await Task.Delay(300);
-                        render.Progress = p;
-                        await _renderRepository.UpdateAsync(render);
-                        await _renderRepository.SaveChangesAsync();
-                    }
-
-                    var elapsed = DateTime.UtcNow - render.CreatedAt;
-                    render.Progress = 100;
-                    render.RenderStatus = "Finished";
-                    render.ProcessingDurationMs = (int)elapsed.TotalMilliseconds;
-                    await _renderRepository.UpdateAsync(render);
-                    await _renderRepository.SaveChangesAsync();
-                }
-                catch (Exception ex)
-                {
-                    try
-                    {
-                        render.RenderStatus = "Failed";
-                        render.Progress = 0;
-                        await _renderRepository.UpdateAsync(render);
-                        await _renderRepository.SaveChangesAsync();
-                    }
-                    catch { /* final effort to mark failed */ }
-                }
-            });
+            // Enqueue render processing as a Hangfire background job (survives restarts, retries on failure)
+            BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessRenderJob(render.Id, default));
 
             return render;
         }

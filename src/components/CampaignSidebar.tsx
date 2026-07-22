@@ -2,10 +2,10 @@ import React, { useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Package, Film, Tv, Cpu, FileText, Users, Activity, 
-  LayoutDashboard 
+  LayoutDashboard, BarChart3 
 } from 'lucide-react';
 
-export type SidebarView = 'dashboard' | 'assets' | 'content' | 'placements' | 'renders' | 'reports' | 'admin' | 'telemetry';
+export type SidebarView = 'dashboard' | 'assets' | 'content' | 'placements' | 'renders' | 'reports' | 'admin' | 'telemetry' | 'analytics';
 
 interface SidebarItem {
   id: SidebarView;
@@ -26,6 +26,7 @@ const ALL_ITEMS: SidebarItem[] = [
   { id: 'reports',    label: 'Reports',     icon: FileText,        requiresCampaign: true,  getPath: (cid) => `/c/${cid}/reports` },
   { id: 'admin',      label: 'Admin',       icon: Users,           requiresCampaign: false, role: 'Admin', getPath: () => '/admin' },
   { id: 'telemetry',  label: 'Telemetry',   icon: Activity,        requiresCampaign: false, getPath: () => '/telemetry' },
+  { id: 'analytics',  label: 'Analytics',   icon: BarChart3,       requiresCampaign: false, getPath: () => '/analytics' },
 ];
 
 interface CampaignSidebarProps {
@@ -46,6 +47,7 @@ function useActiveView(): SidebarView | null {
     }
     if (parts[0] === 'admin') return 'admin' as SidebarView;
     if (parts[0] === 'telemetry') return 'telemetry' as SidebarView;
+    if (parts[0] === 'analytics') return 'analytics' as SidebarView;
     return null;
   }, [location.pathname]);
 }

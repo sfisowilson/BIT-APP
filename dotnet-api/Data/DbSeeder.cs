@@ -21,7 +21,7 @@ namespace Afrobotics.Bit.Api.Data
                         Id = "usr-01",
                         FullName = "Sabelo Nkosi",
                         Email = "admin@afrobotics.co.za",
-                        PasswordHash = "admin123",
+                        PasswordHash = BCrypt.Net.BCrypt.HashPassword("admin123"),
                         Role = "Admin",
                         AccountStatus = "Active",
                         LastLoginAt = DateTime.UtcNow
@@ -31,7 +31,7 @@ namespace Afrobotics.Bit.Api.Data
                         Id = "usr-02",
                         FullName = "Sfiso Dlamini",
                         Email = "loverboy.sfiso@gmail.com",
-                        PasswordHash = "editor123",
+                        PasswordHash = BCrypt.Net.BCrypt.HashPassword("editor123"),
                         Role = "Editor",
                         AccountStatus = "Active",
                         LastLoginAt = DateTime.UtcNow
@@ -41,7 +41,7 @@ namespace Afrobotics.Bit.Api.Data
                         Id = "usr-03",
                         FullName = "Thabo Ndlovu",
                         Email = "advertiser@afrobotics.co.za",
-                        PasswordHash = "advertiser123",
+                        PasswordHash = BCrypt.Net.BCrypt.HashPassword("advertiser123"),
                         Role = "Advertiser",
                         AccountStatus = "Active",
                         LastLoginAt = DateTime.UtcNow

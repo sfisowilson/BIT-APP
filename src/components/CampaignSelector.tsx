@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Plus, Check, Package } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { ChevronDown, Plus, Check, Package, Search } from 'lucide-react';
 import { CampaignItem } from '../types';
 
 interface CampaignSelectorProps {
@@ -18,21 +18,89 @@ export const CampaignSelector: React.FC<CampaignSelectorProps> = ({
   assetCounts,
 }) => {
   const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState('');
+  const [highlightIndex, setHighlightIndex] = useState(-1);
   const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const selected = campaigns.find(c => c.id === selectedId);
 
+  // Filter campaigns by name or naming code
+  const filteredCampaigns = useMemo(() => {
+    if (!filter.trim()) return campaigns;
+    const q = filter.toLowerCase();
+    return campaigns.filter(
+      c => c.name.toLowerCase().includes(q) || c.namingStructureCode.toLowerCase().includes(q)
+    );
+  }, [campaigns, filter]);
+
+  // Close on outside click
   useEffect(() => {
     const close = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setFilter('');
+      }
     };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, []);
 
+  // Reset highlight when filter changes
+  useEffect(() => {
+    setHighlightIndex(-1);
+  }, [filter]);
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (highlightIndex >= 0 && listRef.current) {
+      const item = listRef.current.children[highlightIndex] as HTMLElement | undefined;
+      if (item) item.scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlightIndex]);
+
+  const selectCampaign = (id: string) => {
+    onSelect(id);
+    setOpen(false);
+    setFilter('');
+    setHighlightIndex(-1);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        setOpen(true);
+        e.preventDefault();
+      }
+      return;
+    }
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightIndex(prev => Math.min(prev + 1, filteredCampaigns.length - 1));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightIndex(prev => Math.max(prev - 1, -1));
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (highlightIndex >= 0 && highlightIndex < filteredCampaigns.length) {
+          selectCampaign(filteredCampaigns[highlightIndex].id);
+        }
+        break;
+      case 'Escape':
+        setOpen(false);
+        setFilter('');
+        break;
+    }
+  };
+
   return (
     <div ref={ref} className="relative">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => { setOpen(!open); if (!open) setTimeout(() => inputRef.current?.focus(), 50); }}
         className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 hover:border-blue-300 hover:shadow-sm transition-all min-w-[200px] cursor-pointer"
       >
         {selected ? (
@@ -57,41 +125,63 @@ export const CampaignSelector: React.FC<CampaignSelectorProps> = ({
       </button>
 
       {open && (
-        <div className="absolute top-full mt-1 left-0 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-80 overflow-y-auto">
-          {campaigns.length === 0 ? (
-            <div className="px-4 py-3 text-xs text-slate-400 text-center">
-              No campaigns yet. Create one below.
+        <div className="absolute top-full mt-1 left-0 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-80 overflow-hidden flex flex-col">
+          {/* Search filter input */}
+          <div className="px-3 py-2 border-b border-slate-100">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={filter}
+                onChange={(e) => { setFilter(e.target.value); if (!open) setOpen(true); }}
+                onKeyDown={handleKeyDown}
+                placeholder="Filter campaigns..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-400 transition-colors"
+              />
             </div>
-          ) : (
-            campaigns.map(c => {
-              const isSelected = c.id === selectedId;
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => { onSelect(c.id); setOpen(false); }}
-                  className={`w-full text-left px-4 py-2.5 flex items-center gap-3 hover:bg-blue-50 transition-colors cursor-pointer ${
-                    isSelected ? 'bg-blue-50' : ''
-                  }`}
-                >
-                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${
-                    c.status === 'Active' ? 'bg-emerald-500' :
-                    c.status === 'Draft' ? 'bg-blue-500' : 'bg-slate-400'
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-bold text-slate-800 truncate">{c.name}</div>
-                    <div className="text-[10px] text-slate-400 font-mono">{c.namingStructureCode}</div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[10px] text-slate-400 font-mono">{assetCounts[c.id] || 0}</span>
-                    {isSelected && <Check className="h-3.5 w-3.5 text-blue-600" />}
-                  </div>
-                </button>
-              );
-            })
-          )}
-          <div className="border-t border-slate-100 mt-1 pt-1">
+          </div>
+
+          {/* Campaign list */}
+          <ul ref={listRef} className="overflow-y-auto flex-1">
+            {filteredCampaigns.length === 0 ? (
+              <li className="px-4 py-3 text-xs text-slate-400 text-center">
+                {campaigns.length === 0 ? 'No campaigns yet. Create one below.' : `No campaigns match "${filter}"`}
+              </li>
+            ) : (
+              filteredCampaigns.map((c, idx) => {
+                const isSelected = c.id === selectedId;
+                return (
+                  <li key={c.id}>
+                    <button
+                      onClick={() => selectCampaign(c.id)}
+                      onMouseEnter={() => setHighlightIndex(idx)}
+                      className={`w-full text-left px-4 py-2.5 flex items-center gap-3 transition-colors cursor-pointer ${
+                        idx === highlightIndex ? 'bg-blue-50' : isSelected ? 'bg-blue-50/60' : 'hover:bg-blue-50'
+                      }`}
+                    >
+                      <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                        c.status === 'Active' ? 'bg-emerald-500' :
+                        c.status === 'Draft' ? 'bg-blue-500' : 'bg-slate-400'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-bold text-slate-800 truncate">{c.name}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{c.namingStructureCode}</div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-[10px] text-slate-400 font-mono">{assetCounts[c.id] || 0}</span>
+                        {isSelected && <Check className="h-3.5 w-3.5 text-blue-600" />}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+
+          <div className="border-t border-slate-100 pt-1">
             <button
-              onClick={() => { onCreateNew(); setOpen(false); }}
+              onClick={() => { onCreateNew(); setOpen(false); setFilter(''); }}
               className="w-full text-left px-4 py-2.5 flex items-center gap-2 text-xs font-bold text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />

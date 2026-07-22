@@ -20,4 +20,10 @@ namespace Afrobotics.Bit.Api.DTOs
         public string Role { get; set; } = string.Empty;
         public string AccountStatus { get; set; } = string.Empty;
     }
+
+    /// <summary>DTO for token refresh requests (MReq 8).</summary>
+    public class TokenRefreshDto
+    {
+        public string Token { get; set; } = string.Empty;
+    }
 }

@@ -27,6 +27,37 @@ namespace Afrobotics.Bit.Api.Models
         public string AccountStatus { get; set; } = "Active";
         
         public DateTime LastLoginAt { get; set; } = DateTime.UtcNow;
+
+        /// <summary>JSON array of notification types the user has muted (e.g. ["RenderCompleted","CampaignCreated"]).</summary>
+        [MaxLength(1000)]
+        public string MutedNotifications { get; set; } = "[]";
+    }
+
+    /// <summary>MReq 9: Tracks role elevation requests pending admin approval.</summary>
+    public class RoleRequest
+    {
+        [Key]
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        [Required]
+        public string UserId { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(50)]
+        public string RequestedRole { get; set; } = string.Empty; // Admin, Editor, Advertiser
+
+        [MaxLength(500)]
+        public string? Reason { get; set; }
+
+        [Required]
+        [MaxLength(20)]
+        public string Status { get; set; } = "Pending"; // Pending, Approved, Rejected
+
+        public string? ReviewedBy { get; set; }
+
+        public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
+
+        public DateTime? ReviewedAt { get; set; }
     }
 
     public class ContentItem
@@ -59,6 +90,18 @@ namespace Afrobotics.Bit.Api.Models
         public string? CampaignId { get; set; }  // MReq 10: video ingested for a specific campaign
         
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // ── Pipeline stage timestamps ──
+        public DateTime? StagingCompletedAt { get; set; }
+        public DateTime? TranscodingStartedAt { get; set; }
+        public DateTime? TranscodingCompletedAt { get; set; }
+        public DateTime? SceneDetectingStartedAt { get; set; }
+        public DateTime? SceneDetectingCompletedAt { get; set; }
+
+        // ── Error tracking ──
+        [MaxLength(500)]
+        public string? LastErrorMessage { get; set; }
+        public DateTime? LastErrorAt { get; set; }
     }
 
     public class SceneItem
@@ -178,12 +221,20 @@ namespace Afrobotics.Bit.Api.Models
         
         [Required]
         public string BrandCategory { get; set; } = string.Empty;
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         
         // MReq 10: Assets belong to a campaign
         public string? CampaignId { get; set; }
         
         [ForeignKey(nameof(CampaignId))]
         public CampaignItem? Campaign { get; set; }
+
+        /// <summary>Computed thumbnail URL for uploaded asset files. Not persisted to DB.</summary>
+        [NotMapped]
+        [System.Text.Json.Serialization.JsonInclude]
+        public string? ThumbnailUrl =>
+            !string.IsNullOrEmpty(StorageKey) && StorageKey.StartsWith("/api/") ? StorageKey : null;
     }
 
     public class AdSlotItem
@@ -315,5 +366,100 @@ namespace Afrobotics.Bit.Api.Models
         
         [Required]
         public bool IsActive { get; set; } = true;
+    }
+
+    /// <summary>MReq 22: Tracks every authenticated API request for usage auditing and billing.</summary>
+    public class UsageRecord
+    {
+        [Key]
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        [Required]
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+
+        [MaxLength(100)]
+        public string? UserId { get; set; }
+
+        [MaxLength(200)]
+        public string? UserEmail { get; set; }
+
+        [Required]
+        [MaxLength(500)]
+        public string RequestPath { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(10)]
+        public string HttpMethod { get; set; } = string.Empty;
+
+        [Required]
+        public int StatusCode { get; set; }
+
+        [Required]
+        public long DurationMs { get; set; }
+
+        [MaxLength(50)]
+        public string? IpAddress { get; set; }
+    }
+
+    /// <summary>MReq 12, 15: Records every notification (email/SMS) sent by the platform.</summary>
+    public class NotificationItem
+    {
+        [Key]
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        [Required]
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+
+        [Required]
+        [MaxLength(200)]
+        public string RecipientEmail { get; set; } = string.Empty;
+
+        [Required]
+        [MaxLength(50)]
+        public string Type { get; set; } = string.Empty; // RenderReady, CampaignEvent, ApprovalRequest, CampaignAssignment
+
+        [MaxLength(300)]
+        public string? Subject { get; set; }
+
+        public string? Body { get; set; }
+
+        [Required]
+        [MaxLength(20)]
+        public string Status { get; set; } = "Sent"; // Sent, Failed
+    }
+
+    /// <summary>MReq 18: Admin-configurable platform settings (key-value store).</summary>
+    public class PlatformSetting
+    {
+        [Key]
+        [MaxLength(100)]
+        public string Key { get; set; } = string.Empty;
+
+        [MaxLength(2000)]
+        public string Value { get; set; } = string.Empty;
+
+        [MaxLength(200)]
+        public string? Description { get; set; }
+
+        public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>MReq 4: Permanent brand-safety exclusion categories. Add-only — never silently removed.</summary>
+    public class BrandSafetyRule
+    {
+        [Key]
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+
+        [Required]
+        [MaxLength(200)]
+        public string Category { get; set; } = string.Empty; // e.g. "Human Faces", "Religious Symbols"
+
+        [MaxLength(500)]
+        public string? Description { get; set; }
+
+        [Required]
+        public bool IsActive { get; set; } = true;
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }

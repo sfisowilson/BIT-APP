@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Afrobotics.Bit.Api.DTOs;
 using Afrobotics.Bit.Api.Models;
 using Afrobotics.Bit.Api.Repositories;
 
@@ -8,7 +9,7 @@ namespace Afrobotics.Bit.Api.Services
 {
     public interface IAlarmService
     {
-        Task<IEnumerable<AlarmItem>> GetAlarmsAsync();
+        Task<PaginatedResult<AlarmItem>> GetAlarmsAsync(AlarmFilterParams filter);
         Task<AlarmItem?> ClearAlarmAsync(string id);
         Task<AlarmItem> CreateAlarmAsync(AlarmItem alarm);
     }
@@ -22,9 +23,21 @@ namespace Afrobotics.Bit.Api.Services
             _alarmRepository = alarmRepository;
         }
 
-        public async Task<IEnumerable<AlarmItem>> GetAlarmsAsync()
+        public async Task<PaginatedResult<AlarmItem>> GetAlarmsAsync(AlarmFilterParams filter)
         {
-            return await _alarmRepository.GetAllAsync();
+            var query = _alarmRepository.GetAllQueryable();
+
+            if (!string.IsNullOrEmpty(filter.Severity))
+                query = query.Where(a => a.Severity == filter.Severity);
+            if (filter.IsActive.HasValue)
+                query = query.Where(a => a.IsActive == filter.IsActive.Value);
+
+            if (!string.IsNullOrEmpty(filter.SortBy))
+                query = query.ApplySort(filter.SortBy, filter.SortDescending);
+            else
+                query = query.OrderByDescending(a => a.Timestamp);
+
+            return await query.ToPaginatedResultAsync(filter.Page, filter.PageSize);
         }
 
         public async Task<AlarmItem?> ClearAlarmAsync(string id)

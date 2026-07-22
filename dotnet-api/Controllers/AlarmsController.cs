@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Afrobotics.Bit.Api.DTOs;
 using Afrobotics.Bit.Api.Models;
 using Afrobotics.Bit.Api.Services;
 
@@ -21,10 +22,10 @@ namespace Afrobotics.Bit.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<AlarmItem>>> GetAlarms()
+        public async Task<ActionResult<PaginatedResult<AlarmItem>>> GetAlarms([FromQuery] AlarmFilterParams filter)
         {
-            var alarms = await _alarmService.GetAlarmsAsync();
-            return Ok(alarms);
+            var result = await _alarmService.GetAlarmsAsync(filter);
+            return Ok(result);
         }
 
         [HttpPost("{id}/clear")]

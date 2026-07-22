@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
 using Afrobotics.Bit.Api.DTOs;
 using Afrobotics.Bit.Api.Models;
 using Afrobotics.Bit.Api.Repositories;
@@ -10,7 +11,7 @@ namespace Afrobotics.Bit.Api.Services
 {
     public interface ICampaignService
     {
-        Task<IEnumerable<CampaignItem>> GetCampaignsAsync();
+        Task<PaginatedResult<CampaignItem>> GetCampaignsAsync(CampaignFilterParams filter);
         Task<CampaignItem?> GetCampaignByIdAsync(string id);
         Task<CampaignItem> CreateCampaignAsync(CreateCampaignDto dto);
         Task<bool> DeleteCampaignAsync(string id);
@@ -19,15 +20,31 @@ namespace Afrobotics.Bit.Api.Services
     public class CampaignService : ICampaignService
     {
         private readonly ICampaignRepository _campaignRepository;
+        private readonly IEmailService _email;
+        private readonly IConfiguration _config;
 
-        public CampaignService(ICampaignRepository campaignRepository)
+        public CampaignService(ICampaignRepository campaignRepository, IEmailService email, IConfiguration config)
         {
             _campaignRepository = campaignRepository;
+            _email = email;
+            _config = config;
         }
 
-        public async Task<IEnumerable<CampaignItem>> GetCampaignsAsync()
+        public async Task<PaginatedResult<CampaignItem>> GetCampaignsAsync(CampaignFilterParams filter)
         {
-            return await _campaignRepository.GetAllAsync();
+            var query = _campaignRepository.GetAllQueryable();
+
+            if (!string.IsNullOrEmpty(filter.Status))
+                query = query.Where(c => c.Status == filter.Status);
+            if (!string.IsNullOrEmpty(filter.Search))
+                query = query.Where(c => c.Name.Contains(filter.Search));
+
+            if (!string.IsNullOrEmpty(filter.SortBy))
+                query = query.ApplySort(filter.SortBy, filter.SortDescending);
+            else
+                query = query.OrderByDescending(c => c.CreatedAt);
+
+            return await query.ToPaginatedResultAsync(filter.Page, filter.PageSize);
         }
 
         public async Task<CampaignItem?> GetCampaignByIdAsync(string id)
@@ -59,6 +76,11 @@ namespace Afrobotics.Bit.Api.Services
 
             await _campaignRepository.AddAsync(campaign);
             await _campaignRepository.SaveChangesAsync();
+
+            _ = _email.SendAsync(_config["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
+                $"Campaign Created — {campaign.Name}",
+                $"Campaign '{campaign.Name}' ({campaign.NamingStructureCode}) has been created.\n\nRegion: {campaign.TargetRegion}\nBudget: {campaign.TotalBudget:C}",
+                "CampaignCreated");
 
             return campaign;
         }

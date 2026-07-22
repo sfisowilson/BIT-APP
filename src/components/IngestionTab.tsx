@@ -1,10 +1,11 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Video, Plus, Trash2, Sparkles, Loader2, Info, CheckCircle, Clock, Film, Play, Eye } from 'lucide-react';
+import { Video, Plus, Trash2, Sparkles, Loader2, Info, CheckCircle, Clock, Film, Play, Eye, Search, RefreshCw, AlertTriangle, RotateCcw } from 'lucide-react';
 import { ContentItem, SceneItem } from '../types';
+import { usePaginatedData } from '../hooks/usePaginatedData';
+import { Pagination } from './Pagination';
 
 interface IngestionTabProps {
-  contentList: ContentItem[];
   selectedVideo: string;
   setSelectedVideo: (v: string) => void;
   scenesForVideo: SceneItem[];
@@ -26,11 +27,20 @@ interface IngestionTabProps {
   handleIngestVideo: (e: React.FormEvent) => void;
   ingestError: string | null;
   ingesting: boolean;
+  uploadProgress?: number; // 0-100 for upload progress bar
+  chunkProgress?: string;  // e.g. "12/48 chunks" for chunked upload
   handleDeleteContent?: (id: string) => void;
   handleAiSplitAnalyze?: (contentId: string, videoTitle: string) => Promise<void>;
   aiAnalyzingVideoId?: string | null;
   selectedCampaignId?: string | null;
   campaignList?: { id: string; name: string }[];
+  /** Called after ingest/delete to refresh data externally if needed */
+  onDataChanged?: () => void;
+  // ── Pipeline re-run handlers ──
+  onRetranscode?: (contentId: string) => Promise<void>;
+  onRedetectScenes?: (contentId: string, videoTitle: string) => Promise<void>;
+  onResetPipeline?: (contentId: string) => Promise<void>;
+  isPipelineActionPending?: string | null; // contentId of item being acted on
 }
 
 /** Pipeline stage display order with icons and labels */
@@ -74,7 +84,6 @@ function PipelineIndicator({ status }: { status: string }) {
 }
 
 export const IngestionTab: React.FC<IngestionTabProps> = ({
-  contentList,
   selectedVideo,
   setSelectedVideo,
   scenesForVideo,
@@ -96,20 +105,47 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
   handleIngestVideo,
   ingestError,
   ingesting,
+  uploadProgress = 0,
+  chunkProgress = '',
   handleDeleteContent,
   handleAiSplitAnalyze,
   aiAnalyzingVideoId,
   selectedCampaignId,
   campaignList,
+  onDataChanged,
+  onRetranscode,
+  onRedetectScenes,
+  onResetPipeline,
+  isPipelineActionPending,
 }) => {
-  // MReq 10: Show only videos linked to the selected campaign
-  const filteredContent = selectedCampaignId
-    ? contentList.filter(v => v.campaignId === selectedCampaignId)
-    : contentList;
-  const selectedCampaignName = campaignList?.find(c => c.id === selectedCampaignId)?.name;
+  // ── Paginated content list ──
+  const {
+    data: contentData,
+    loading: contentLoading,
+    page: contentPage,
+    totalPages: contentTotalPages,
+    totalCount: contentTotalCount,
+    hasPreviousPage: contentHasPrev,
+    hasNextPage: contentHasNext,
+    setPage: setContentPage,
+    setFilters: setContentFilters,
+    refresh: refreshContent,
+  } = usePaginatedData<ContentItem>('/api/content', {
+    campaignId: selectedCampaignId || undefined,
+  }, { defaultPageSize: 12 });
 
-  const sceneCountByVideo: Record<string, number> = {};
-  contentList.forEach(v => { sceneCountByVideo[v.id] = 0; });
+  const [contentStatusFilter, setContentStatusFilter] = React.useState('');
+  const [contentSearchFilter, setContentSearchFilter] = React.useState('');
+
+  React.useEffect(() => {
+    setContentFilters({
+      campaignId: selectedCampaignId || undefined,
+      ingestionStatus: contentStatusFilter || undefined,
+      search: contentSearchFilter || undefined,
+    });
+  }, [selectedCampaignId, contentStatusFilter, contentSearchFilter]);
+
+  const selectedCampaignName = campaignList?.find(c => c.id === selectedCampaignId)?.name;
 
   // MReq 1: Extract metadata from uploaded video file
   const [metadataExtracted, setMetadataExtracted] = React.useState(false);
@@ -136,7 +172,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
         else if (w >= 1920) setNewVideoRes('1920x1080 (1080p)');
         else if (w >= 1280) setNewVideoRes('1280x720');
         else setNewVideoRes(`${w}x${h}`);
-      }      // MReq 1: FPS not available from browser API — default to broadcast standard
+      }      // FPS not available from browser API — defaults to 25; adjust manually for your source
       setNewVideoFps(25);      setMetadataExtracted(true);
       URL.revokeObjectURL(url);
     };
@@ -172,11 +208,11 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
           <h4 className="font-bold text-sm text-blue-900">
             {selectedCampaignId && selectedCampaignName
               ? `Content for: ${selectedCampaignName}`
-              : 'Step 2: Video Ingestion — MReq 1 Pipeline'}
+              : 'Step 2: Video Ingestion Pipeline'}
           </h4>
           <p className="mt-1 text-blue-700 leading-normal">
             {selectedCampaignId
-              ? <>Videos ingested for <strong>{selectedCampaignName}</strong>. New uploads will be automatically linked to this campaign per <strong>MReq 10</strong>.</>
+              ? <>Videos ingested for <strong>{selectedCampaignName}</strong>. New uploads will be automatically linked to this campaign.</>
               : <><strong>1. Register</strong> video metadata (title, duration, resolution, frame rate, source).{' '}
             <strong>2. System auto-transcodes</strong> to a normalised working format.{' '}
             <strong>3. Scene-cut detection</strong> splits footage into indexed segments.{' '}
@@ -192,10 +228,10 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
         <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm">
           <h2 className="text-lg font-bold text-slate-800 font-display mb-2">Register Video Metadata</h2>
           <p className="text-xs text-slate-500 mb-6 font-sans">
-            Per <strong>MReq 1</strong>, attach a video file to auto-extract metadata. Fields are populated from the source file.
+            Attach a video file to auto-extract metadata. Fields are populated from the source file.
           </p>
 
-          <form onSubmit={handleIngestVideo} className="space-y-4">
+          <form onSubmit={async (e) => { await handleIngestVideo(e); refreshContent(); }} className="space-y-4">
             <div>
               <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
                 Video Title / Broadcast Name (auto from file)
@@ -233,18 +269,35 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Native FPS (default)</label>
-                <select
+                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Native FPS</label>
+                <input
+                  type="number"
                   value={newVideoFps}
-                  disabled
-                  className="w-full border rounded-lg px-2 py-1.5 text-xs font-mono bg-slate-100 border-slate-200 text-slate-500 pointer-events-none"
-                >
-                  <option value={24}>24 FPS (Cinema)</option>
-                  <option value={25}>25 FPS (PAL Broadcast)</option>
-                  <option value={30}>30 FPS (NTSC)</option>
-                  <option value={50}>50 FPS (Sports)</option>
-                  <option value={60}>60 FPS (High Frame Rate)</option>
-                </select>
+                  onChange={(e) => setNewVideoFps(Number(e.target.value))}
+                  min={1}
+                  max={960}
+                  step={1}
+                  list="fps-presets"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
+                  required
+                />
+                <datalist id="fps-presets">
+                  <option value="8" />
+                  <option value="12" />
+                  <option value="15" />
+                  <option value="24" />
+                  <option value="25" />
+                  <option value="30" />
+                  <option value="48" />
+                  <option value="50" />
+                  <option value="60" />
+                  <option value="120" />
+                  <option value="144" />
+                  <option value="240" />
+                  <option value="480" />
+                  <option value="576" />
+                  <option value="960" />
+                </datalist>
               </div>
               <div>
                 <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
@@ -272,10 +325,10 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                 <>
                   <Video className="h-6 w-6 text-slate-400 mx-auto mb-2" />
                   <span className="text-2xs text-slate-500 block font-semibold">Attach source file (MP4, MOV, MXF, AVI)</span>
-                  <span className="text-[10px] text-slate-400 block mt-1">MReq 1: System transcodes to normalised format automatically.</span>
+                  <span className="text-[10px] text-slate-400 block mt-1">System transcodes to normalised format automatically.</span>
                 </>
               )}
-              <input type="file" accept="video/*,.mxf,.mov,.mp4,.avi" className="hidden"
+              <input type="file" accept="video/*,.mxf,.mov,.mp4,.avi,.mkv,.webm" className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) setNewVideoFile(file);
@@ -286,8 +339,36 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
               <p className="text-2xs text-red-600 font-semibold font-mono bg-red-50 p-2.5 rounded-lg border border-red-100">{ingestError}</p>
             )}
 
+            {/* Upload progress bar (visible during upload) */}
+            {ingesting && uploadProgress > 0 && (
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                  <span>Uploading{newVideoFile ? ` ${newVideoFile.name}` : ''}...</span>
+                  <span className="font-bold">
+                    {chunkProgress ? `${chunkProgress} · ` : ''}{uploadProgress}%
+                  </span>
+                </div>
+                <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-blue-500 h-full rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+                {newVideoFile && !chunkProgress && (
+                  <div className="text-[9px] text-slate-400 font-mono text-right">
+                    {((newVideoFile.size * (uploadProgress / 100)) / (1024 * 1024)).toFixed(0)} MB of {(newVideoFile.size / (1024 * 1024)).toFixed(0)} MB
+                  </div>
+                )}
+                {chunkProgress && (
+                  <div className="text-[9px] text-slate-400 font-mono text-right">
+                    Chunked upload · {(newVideoFile ? (newVideoFile.size / (1024 * 1024 * 1024)).toFixed(1) : '?')} GB total
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-medium bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
-              <Sparkles className="h-3 w-3" /> MReq 1: Metadata auto-extracted from video file. Select a file below to populate all fields.
+              <Sparkles className="h-3 w-3" /> Metadata auto-extracted from video file. Select a file below to populate all fields.
             </div>
 
             <button 
@@ -298,7 +379,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
               {ingesting ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Uploading &amp; Starting Pipeline...
+                  {chunkProgress ? `Uploading ${chunkProgress}` : uploadProgress > 0 ? `Uploading ${uploadProgress}%...` : 'Uploading & Starting Pipeline...'}
                 </>
               ) : (
                 <>
@@ -332,7 +413,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
       <div className="col-span-2 space-y-6">
         {/* ── Video Preview Player (shows when a video is selected) ── */}
         {(() => {
-          const activeVideo = contentList.find(v => v.id === selectedVideo);
+          const activeVideo = contentData.find(v => v.id === selectedVideo);
           if (!activeVideo) return null;
           const isLocalFile = activeVideo.storageKey?.startsWith('/api/content/file/');
 
@@ -446,13 +527,41 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
               {selectedCampaignId ? `Campaign Videos` : 'Video Pipeline Catalog'}
             </h3>
             <span className="text-[10px] text-slate-400 font-mono">
-              {filteredContent.length} video{filteredContent.length !== 1 ? 's' : ''}
-              {selectedCampaignId && contentList.length !== filteredContent.length && ` (of ${contentList.length} total)`}
+              {contentData.length} of {contentTotalCount} video{contentTotalCount !== 1 ? 's' : ''}
             </span>
+          </div>
+
+          {/* Filter bar */}
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <select
+              value={contentStatusFilter}
+              onChange={e => setContentStatusFilter(e.target.value)}
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] text-slate-700 focus:outline-none focus:border-blue-400"
+            >
+              <option value="">All Statuses</option>
+              <option value="Staging">Staging</option>
+              <option value="Transcoding">Transcoding</option>
+              <option value="SceneDetecting">Scene Detecting</option>
+              <option value="Completed">Completed</option>
+              <option value="Failed">Failed</option>
+            </select>
+            <div className="relative flex-1 min-w-[150px]">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400" />
+              <input
+                type="text"
+                value={contentSearchFilter}
+                onChange={e => setContentSearchFilter(e.target.value)}
+                placeholder="Search videos..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-6 pr-2 py-1 text-[10px] text-slate-700 focus:outline-none focus:border-blue-400"
+              />
+            </div>
           </div>
           
           <div className="space-y-4">
-            {filteredContent.length === 0 && (
+            {contentLoading && (
+              <div className="text-center py-12 text-xs text-slate-400">Loading videos...</div>
+            )}
+            {!contentLoading && contentData.length === 0 && (
               <div className="text-center py-12 text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                 <Film className="h-8 w-8 mx-auto mb-2 text-slate-300" />
                 {selectedCampaignId ? (
@@ -468,7 +577,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                 )}
               </div>
             )}
-            {filteredContent.map(video => {
+            {!contentLoading && contentData.map(video => {
               const isSelected = selectedVideo === video.id;
               const isComplete = video.ingestionStatus === 'Completed';
               return (
@@ -500,9 +609,10 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                       {handleDeleteContent && (
                         <button
                           type="button"
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
                             handleDeleteContent(video.id);
+                            refreshContent();
                           }}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors shrink-0"
                           title="Delete Video"
@@ -547,7 +657,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                     {!isComplete && handleAiSplitAnalyze && (
                       <button
                         type="button"
-                        disabled={aiAnalyzingVideoId !== null}
+                        disabled={aiAnalyzingVideoId !== null || isPipelineActionPending !== null}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleAiSplitAnalyze(video.id, video.title);
@@ -565,9 +675,58 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                         )}
                       </button>
                     )}
+                    {isComplete && onRedetectScenes && (
+                      <button
+                        type="button"
+                        disabled={isPipelineActionPending !== null}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await onRedetectScenes(video.id, video.title);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase transition-all border cursor-pointer ${
+                          isPipelineActionPending === video.id
+                            ? 'bg-amber-50 border-amber-200 text-amber-600'
+                            : 'bg-amber-500 hover:bg-amber-400 border-amber-600 text-white shadow-xs'
+                        }`}
+                        title="Re-run scene detection to regenerate scene cuts and surfaces"
+                      >
+                        {isPipelineActionPending === video.id ? (
+                          <><Loader2 className="h-3 w-3 animate-spin" /> Re-running...</>
+                        ) : (
+                          <><RefreshCw className="h-3 w-3" /> Re-detect Scenes</>
+                        )}
+                      </button>
+                    )}
                     {isComplete && (
                       <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-100">
                         <CheckCircle className="h-3 w-3" /> Scenes indexed — proceed to QA Workbench
+                      </span>
+                    )}
+                    {video.ingestionStatus === 'Failed' && onResetPipeline && (
+                      <button
+                        type="button"
+                        disabled={isPipelineActionPending !== null}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          await onResetPipeline(video.id);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase transition-all border cursor-pointer ${
+                          isPipelineActionPending === video.id
+                            ? 'bg-red-50 border-red-200 text-red-600'
+                            : 'bg-red-500 hover:bg-red-400 border-red-600 text-white shadow-xs'
+                        }`}
+                        title="Reset pipeline back to Staging to retry"
+                      >
+                        {isPipelineActionPending === video.id ? (
+                          <><Loader2 className="h-3 w-3 animate-spin" /> Resetting...</>
+                        ) : (
+                          <><RotateCcw className="h-3 w-3" /> Reset Pipeline</>
+                        )}
+                      </button>
+                    )}
+                    {video.ingestionStatus === 'Failed' && video.lastErrorMessage && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[9px] font-bold bg-red-50 text-red-700 border border-red-100 max-w-[250px] truncate" title={video.lastErrorMessage}>
+                        <AlertTriangle className="h-3 w-3 shrink-0" /> {video.lastErrorMessage}
                       </span>
                     )}
                     {isSelected && scenesForVideo.length > 0 && (
@@ -587,7 +746,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                       </div>
                       {scenesForVideo.length === 0 ? (
                         <div className="text-2xs text-slate-400 italic bg-slate-50 rounded-lg p-3 border border-dashed border-slate-200">
-                          No scenes detected yet. Click <strong>"Run Scene Detection"</strong> above to trigger MReq 1 scene-cut analysis, or wait for the automated pipeline.
+                          No scenes detected yet. Click <strong>"Run Scene Detection"</strong> above to trigger scene-cut analysis, or wait for the automated pipeline.
                         </div>
                       ) : (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -606,6 +765,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                               <div className="text-slate-400">{scene.durationSeconds}s</div>
                               <div className={`text-[9px] mt-1 font-bold ${
                                 scene.qaStatus === 'Approved' ? 'text-emerald-600' : 
+                                scene.qaStatus === 'PendingReview' ? 'text-blue-600' :
                                 scene.qaStatus === 'Flagged' ? 'text-red-500' : 'text-slate-400'
                               }`}>
                                 {scene.qaStatus}
@@ -623,6 +783,14 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
               );
             })}
           </div>
+
+          <Pagination
+            page={contentPage}
+            totalPages={contentTotalPages}
+            hasPreviousPage={contentHasPrev}
+            hasNextPage={contentHasNext}
+            onPageChange={setContentPage}
+          />
         </div>
       </div>
     </motion.div>

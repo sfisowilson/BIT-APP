@@ -21,7 +21,10 @@ import {
   Package,
   Plus,
   Sun,
-  Moon
+  Moon,
+  BarChart3,
+  Clock,
+  UserPlus
 } from 'lucide-react';
 
 import { 
@@ -39,7 +42,8 @@ import {
   TIMELINE_DATA 
 } from './types';
 import { DOCUMENT_CONTENT } from './document';
-import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession } from './apiClient';
+import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession, retranscode, redetectScenes, resetPipeline, refreshToken, fetchStatsSummary, type StatsSummary } from './apiClient';
+import { useChunkedUpload } from './hooks/useChunkedUpload';
 
 // Import our modular sub-components
 import { CampaignsTab } from './components/CampaignsTab';
@@ -51,6 +55,9 @@ import { AdminConsoleTab } from './components/AdminConsoleTab';
 import { CampaignSelector } from './components/CampaignSelector';
 import { CampaignSidebar, type SidebarView } from './components/CampaignSidebar';
 import { CampaignDashboard } from './components/CampaignDashboard';
+import { AnalyticsTab } from './components/AnalyticsTab';
+import { useIdleTimer } from './hooks/useIdleTimer';
+import { NotificationPreferencesPanel } from './components/NotificationPreferencesPanel';
 
 export default function App() {
   const navigate = useNavigate();
@@ -71,6 +78,7 @@ export default function App() {
     }
     if (parts[0] === 'admin') return { activeView: 'admin' as SidebarView, selectedCampaignId: null };
     if (parts[0] === 'telemetry') return { activeView: 'telemetry' as SidebarView, selectedCampaignId: null };
+    if (parts[0] === 'analytics') return { activeView: 'analytics' as SidebarView, selectedCampaignId: null };
     return { activeView: null, selectedCampaignId: null };
   }, [location.pathname]);
 
@@ -117,6 +125,13 @@ export default function App() {
   // App States representing the operational UI
   const [contentList, setContentList] = useState<ContentItem[]>([]);
   const [aiAnalyzingVideoId, setAiAnalyzingVideoId] = useState<string | null>(null);
+  const [isPipelineActionPending, setIsPipelineActionPending] = useState<string | null>(null);
+  const [statsSummary, setStatsSummary] = useState<StatsSummary | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [showRoleRequest, setShowRoleRequest] = useState(false);
+  const [requestedRole, setRequestedRole] = useState('Editor');
+  const [roleRequestReason, setRoleRequestReason] = useState('');
+  const [roleRequestMsg, setRoleRequestMsg] = useState<{type:'success'|'error',text:string}|null>(null);
   const [campaignList, setCampaignList] = useState<CampaignItem[]>([]);
   const [assetList, setAssetList] = useState<CreativeAsset[]>([]);
   const [renderList, setRenderList] = useState<RenderItem[]>([]);
@@ -158,6 +173,9 @@ export default function App() {
   const [newVideoFile, setNewVideoFile] = useState<File | null>(null);
   const [ingestError, setIngestError] = useState<string | null>(null);
   const [ingesting, setIngesting] = useState<boolean>(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0); // 0-100
+  const [chunkProgress, setChunkProgress] = useState<string>(''); // e.g. "12/48 chunks"
+  const chunkedUpload = useChunkedUpload({ chunkSizeMB: 25, maxConcurrent: 3 });
 
   // Dispatch Composite Renders
   const [composerCampaignId, setComposerCampaignId] = useState<string>('');
@@ -215,6 +233,53 @@ export default function App() {
     // Navigate to landing page (clears URL)
     navigate('/');
   };
+
+  // MReq 9: Submit a role elevation request
+  const handleRequestRole = async () => {
+    setRoleRequestMsg(null);
+    try {
+      const res = await fetchWithAuth('/api/user/request-role', {
+        method: 'POST',
+        body: JSON.stringify({ requestedRole, reason: roleRequestReason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Request failed.');
+      setRoleRequestMsg({ type: 'success', text: data.message });
+      setTimeout(() => { setShowRoleRequest(false); setRoleRequestMsg(null); }, 2000);
+    } catch (err: any) {
+      setRoleRequestMsg({ type: 'error', text: err.message });
+    }
+  };
+
+  // MReq 8: Idle timeout — auto-logout after 28 min inactivity + 60s countdown
+  const { showCountdown, secondsRemaining, resetTimer } = useIdleTimer({
+    idleMinutes: 28,
+    countdownSeconds: 60,
+    onTimeout: handleLogout,
+  });
+
+  // MReq 8: Attempt silent token refresh on activity
+  useEffect(() => {
+    if (!user) return;
+    const refreshInterval = setInterval(async () => {
+      const refreshed = await refreshToken();
+      if (refreshed?.token) {
+        setToken(refreshed.token);
+        setUser(refreshed.user as typeof user);
+      }
+    }, 30 * 60 * 1000); // every 30 minutes
+    return () => clearInterval(refreshInterval);
+  }, [user]);
+
+  // MReq 19: Fetch stats when analytics tab is active
+  useEffect(() => {
+    if (activeView !== 'analytics' || !user) return;
+    setStatsLoading(true);
+    fetchStatsSummary()
+      .then(setStatsSummary)
+      .catch(console.error)
+      .finally(() => setStatsLoading(false));
+  }, [activeView, user]);
 
   // Secure request broker (MReq 8 over secure JWT authorization)
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
@@ -275,12 +340,35 @@ export default function App() {
         fetchJson('/api/alarms')
       ]);
 
-      if (contentRes.status === 'fulfilled') setContentList(contentRes.value);
-      if (campaignsRes.status === 'fulfilled') setCampaignList(campaignsRes.value);
-      if (assetsRes.status === 'fulfilled') setAssetList(assetsRes.value);
-      if (rendersRes.status === 'fulfilled') setRenderList(rendersRes.value);
-      if (logsRes.status === 'fulfilled') setLogList(logsRes.value);
-      if (alarmsRes.status === 'fulfilled') setAlarmList(alarmsRes.value);
+      if (contentRes.status === 'fulfilled') {
+        const data = contentRes.value as any;
+        setContentList(data.items || data);
+      }
+      if (campaignsRes.status === 'fulfilled') {
+        const data = campaignsRes.value as any;
+        setCampaignList(data.items || data);
+      }
+      if (assetsRes.status === 'fulfilled') {
+        const data = assetsRes.value as any;
+        const assets = data.items || data;
+        const assetsWithThumbnails = (assets as CreativeAsset[]).map(a => ({
+          ...a,
+          thumbnailUrl: a.storageKey?.startsWith('/api/') ? a.storageKey : a.thumbnailUrl
+        }));
+        setAssetList(assetsWithThumbnails);
+      }
+      if (rendersRes.status === 'fulfilled') {
+        const data = rendersRes.value as any;
+        setRenderList(data.items || data);
+      }
+      if (logsRes.status === 'fulfilled') {
+        const data = logsRes.value as any;
+        setLogList(data.items || data);
+      }
+      if (alarmsRes.status === 'fulfilled') {
+        const data = alarmsRes.value as any;
+        setAlarmList(data.items || data);
+      }
 
       const failures = [
         { name: 'content', res: contentRes },
@@ -325,7 +413,7 @@ export default function App() {
   }, [selectedCampaignId, campaignList, navigate]);
 
   // Validate that the URL view is a known SidebarView — redirect to dashboard if not
-  const VALID_VIEWS: string[] = ['dashboard', 'assets', 'content', 'placements', 'renders', 'reports', 'admin', 'telemetry'];
+  const VALID_VIEWS: string[] = ['dashboard', 'assets', 'content', 'placements', 'renders', 'reports', 'admin', 'telemetry', 'analytics'];
   useEffect(() => {
     if (activeView && !VALID_VIEWS.includes(activeView)) {
       if (selectedCampaignId) {
@@ -411,6 +499,14 @@ export default function App() {
       setComposerCampaignId(selectedCampaignId);
     }
   }, [selectedCampaignId]);
+
+  // Sync chunked upload progress to App state for UI display
+  useEffect(() => {
+    if (chunkedUpload.state.uploading) {
+      setUploadProgress(chunkedUpload.state.progress);
+      setChunkProgress(chunkedUpload.state.chunkProgress);
+    }
+  }, [chunkedUpload.state.progress, chunkedUpload.state.chunkProgress, chunkedUpload.state.uploading]);
 
   // Handle Campaign Creation
   const handleCreateCampaign = async (e?: React.FormEvent) => {
@@ -579,52 +675,123 @@ export default function App() {
     }
   };
 
-  // Handle Content Upload (MReq 1: real file upload with metadata)
+  // Handle Content Upload (MReq 1: chunked upload for files > 100 MB, direct XHR for smaller)
   const handleIngestVideo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newVideoTitle || ingesting) return;
     setIngestError(null);
     setIngesting(true);
-    try {
-      const formData = new FormData();
-      formData.append('title', newVideoTitle);
-      formData.append('resolution', newVideoRes);
-      formData.append('frameRate', String(newVideoFps));
-      formData.append('duration', newVideoDuration);
-      formData.append('sourceChannel', newVideoChannel);
-      if (selectedCampaignId) {
-        formData.append('campaignId', selectedCampaignId);
+    setUploadProgress(0);
+    setChunkProgress('');
+
+    // Use chunked upload for files larger than 100 MB
+    const CHUNKED_THRESHOLD = 100 * 1024 * 1024; // 100 MB
+    if (newVideoFile && newVideoFile.size > CHUNKED_THRESHOLD) {
+      try {
+        const result = await chunkedUpload.startUpload(newVideoFile, {
+          title: newVideoTitle,
+          sourceChannel: newVideoChannel,
+          campaignId: selectedCampaignId || '',
+        });
+
+        // Sync progress from chunked upload
+        setUploadProgress(chunkedUpload.state.progress);
+        setChunkProgress(chunkedUpload.state.chunkProgress);
+
+        setNewVideoTitle('');
+        setNewVideoDuration('00:05:00');
+        setNewVideoFile(null);
+        setNewVideoRes('1920x1080 (1080p)');
+        setNewVideoFps(50);
+        setNewVideoChannel('SuperSport Variety');
+        setIngesting(false);
+        setUploadProgress(0);
+        setChunkProgress('');
+        fetchAllData();
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          setIngestError(err.message || 'Chunked upload failed.');
+        }
+        setIngesting(false);
+        setUploadProgress(0);
+        setChunkProgress('');
       }
-      if (newVideoFile) {
-        formData.append('file', newVideoFile);
-      }
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('title', newVideoTitle);
+    formData.append('resolution', newVideoRes);
+    formData.append('frameRate', String(newVideoFps));
+    formData.append('duration', newVideoDuration);
+    formData.append('sourceChannel', newVideoChannel);
+    if (selectedCampaignId) {
+      formData.append('campaignId', selectedCampaignId);
+    }
+    if (newVideoFile) {
+      formData.append('file', newVideoFile);
+    }
+
+    // Use XMLHttpRequest for upload progress tracking
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/content/upload');
 
       const token = getToken();
-      const res = await fetch('/api/content/upload', {
-        method: 'POST',
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
-        body: formData,
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      xhr.upload.addEventListener('progress', (evt) => {
+        if (evt.lengthComputable) {
+          const pct = Math.round((evt.loaded / evt.total) * 100);
+          setUploadProgress(pct);
+        }
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setIngestError(data.error || 'Ingestion failed.');
+      xhr.addEventListener('load', () => {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) {
+            setNewVideoTitle('');
+            setNewVideoDuration('00:05:00');
+            setNewVideoFile(null);
+            setNewVideoRes('1920x1080 (1080p)');
+            setNewVideoFps(50);
+            setNewVideoChannel('SuperSport Variety');
+            setIngesting(false);
+            setUploadProgress(0);
+            fetchAllData();
+            resolve();
+          } else {
+            setIngestError(data.error || `Upload failed (HTTP ${xhr.status}).`);
+            setIngesting(false);
+            setUploadProgress(0);
+            resolve(); // resolve anyway so UI updates
+          }
+        } catch {
+          setIngestError('Failed to parse server response.');
+          setIngesting(false);
+          setUploadProgress(0);
+          resolve();
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        setIngestError('Network error during upload. Check your connection and try again.');
         setIngesting(false);
-        return;
-      }
-      setNewVideoTitle('');
-      setNewVideoDuration('00:05:00');
-      setNewVideoFile(null);
-      setNewVideoRes('1920x1080 (1080p)');
-      setNewVideoFps(50);
-      setNewVideoChannel('SuperSport Variety');
-      setIngesting(false);
-      fetchAllData();
-    } catch (err) {
-      console.error(err);
-      setIngestError('API communication failure.');
-      setIngesting(false);
-    }
+        setUploadProgress(0);
+        resolve();
+      });
+
+      xhr.addEventListener('abort', () => {
+        setIngesting(false);
+        setUploadProgress(0);
+        resolve();
+      });
+
+      xhr.send(formData);
+    });
   };
 
   // Handle Surface Approval Decision (MReq 11: real campaign context, audit trail)
@@ -729,19 +896,25 @@ export default function App() {
     setAiAnalyzingVideoId(contentId);
 
     try {
-      // 1. Call our real Express server with Gemini logic to analyze and split
+      // 1. Call our backend to detect scene cuts via FFprobe
       const res = await fetchWithAuth('/api/video/ai-split-analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ videoTitle, contentId })
       });
 
-      const responseData = await res.json();
       if (!res.ok) {
-        throw new Error(responseData.error || "AI Video Split and Spatial analysis failed.");
+        let errorMsg = `Scene detection failed (HTTP ${res.status}).`;
+        try {
+          const errData = await res.json();
+          errorMsg = errData.error || errorMsg;
+        } catch { /* response wasn't JSON */ }
+        throw new Error(errorMsg);
       }
 
-      // 2. Save the custom generated scenes & surfaces into our mock DB
+      const responseData = await res.json();
+
+      // 2. Save the generated scenes & surfaces
       const saveRes = await fetchWithAuth('/api/video/ai-split-save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -752,7 +925,9 @@ export default function App() {
       });
 
       if (!saveRes.ok) {
-        throw new Error("Failed to save AI-generated scenes.");
+        let saveError = 'Failed to save scenes.';
+        try { const errData = await saveRes.json(); saveError = errData.error || saveError; } catch { }
+        throw new Error(saveError);
       }
 
       // 3. Reload everything
@@ -769,6 +944,60 @@ export default function App() {
       alert(err instanceof Error ? err.message : "Error executing AI Spatial Video Splitting.");
     } finally {
       setAiAnalyzingVideoId(null);
+    }
+  };
+
+  // ── Pipeline Re-Run Handlers ──────────────────────────────────────────
+
+  /** Re-run scene detection (from Completed or SceneDetecting stage). */
+  const handleRedetectScenes = async (contentId: string, videoTitle: string) => {
+    if (!contentId) return;
+    setIsPipelineActionPending(contentId);
+    try {
+      // Transition to SceneDetecting via the pipeline endpoint
+      await redetectScenes(contentId);
+      // Then trigger the full scene analysis + save flow
+      await handleAiSplitAnalyze(contentId, videoTitle);
+    } catch (err: any) {
+      console.error('Re-detect scenes error:', err);
+      alert(err instanceof Error ? err.message : 'Failed to re-detect scenes.');
+    } finally {
+      setIsPipelineActionPending(null);
+    }
+  };
+
+  /** Re-run transcoding for a content item. */
+  const handleRetranscode = async (contentId: string) => {
+    if (!contentId) return;
+    setIsPipelineActionPending(contentId);
+    try {
+      await retranscode(contentId);
+      await fetchAllData();
+    } catch (err: any) {
+      console.error('Retranscode error:', err);
+      alert(err instanceof Error ? err.message : 'Failed to restart transcoding.');
+    } finally {
+      setIsPipelineActionPending(null);
+    }
+  };
+
+  /** Full pipeline reset — clear all progress back to Staging. */
+  const handleResetPipeline = async (contentId: string) => {
+    if (!contentId) return;
+    setIsPipelineActionPending(contentId);
+    try {
+      await resetPipeline(contentId);
+      await fetchAllData();
+      // Also refresh scenes
+      try {
+        const refreshedScenes = await fetchWithAuth(`/api/content/${contentId}/scenes`).then(r => r.json());
+        setScenesForVideo(refreshedScenes);
+      } catch { /* scenes may not exist after reset */ }
+    } catch (err: any) {
+      console.error('Reset pipeline error:', err);
+      alert(err instanceof Error ? err.message : 'Failed to reset pipeline.');
+    } finally {
+      setIsPipelineActionPending(null);
     }
   };
 
@@ -1174,6 +1403,15 @@ export default function App() {
                   {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
                 </button>
 
+                {/* MReq 9: Role Request */}
+                <button
+                  onClick={() => { setShowRoleRequest(!showRoleRequest); setRoleRequestMsg(null); }}
+                  className="p-2 rounded-lg text-slate-400 hover:text-amber-500 hover:bg-amber-50 cursor-pointer transition-all border border-slate-200"
+                  title="Request a role elevation"
+                >
+                  <UserPlus className="h-4 w-4" />
+                </button>
+
                 <button onClick={handleLogout} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-all border border-slate-200 hover:border-red-100" title="Logout">
                   <LogOut className="h-4 w-4" />
                 </button>
@@ -1183,7 +1421,84 @@ export default function App() {
         </div>
       </header>
 
+      {/* MReq 9: Role Request Popover */}
+      <AnimatePresence>
+        {showRoleRequest && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="fixed top-[73px] right-4 z-40 bg-white border border-slate-200 rounded-xl shadow-xl p-5 w-80"
+          >
+            <h4 className="text-sm font-bold text-slate-800 mb-3">Request Role Elevation</h4>
+            <p className="text-xs text-slate-500 mb-3">Your current role: <strong>{user?.role}</strong></p>
+            <select
+              value={requestedRole}
+              onChange={e => setRequestedRole(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-3 focus:outline-none focus:border-blue-500"
+            >
+              {['Admin', 'Editor', 'Advertiser'].filter(r => r !== user?.role).map(r => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
+            <textarea
+              value={roleRequestReason}
+              onChange={e => setRoleRequestReason(e.target.value)}
+              placeholder="Reason for request (optional)..."
+              rows={2}
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-3 resize-none focus:outline-none focus:border-blue-500"
+            />
+            {roleRequestMsg && (
+              <div className={`text-[10px] font-bold mb-3 px-3 py-1.5 rounded-lg ${roleRequestMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                {roleRequestMsg.text}
+              </div>
+            )}
+            <button
+              onClick={handleRequestRole}
+              className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs cursor-pointer transition-colors"
+            >
+              Submit Request
+            </button>
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <NotificationPreferencesPanel />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex gap-0 max-w-full mx-auto" id="app_body">
+        {/* MReq 8: Idle timeout countdown modal */}
+        <AnimatePresence>
+          {showCountdown && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-white rounded-2xl p-8 shadow-2xl max-w-sm w-full mx-4 text-center"
+              >
+                <Clock className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-slate-800 mb-2">Session Expiring</h3>
+                <p className="text-sm text-slate-500 mb-4">
+                  You've been inactive. Your session will end in <strong className="text-red-600 text-xl">{secondsRemaining}s</strong>.
+                </p>
+                <p className="text-xs text-slate-400 mb-6">Move your mouse or press any key to stay signed in.</p>
+                <button
+                  onClick={() => { resetTimer(); }}
+                  className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-xl cursor-pointer transition-colors"
+                >
+                  I'm Still Here
+                </button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* LEFT SIDEBAR */}
         <div className="border-r border-slate-200 bg-white px-4 py-6 min-h-[calc(100vh-140px)] sticky top-[73px] self-start" id="sidebar_wrapper">
           <CampaignSidebar
@@ -1227,6 +1542,9 @@ export default function App() {
                     setAlarmSimDesc={setAlarmSimDesc}
                   />
                 )}
+                {activeView === 'analytics' && (
+                  <AnalyticsTab summary={statsSummary} loading={statsLoading} />
+                )}
                 {!activeView && (
                   <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto space-y-8 py-12" key="no_campaign">
                     <div className="text-center">
@@ -1243,7 +1561,7 @@ export default function App() {
                         <Plus className="h-4 w-4 text-blue-600" />
                         Create New Campaign
                       </h3>
-                      <p className="text-xs text-slate-500 mb-5">Define campaign schedules, regions and budgets (<strong>MReq 10</strong>).</p>
+                      <p className="text-xs text-slate-500 mb-5">Define campaign schedules, regions and budgets.</p>
                       <form onSubmit={(e) => { e.preventDefault(); handleCreateCampaign(e); }} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                           <div>
@@ -1253,7 +1571,7 @@ export default function App() {
                               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors" required />
                           </div>
                           <div>
-                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Naming Code (MReq 10)</label>
+                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Naming Code</label>
                             <input type="text" value={newCampaignCode} onChange={(e) => setNewCampaignCode(e.target.value)}
                               placeholder="e.g., UZ01EP12_COKE"
                               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors" required />
@@ -1356,7 +1674,6 @@ export default function App() {
 
                 {activeView === 'content' && (
                   <IngestionTab
-                    contentList={contentList}
                     selectedVideo={selectedVideo}
                     setSelectedVideo={setSelectedVideo}
                     scenesForVideo={scenesForVideo}
@@ -1378,11 +1695,18 @@ export default function App() {
                     handleIngestVideo={handleIngestVideo}
                     ingestError={ingestError}
                     ingesting={ingesting}
+                    uploadProgress={uploadProgress}
+                    chunkProgress={chunkProgress}
                     handleDeleteContent={handleDeleteContent}
                     handleAiSplitAnalyze={handleAiSplitAnalyze}
                     aiAnalyzingVideoId={aiAnalyzingVideoId}
                     selectedCampaignId={selectedCampaignId}
                     campaignList={campaignList.map(c => ({ id: c.id, name: c.name }))}
+                    onDataChanged={fetchAllData}
+                    onRetranscode={handleRetranscode}
+                    onRedetectScenes={handleRedetectScenes}
+                    onResetPipeline={handleResetPipeline}
+                    isPipelineActionPending={isPipelineActionPending}
                   />
                 )}
 

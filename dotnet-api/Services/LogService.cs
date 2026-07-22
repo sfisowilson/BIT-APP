@@ -9,7 +9,7 @@ namespace Afrobotics.Bit.Api.Services
 {
     public interface ILogService
     {
-        Task<IEnumerable<EventLog>> GetLogsAsync();
+        Task<PaginatedResult<EventLog>> GetLogsAsync(LogFilterParams filter);
         Task<EventLog> CreateLogAsync(CreateLogDto dto);
     }
 
@@ -22,9 +22,27 @@ namespace Afrobotics.Bit.Api.Services
             _logRepository = logRepository;
         }
 
-        public async Task<IEnumerable<EventLog>> GetLogsAsync()
+        public async Task<PaginatedResult<EventLog>> GetLogsAsync(LogFilterParams filter)
         {
-            return await _logRepository.GetRecentLogsAsync(100);
+            var query = _logRepository.GetAllQueryable();
+
+            if (!string.IsNullOrEmpty(filter.Severity))
+                query = query.Where(l => l.Severity == filter.Severity);
+            if (!string.IsNullOrEmpty(filter.Module))
+                query = query.Where(l => l.Module == filter.Module);
+            if (filter.DateFrom.HasValue)
+                query = query.Where(l => l.Timestamp >= filter.DateFrom.Value);
+            if (filter.DateTo.HasValue)
+                query = query.Where(l => l.Timestamp <= filter.DateTo.Value);
+            if (!string.IsNullOrEmpty(filter.Search))
+                query = query.Where(l => l.Description.Contains(filter.Search) || l.EventCode.Contains(filter.Search));
+
+            if (!string.IsNullOrEmpty(filter.SortBy))
+                query = query.ApplySort(filter.SortBy, filter.SortDescending);
+            else
+                query = query.OrderByDescending(l => l.Timestamp);
+
+            return await query.ToPaginatedResultAsync(filter.Page, filter.PageSize);
         }
 
         public async Task<EventLog> CreateLogAsync(CreateLogDto dto)

@@ -23,10 +23,10 @@ namespace Afrobotics.Bit.Api.Controllers
         }
 
         [HttpGet("logs")]
-        public async Task<ActionResult<IEnumerable<EventLog>>> GetLogs()
+        public async Task<ActionResult<PaginatedResult<EventLog>>> GetLogs([FromQuery] LogFilterParams filter)
         {
-            var logs = await _logService.GetLogsAsync();
-            return Ok(logs);
+            var result = await _logService.GetLogsAsync(filter);
+            return Ok(result);
         }
 
         [HttpPost("logs")]
@@ -47,10 +47,11 @@ namespace Afrobotics.Bit.Api.Controllers
         [HttpGet("usage/csv")]
         public async Task<IActionResult> DownloadUsageCsv()
         {
-            var logs = await _logService.GetLogsAsync();
+            var filter = new LogFilterParams { PageSize = 10000 }; // fetch all for CSV export
+            var result = await _logService.GetLogsAsync(filter);
             var sb = new StringBuilder();
             sb.AppendLine("ID,Timestamp,EventCode,Severity,Module,User,Description");
-            foreach (var log in logs)
+            foreach (var log in result.Items)
             {
                 var desc = log.Description.Replace("\"", "\"\"");
                 sb.AppendLine($"{log.Id},{log.Timestamp:O},{log.EventCode},{log.Severity},{log.Module},{log.User},\"{desc}\"");

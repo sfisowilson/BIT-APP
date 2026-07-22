@@ -1,3 +1,5 @@
+/'
+
 ---
 description: "Execute implementation plans to completion without stopping. Use when: implementing a multi-step plan, building a feature end-to-end, executing a task list, any work that spans multiple files or steps. Never abandons work mid-plan — only stops when all steps are verified done or the user explicitly says stop."
 name: "Plan Executor"

@@ -33,5 +33,26 @@ namespace Afrobotics.Bit.Api.Controllers
                 return StatusCode(500, new { error = ex.Message });
             }
         }
+
+        /// <summary>MReq 8: Refresh an expiring JWT token silently.</summary>
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh([FromBody] TokenRefreshDto dto)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(dto?.Token))
+                    return BadRequest(new { error = "Token is required." });
+
+                var response = await _authService.RefreshTokenAsync(dto.Token);
+                if (response == null)
+                    return Unauthorized(new { error = "Token expired beyond refresh window. Please sign in again." });
+
+                return Ok(response);
+            }
+            catch (System.Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
     }
 }

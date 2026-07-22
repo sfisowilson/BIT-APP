@@ -22,9 +22,9 @@ namespace Afrobotics.Bit.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<RenderItem>>> GetRenders([FromQuery] string? campaignId = null)
+        public async Task<ActionResult<PaginatedResult<RenderItem>>> GetRenders([FromQuery] RenderFilterParams filter)
         {
-            var renders = await _renderService.GetRendersAsync(campaignId);
+            var renders = await _renderService.GetRendersAsync(filter);
             return Ok(renders);
         }
 

@@ -21,6 +21,11 @@ namespace Afrobotics.Bit.Api.Data
         public DbSet<RenderItem> Renders { get; set; } = null!;
         public DbSet<EventLog> EventLogs { get; set; } = null!;
         public DbSet<AlarmItem> Alarms { get; set; } = null!;
+        public DbSet<UsageRecord> UsageRecords { get; set; } = null!;
+        public DbSet<NotificationItem> Notifications { get; set; } = null!;
+        public DbSet<PlatformSetting> PlatformSettings { get; set; } = null!;
+        public DbSet<RoleRequest> RoleRequests { get; set; } = null!;
+        public DbSet<BrandSafetyRule> BrandSafetyRules { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -39,6 +44,18 @@ namespace Afrobotics.Bit.Api.Data
 
             modelBuilder.Entity<EventLog>()
                 .HasIndex(l => l.EventCode);
+
+            modelBuilder.Entity<UsageRecord>()
+                .HasIndex(r => r.Timestamp);
+
+            modelBuilder.Entity<UsageRecord>()
+                .HasIndex(r => r.UserId);
+
+            modelBuilder.Entity<NotificationItem>()
+                .HasIndex(n => n.Timestamp);
+
+            modelBuilder.Entity<NotificationItem>()
+                .HasIndex(n => n.RecipientEmail);
 
             // Configure decimal precision
             modelBuilder.Entity<CampaignItem>()

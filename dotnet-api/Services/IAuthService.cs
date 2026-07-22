@@ -6,5 +6,6 @@ namespace Afrobotics.Bit.Api.Services
     public interface IAuthService
     {
         Task<LoginResponseDto?> LoginAsync(LoginRequestDto request);
+        Task<LoginResponseDto?> RefreshTokenAsync(string expiredToken);
     }
 }

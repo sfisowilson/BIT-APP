@@ -10,4 +10,14 @@ namespace Afrobotics.Bit.Api.DTOs
         public string? StorageKey { get; set; }
         public string? CampaignId { get; set; }  // MReq 10: associate with campaign
     }
+
+    /// <summary>DTO for transitioning content to a new pipeline stage.</summary>
+    public class TransitionStageDto
+    {
+        /// <summary>Target pipeline stage: Staging, Transcoding, SceneDetecting, Completed, Failed.</summary>
+        public string TargetStage { get; set; } = string.Empty;
+
+        /// <summary>Optional error message (used when transitioning to Failed).</summary>
+        public string? ErrorMessage { get; set; }
+    }
 }

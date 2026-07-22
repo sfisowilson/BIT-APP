@@ -9,6 +9,15 @@ export interface ContentItem {
   ingestionStatus: "Staging" | "Transcoding" | "SceneDetecting" | "Completed" | "Failed";
   campaignId?: string;  // MReq 10: video linked to a campaign
   createdAt: string;
+  // ── Pipeline stage timestamps ──
+  stagingCompletedAt?: string;
+  transcodingStartedAt?: string;
+  transcodingCompletedAt?: string;
+  sceneDetectingStartedAt?: string;
+  sceneDetectingCompletedAt?: string;
+  // ── Error tracking ──
+  lastErrorMessage?: string;
+  lastErrorAt?: string;
 }
 
 export interface SceneItem {
@@ -104,6 +113,7 @@ export interface CreativeAsset {
   dimensions: string;
   brandCategory: string;
   campaignId?: string;  // MReq 10: asset can be assigned to a campaign
+  thumbnailUrl?: string; // computed by backend for uploaded files
 }
 
 /** Comprehensive brand categories for competitive separation and filtering (MReq 3, 10) */

@@ -24,10 +24,10 @@ namespace Afrobotics.Bit.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<CampaignItem>>> GetCampaigns()
+        public async Task<ActionResult<PaginatedResult<CampaignItem>>> GetCampaigns([FromQuery] CampaignFilterParams filter)
         {
-            var campaigns = await _campaignService.GetCampaignsAsync();
-            return Ok(campaigns);
+            var result = await _campaignService.GetCampaignsAsync(filter);
+            return Ok(result);
         }
 
         [HttpGet("{id}/assets")]

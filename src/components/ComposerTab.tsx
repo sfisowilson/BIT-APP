@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Cpu, Sparkles, Receipt, Film, Loader2, Play } from 'lucide-react';
+import { Cpu, Sparkles, Receipt, Film, Loader2, Play, Image } from 'lucide-react';
 import { CampaignItem, CreativeAsset, RenderItem, SceneItem } from '../types';
 
 interface ComposerTabProps {
@@ -114,7 +114,7 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
         <div>
           <h4 className="font-bold text-sm text-blue-900">Step 4: GPU Perspective Compositing Dispatcher</h4>
           <p className="mt-1 text-blue-700 leading-normal">
-            Now that you have approved candidate surface locations, choose an active advertiser campaign and a staged creative branding asset. This tool maps the transparent graphic overlay onto the 3D target coordinates frame-by-frame and dispatches rendering progress to virtualized GPU instances (<strong>MReq 14</strong>).
+            Now that you have approved candidate surface locations, choose an active advertiser campaign and a staged creative branding asset. This tool maps the transparent graphic overlay onto the 3D target coordinates frame-by-frame and dispatches rendering progress to virtualized GPU instances.
           </p>
         </div>
       </div>
@@ -217,10 +217,31 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
                   </optgroup>
                 )}
               </select>
+              {/* Thumbnail preview of selected asset */}
+              {composerAssetId && (() => {
+                const selectedAsset = assetList.find(a => a.id === composerAssetId);
+                if (!selectedAsset) return null;
+                return (
+                  <div className="mt-2 flex items-center gap-3 p-2.5 bg-blue-50/50 border border-blue-100 rounded-lg">
+                    <div className="h-12 w-12 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-blue-200">
+                      {selectedAsset.thumbnailUrl ? (
+                        <img src={selectedAsset.thumbnailUrl} alt={selectedAsset.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <Image className="h-6 w-6 text-slate-400" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">{selectedAsset.name}</p>
+                      <p className="text-[10px] text-slate-500 font-mono">{selectedAsset.type} · {selectedAsset.brandCategory}</p>
+                      <p className="text-[9px] text-slate-400 font-mono">{selectedAsset.dimensions}</p>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1.5 font-mono">Rendering Preset (MReq 7)</label>
+              <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1.5 font-mono">Rendering Preset</label>
               <select 
                 value={composerPreset} 
                 onChange={(e) => setComposerPreset(e.target.value)}

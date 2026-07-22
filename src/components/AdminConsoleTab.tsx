@@ -16,6 +16,9 @@ import {
   Trash2
 } from 'lucide-react';
 import { User } from '../types';
+import { SettingsPanel } from './SettingsPanel';
+import { RoleRequestsPanel } from './RoleRequestsPanel';
+import { BrandSafetyPanel } from './BrandSafetyPanel';
 
 interface AdminConsoleTabProps {
   onTriggerLog?: (code: string, severity: 'Info' | 'Warning' | 'Major' | 'Critical', module: string, user: string, desc: string) => void;
@@ -64,7 +67,9 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
       const res = await fetchWithAuth('/api/users');
       const data = await res.json();
       if (res.ok) {
-        setUsers(data);
+        // Handle both flat array and paginated { items: [...] } response
+        const userList = Array.isArray(data) ? data : (data.items || []);
+        setUsers(userList);
       }
     } catch (err) {
       console.error("Error loading users:", err);
@@ -631,6 +636,15 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
           </div>
         </div>
       </div>
+
+      {/* BRAND-SAFETY EXCLUSION LIST */}
+      <BrandSafetyPanel />
+
+      {/* ROLE REQUESTS */}
+      <RoleRequestsPanel />
+
+      {/* PLATFORM SETTINGS */}
+      <SettingsPanel />
     </motion.div>
   );
 };

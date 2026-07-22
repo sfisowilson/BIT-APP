@@ -122,6 +122,31 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.ToTable("Approvals");
                 });
 
+            modelBuilder.Entity("Afrobotics.Bit.Api.Models.BrandSafetyRule", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("BrandSafetyRules");
+                });
+
             modelBuilder.Entity("Afrobotics.Bit.Api.Models.CampaignItem", b =>
                 {
                     b.Property<string>("Id")
@@ -186,13 +211,29 @@ namespace Afrobotics.Bit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("LastErrorAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastErrorMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("Resolution")
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("SceneDetectingCompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SceneDetectingStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("SourceChannel")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("StagingCompletedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("StorageKey")
                         .IsRequired()
@@ -202,6 +243,12 @@ namespace Afrobotics.Bit.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("TranscodingCompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("TranscodingStartedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
@@ -221,6 +268,9 @@ namespace Afrobotics.Bit.Api.Migrations
 
                     b.Property<string>("CampaignId")
                         .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Dimensions")
                         .IsRequired()
@@ -285,6 +335,68 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.ToTable("EventLogs");
                 });
 
+            modelBuilder.Entity("Afrobotics.Bit.Api.Models.NotificationItem", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Body")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RecipientEmail")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Subject")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecipientEmail");
+
+                    b.HasIndex("Timestamp");
+
+                    b.ToTable("Notifications");
+                });
+
+            modelBuilder.Entity("Afrobotics.Bit.Api.Models.PlatformSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("PlatformSettings");
+                });
+
             modelBuilder.Entity("Afrobotics.Bit.Api.Models.RenderItem", b =>
                 {
                     b.Property<string>("Id")
@@ -330,6 +442,43 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Renders");
+                });
+
+            modelBuilder.Entity("Afrobotics.Bit.Api.Models.RoleRequest", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestedRole")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReviewedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RoleRequests");
                 });
 
             modelBuilder.Entity("Afrobotics.Bit.Api.Models.SceneItem", b =>
@@ -419,6 +568,51 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.ToTable("SurfaceItems");
                 });
 
+            modelBuilder.Entity("Afrobotics.Bit.Api.Models.UsageRecord", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<long>("DurationMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("HttpMethod")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("RequestPath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("StatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserEmail")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UsageRecords");
+                });
+
             modelBuilder.Entity("Afrobotics.Bit.Api.Models.User", b =>
                 {
                     b.Property<string>("Id")
@@ -439,6 +633,11 @@ namespace Afrobotics.Bit.Api.Migrations
 
                     b.Property<DateTime>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MutedNotifications")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()

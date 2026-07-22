@@ -9,7 +9,7 @@ namespace Afrobotics.Bit.Api.Services
 {
     public interface IAssetService
     {
-        Task<IEnumerable<CreativeAsset>> GetAssetsAsync(string? campaignId = null);
+        Task<PaginatedResult<CreativeAsset>> GetAssetsAsync(AssetFilterParams filter);
         Task<IEnumerable<CreativeAsset>> GetAssetsByCampaignAsync(string campaignId);
         Task<CreativeAsset> CreateAssetAsync(CreateAssetDto dto);
         Task<CreativeAsset> CreateAssetWithFileAsync(CreateAssetDto dto, string storageKey, string fileSize, string dimensions);
@@ -30,12 +30,25 @@ namespace Afrobotics.Bit.Api.Services
             _campaignRepository = campaignRepository;
         }
 
-        public async Task<IEnumerable<CreativeAsset>> GetAssetsAsync(string? campaignId = null)
+        public async Task<PaginatedResult<CreativeAsset>> GetAssetsAsync(AssetFilterParams filter)
         {
-            var all = await _assetRepository.GetAllAsync();
-            if (!string.IsNullOrEmpty(campaignId))
-                return all.Where(a => a.CampaignId == campaignId);
-            return all;
+            var query = _assetRepository.GetAllQueryable();
+
+            if (!string.IsNullOrEmpty(filter.Type))
+                query = query.Where(a => a.Type == filter.Type);
+            if (!string.IsNullOrEmpty(filter.BrandCategory))
+                query = query.Where(a => a.BrandCategory == filter.BrandCategory);
+            if (!string.IsNullOrEmpty(filter.CampaignId))
+                query = query.Where(a => a.CampaignId == filter.CampaignId);
+            if (!string.IsNullOrEmpty(filter.Search))
+                query = query.Where(a => a.Name.Contains(filter.Search));
+
+            if (!string.IsNullOrEmpty(filter.SortBy))
+                query = query.ApplySort(filter.SortBy, filter.SortDescending);
+            else
+                query = query.OrderByDescending(a => a.CreatedAt);
+
+            return await query.ToPaginatedResultAsync(filter.Page, filter.PageSize);
         }
 
         public async Task<IEnumerable<CreativeAsset>> GetAssetsByCampaignAsync(string campaignId)

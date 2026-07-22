@@ -16,10 +16,12 @@ namespace Afrobotics.Bit.Api.Services
     public class SurfaceService : ISurfaceService
     {
         private readonly ISurfaceRepository _surfaceRepository;
+        private readonly IEmailService _email;
 
-        public SurfaceService(ISurfaceRepository surfaceRepository)
+        public SurfaceService(ISurfaceRepository surfaceRepository, IEmailService email)
         {
             _surfaceRepository = surfaceRepository;
+            _email = email;
         }
 
         public async Task<IEnumerable<SurfaceItem>> GetSurfacesAsync(string sceneId)
@@ -83,11 +85,21 @@ namespace Afrobotics.Bit.Api.Services
                     Timestamp = DateTime.UtcNow
                 };
                 await _surfaceRepository.AddApprovalAsync(approval);
+
+                _ = _email.SendAsync(approverEmail,
+                    "Placement Approved",
+                    $"Surface '{surface.SurfaceType}' has been approved.\n\nCampaign: {campaignId}\nAd Slot: {adSlot.Id}\nViability: {surface.ViabilityScore:P0}",
+                    "PlacementApproved");
             }
             else
             {
                 surface.Status = "Excluded";
                 surface.ExclusionReason = dto.RejectionReason ?? "Editor manual exclusion.";
+
+                _ = _email.SendAsync(approverEmail,
+                    "Placement Rejected",
+                    $"Surface '{surface.SurfaceType}' has been rejected.\n\nReason: {surface.ExclusionReason}",
+                    "PlacementRejected");
             }
 
             await _surfaceRepository.UpdateAsync(surface);

@@ -19,10 +19,12 @@ namespace Afrobotics.Bit.Api.Services
     public class UserService : IUserService
     {
         private readonly IUserRepository _userRepository;
+        private readonly IEmailService _email;
 
-        public UserService(IUserRepository userRepository)
+        public UserService(IUserRepository userRepository, IEmailService email)
         {
             _userRepository = userRepository;
+            _email = email;
         }
 
         public async Task<IEnumerable<User>> GetUsersAsync()
@@ -44,7 +46,7 @@ namespace Afrobotics.Bit.Api.Services
                 Id = "usr-" + Guid.NewGuid().ToString().Substring(0, 4),
                 FullName = dto.FullName,
                 Email = dto.Email,
-                PasswordHash = dto.Email, // simple default password = email (dev only)
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password ?? dto.Email),
                 Role = dto.Role,
                 AccountStatus = dto.AccountStatus,
                 LastLoginAt = DateTime.UtcNow
@@ -52,6 +54,13 @@ namespace Afrobotics.Bit.Api.Services
 
             await _userRepository.AddAsync(user);
             await _userRepository.SaveChangesAsync();
+
+            // Notify the new user
+            _ = _email.SendAsync(user.Email,
+                "Welcome to BIT Platform",
+                $"Hello {user.FullName},\n\nAn account has been created for you on the Afrobotics BIT platform.\n\n" +
+                $"Role: {user.Role}\nEmail: {user.Email}\n\nPlease contact your administrator for login credentials.",
+                "UserCreated");
 
             return user;
         }
@@ -124,6 +133,9 @@ namespace Afrobotics.Bit.Api.Services
 
             // ─── All validations passed — apply changes ───
 
+            var oldRole = user.Role;
+            var oldStatus = user.AccountStatus;
+
             if (!string.IsNullOrEmpty(dto.Email) && dto.Email != user.Email)
             {
                 user.Email = dto.Email;
@@ -146,6 +158,20 @@ namespace Afrobotics.Bit.Api.Services
 
             // Entity is already tracked from GetByIdAsync, just save changes
             await _userRepository.SaveChangesAsync();
+
+            // Notify user of changes (fire-and-forget — don't block the response)
+            if (user.Role != oldRole)
+            {
+                _ = _email.SendAsync(user.Email, "BIT — Role Updated",
+                    $"Hello {user.FullName},\n\nYour account role has been changed from '{oldRole}' to '{user.Role}'.",
+                    "RoleChanged");
+            }
+            if (user.AccountStatus != oldStatus)
+            {
+                _ = _email.SendAsync(user.Email, $"BIT — Account {user.AccountStatus}",
+                    $"Hello {user.FullName},\n\nYour account status has been changed to '{user.AccountStatus}'.",
+                    "StatusChanged");
+            }
 
             return user;
         }
@@ -179,8 +205,13 @@ namespace Afrobotics.Bit.Api.Services
             }
 
             await _userRepository.DeleteAsync(user);
-            // Entity is tracked from GetByIdAsync — DeleteAsync marks it for removal, then save
             await _userRepository.SaveChangesAsync();
+
+            // Notify the deleted user
+            _ = _email.SendAsync(user.Email, "BIT — Account Removed",
+                $"Hello {user.FullName},\n\nYour account on the Afrobotics BIT platform has been removed.\n\nPlease contact your administrator if you believe this was an error.",
+                "UserDeleted");
+
             return (true, null);
         }
     }

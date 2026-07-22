@@ -50,6 +50,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
   const [editType, setEditType] = React.useState<'Image' | 'Logo' | 'Video'>('Image');
   const [editCategory, setEditCategory] = React.useState('');
   const [editFile, setEditFile] = React.useState<File | null>(null);
+  const [previewAsset, setPreviewAsset] = React.useState<CreativeAsset | null>(null);
 
   const selectedCampaign = campaignList.find(c => c.id === selectedCampaignId);
   const campaignAssets = assetList.filter(a => a.campaignId === selectedCampaignId);
@@ -96,8 +97,8 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
           </h4>
           <p className="mt-1 text-blue-700 leading-normal">
             {selectedCampaignId
-              ? <>Managing creative assets for <strong>{selectedCampaign?.name}</strong> ({selectedCampaign?.namingStructureCode}). Stage brand overlays and assign them to this campaign per <strong>MReq 10</strong>.</>
-              : <><strong>Select a campaign</strong> to view and manage its creative assets. Create advertiser campaigns with strict naming codes (<strong>MReq 10</strong>), then stage brand overlays and assign them to campaigns. Unassigned assets appear in the staging area.</>
+              ? <>Managing creative assets for <strong>{selectedCampaign?.name}</strong> ({selectedCampaign?.namingStructureCode}). Stage brand overlays and assign them to this campaign.</>
+              : <><strong>Select a campaign</strong> to view and manage its creative assets. Create advertiser campaigns with strict naming codes, then stage brand overlays and assign them to campaigns. Unassigned assets appear in the staging area.</>
             }
           </p>
         </div>
@@ -271,15 +272,36 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                       ) : (
                         /* Normal display */
                         <div className="flex items-center justify-between group">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-2xs font-bold text-slate-800 truncate">{as.name}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[8px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-mono">{as.type}</span>
-                              <span className="text-[8px] text-slate-400 font-mono">{as.brandCategory}</span>
-                              <span className="text-[8px] text-slate-300 font-mono">{as.dimensions}</span>
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            {/* Thumbnail — clickable to view full */}
+                            <div
+                              className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200 cursor-pointer hover:border-blue-400 hover:shadow-sm transition-all"
+                              onClick={() => as.thumbnailUrl && setPreviewAsset(as)}
+                              title={as.thumbnailUrl ? 'Click to view full image' : 'No preview available'}
+                            >
+                              {as.thumbnailUrl ? (
+                                <img src={as.thumbnailUrl} alt={as.name} className="h-full w-full object-cover" />
+                              ) : (
+                                <Package className="h-5 w-5 text-slate-300" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-2xs font-bold text-slate-800 truncate">{as.name}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[8px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-mono">{as.type}</span>
+                                <span className="text-[8px] text-slate-400 font-mono">{as.brandCategory}</span>
+                                <span className="text-[8px] text-slate-300 font-mono">{as.dimensions}</span>
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
+                            {/* View full asset */}
+                            {as.thumbnailUrl && (
+                              <button type="button" onClick={() => setPreviewAsset(as)}
+                                className="p-1 rounded text-slate-300 hover:text-fuchsia-500 hover:bg-fuchsia-50 cursor-pointer transition-colors opacity-0 group-hover:opacity-100" title="View full image">
+                                <Eye className="h-3 w-3" />
+                              </button>
+                            )}
                             {handleUpdateAsset && (
                               <button type="button" onClick={() => startEditing(as)}
                                 className="p-1 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 cursor-pointer transition-colors opacity-0 group-hover:opacity-100" title="Edit">
@@ -377,23 +399,46 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                   {unassignedAssets.map(as => (
                     <div key={as.id} className="bg-amber-50/30 border border-amber-100 rounded-lg p-3">
                       <div className="flex items-center justify-between">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-2xs font-bold text-slate-800 truncate">{as.name}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[8px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-600 font-mono">{as.type}</span>
-                            <span className="text-[8px] text-slate-400 font-mono">{as.brandCategory}</span>
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {/* Thumbnail — clickable to view full */}
+                          <div
+                            className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-amber-200 cursor-pointer hover:border-blue-400 hover:shadow-sm transition-all"
+                            onClick={() => as.thumbnailUrl && setPreviewAsset(as)}
+                            title={as.thumbnailUrl ? 'Click to view full image' : 'No preview available'}
+                          >
+                            {as.thumbnailUrl ? (
+                              <img src={as.thumbnailUrl} alt={as.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <Package className="h-5 w-5 text-slate-300" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-2xs font-bold text-slate-800 truncate">{as.name}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[8px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-600 font-mono">{as.type}</span>
+                              <span className="text-[8px] text-slate-400 font-mono">{as.brandCategory}</span>
+                            </div>
                           </div>
                         </div>
-                        {handleDeleteAsset && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteAsset(as.id)}
-                            className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors"
-                            title="Delete Asset"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        )}
+                        <div className="flex items-center gap-1 shrink-0">
+                          {/* View full asset */}
+                          {as.thumbnailUrl && (
+                            <button type="button" onClick={() => setPreviewAsset(as)}
+                              className="p-1 rounded text-slate-300 hover:text-fuchsia-500 hover:bg-fuchsia-50 cursor-pointer transition-colors" title="View full image">
+                              <Eye className="h-3 w-3" />
+                            </button>
+                          )}
+                          {handleDeleteAsset && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAsset(as.id)}
+                              className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors"
+                              title="Delete Asset"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                       {/* Quick assign dropdown */}
                       <div className="mt-2 flex items-center gap-2">
@@ -483,6 +528,54 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
           </div>
         )}
       </div>
+
+      {/* Asset Preview Modal */}
+      {previewAsset && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setPreviewAsset(null)}
+        >
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-800 truncate">{previewAsset.name}</h3>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-mono">{previewAsset.type}</span>
+                  <span className="text-[10px] text-slate-400 font-mono">{previewAsset.brandCategory}</span>
+                  <span className="text-[10px] text-slate-300 font-mono">{previewAsset.dimensions} · {previewAsset.fileSize}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => setPreviewAsset(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer transition-colors shrink-0"
+                title="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {/* Image */}
+            <div className="flex-1 flex items-center justify-center bg-slate-900/5 p-6 min-h-[300px]">
+              {previewAsset.thumbnailUrl ? (
+                <img
+                  src={previewAsset.thumbnailUrl}
+                  alt={previewAsset.name}
+                  className="max-w-full max-h-[60vh] object-contain rounded-lg shadow-md"
+                />
+              ) : (
+                <div className="text-center text-slate-400">
+                  <Package className="h-16 w-16 mx-auto mb-3 text-slate-300" />
+                  <p className="text-sm font-medium">No preview available</p>
+                  <p className="text-xs mt-1">This asset has no uploaded image file.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 };

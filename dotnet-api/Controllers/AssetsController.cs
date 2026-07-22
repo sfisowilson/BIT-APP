@@ -27,10 +27,10 @@ namespace Afrobotics.Bit.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<CreativeAsset>>> GetAssets([FromQuery] string? campaignId = null)
+        public async Task<ActionResult<PaginatedResult<CreativeAsset>>> GetAssets([FromQuery] AssetFilterParams filter)
         {
-            var assets = await _assetService.GetAssetsAsync(campaignId);
-            return Ok(assets);
+            var result = await _assetService.GetAssetsAsync(filter);
+            return Ok(result);
         }
 
         [HttpGet("campaign/{campaignId}")]
@@ -186,6 +186,19 @@ namespace Afrobotics.Bit.Api.Controllers
                     var uploadsDir = Path.Combine(_env.ContentRootPath, "Uploads", "assets");
                     Directory.CreateDirectory(uploadsDir);
 
+                    // Delete old file if it's a local stored asset
+                    if (!string.IsNullOrEmpty(asset.StorageKey) && asset.StorageKey.StartsWith("/api/assets/file/"))
+                    {
+                        var oldFileName = asset.StorageKey.Replace("/api/assets/file/", "");
+                        var oldFilePath = Path.Combine(uploadsDir, oldFileName);
+                        var oldFullPath = Path.GetFullPath(oldFilePath);
+                        var uploadsFullPath = Path.GetFullPath(uploadsDir);
+                        if (oldFullPath.StartsWith(uploadsFullPath + Path.DirectorySeparatorChar) && System.IO.File.Exists(oldFilePath))
+                        {
+                            try { System.IO.File.Delete(oldFilePath); } catch { /* best effort */ }
+                        }
+                    }
+
                     var ext = Path.GetExtension(file.FileName);
                     var safeName = $"asset_{Guid.NewGuid():N}{ext}";
                     var filePath = Path.Combine(uploadsDir, safeName);
@@ -244,6 +257,23 @@ namespace Afrobotics.Bit.Api.Controllers
         {
             try
             {
+                // Fetch asset first to get the storage key for file cleanup
+                var assetsResult = await _assetService.GetAssetsAsync(new AssetFilterParams { PageSize = 10000 });
+                var asset = assetsResult.Items.FirstOrDefault(a => a.Id == id);
+
+                if (asset != null && !string.IsNullOrEmpty(asset.StorageKey) && asset.StorageKey.StartsWith("/api/assets/file/"))
+                {
+                    var uploadsDir = Path.Combine(_env.ContentRootPath, "Uploads", "assets");
+                    var oldFileName = asset.StorageKey.Replace("/api/assets/file/", "");
+                    var oldFilePath = Path.Combine(uploadsDir, oldFileName);
+                    var oldFullPath = Path.GetFullPath(oldFilePath);
+                    var uploadsFullPath = Path.GetFullPath(uploadsDir);
+                    if (oldFullPath.StartsWith(uploadsFullPath + Path.DirectorySeparatorChar) && System.IO.File.Exists(oldFilePath))
+                    {
+                        try { System.IO.File.Delete(oldFilePath); } catch { /* best effort */ }
+                    }
+                }
+
                 var deleted = await _assetService.DeleteAssetAsync(id);
                 if (!deleted)
                 {

@@ -605,8 +605,12 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     return (
                       <div key={sf.id} className="flex items-center justify-between bg-emerald-50/50 border border-emerald-200/60 rounded-lg px-3 py-2">
                         <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center">
-                            <Image className="h-4 w-4 text-emerald-600" />
+                          <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center overflow-hidden border border-emerald-200">
+                            {asset.thumbnailUrl ? (
+                              <img src={asset.thumbnailUrl} alt={asset.name} className="h-full w-full object-cover" />
+                            ) : (
+                              <Image className="h-4 w-4 text-emerald-600" />
+                            )}
                           </div>
                           <div>
                             <div className="text-xs font-bold text-slate-800">{sf.surfaceType} ← {asset.name}</div>
@@ -776,7 +780,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     {currentSurface.exclusionReason && <p className="text-2xs text-red-600 leading-normal mt-2 italic bg-red-50 p-2 rounded border border-red-100">Exclusion: {currentSurface.exclusionReason}</p>}
                   </div>
                   {currentSurface.status === "Excluded" && currentSurface.exclusionReason?.includes("MReq 4") ? (
-                    <div className="p-3.5 bg-red-50 border border-red-200/60 rounded-xl text-red-700 text-xs"><Shield className="h-4 w-4 inline mr-1 text-red-600" /><strong>Security Blocklist:</strong> Face classification overrides cannot be bypassed (<strong>MReq 4</strong>).</div>
+                    <div className="p-3.5 bg-red-50 border border-red-200/60 rounded-xl text-red-700 text-xs"><Shield className="h-4 w-4 inline mr-1 text-red-600" /><strong>Security Blocklist:</strong> Face classification overrides cannot be bypassed.</div>
                   ) : (
                     <div className="space-y-3 pt-2">
                       <button onClick={() => handleSurfaceDecision("Approved")} className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg cursor-pointer transition-all shadow-xs"><CheckCircle className="h-3.5 w-3.5" />Approve Surface</button>
@@ -857,7 +861,13 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                             {campaignAssets.map(asset => (
                               <button key={asset.id} onClick={() => onPlaceAsset(currentSurface.id, asset.id)}
                                 className="w-full flex items-center gap-2.5 p-2 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer text-left">
-                                <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0"><Image className="h-4 w-4 text-slate-400" /></div>
+                                <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200">
+                                  {asset.thumbnailUrl ? (
+                                    <img src={asset.thumbnailUrl} alt={asset.name} className="h-full w-full object-cover" />
+                                  ) : (
+                                    <Image className="h-4 w-4 text-slate-400" />
+                                  )}
+                                </div>
                                 <div className="flex-1 min-w-0"><div className="text-xs font-bold text-slate-800 truncate">{asset.name}</div><div className="text-[10px] text-slate-400 font-mono">{asset.type} · {asset.brandCategory}</div></div>
                                 <div className="text-[10px] text-slate-300 font-mono">{asset.dimensions}</div>
                               </button>
