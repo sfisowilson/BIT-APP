@@ -60,6 +60,7 @@ import { AnalyticsTab } from './components/AnalyticsTab';
 import { useIdleTimer } from './hooks/useIdleTimer';
 import { NotificationPreferencesPanel } from './components/NotificationPreferencesPanel';
 import { AttentionBell } from './components/AttentionBell';
+import { NotFoundPage } from './components/NotFoundPage';
 
 export default function App() {
   const navigate = useNavigate();
@@ -992,7 +993,7 @@ export default function App() {
       }
     } catch (err: any) {
       console.error("AI Split/Analyze Error:", err);
-      alert(err instanceof Error ? err.message : "Error executing AI Spatial Video Splitting.");
+      alert("Scene detection failed. Please try again or contact support.");
     } finally {
       setAiAnalyzingVideoId(null);
     }
@@ -1011,7 +1012,7 @@ export default function App() {
       await handleAiSplitAnalyze(contentId, videoTitle);
     } catch (err: any) {
       console.error('Re-detect scenes error:', err);
-      alert(err instanceof Error ? err.message : 'Failed to re-detect scenes.');
+      alert("Failed to re-detect scenes. Please try again or contact support.");
     } finally {
       setIsPipelineActionPending(null);
     }
@@ -1026,7 +1027,7 @@ export default function App() {
       await fetchAllData();
     } catch (err: any) {
       console.error('Retranscode error:', err);
-      alert(err instanceof Error ? err.message : 'Failed to restart transcoding.');
+      alert("Failed to restart transcoding. Please try again or contact support.");
     } finally {
       setIsPipelineActionPending(null);
     }
@@ -1046,7 +1047,7 @@ export default function App() {
       } catch { /* scenes may not exist after reset */ }
     } catch (err: any) {
       console.error('Reset pipeline error:', err);
-      alert(err instanceof Error ? err.message : 'Failed to reset pipeline.');
+      alert("Failed to reset pipeline. Please try again or contact support.");
     } finally {
       setIsPipelineActionPending(null);
     }
@@ -1899,6 +1900,9 @@ export default function App() {
               </>
             )}
           </AnimatePresence>
+
+          {/* 404 — no matching route for authenticated users */}
+          {user && !activeView && location.pathname !== '/' && location.pathname !== '' && <NotFoundPage />}
         </main>
       </div>
 

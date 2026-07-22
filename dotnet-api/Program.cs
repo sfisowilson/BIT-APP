@@ -123,6 +123,10 @@ if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 }
+else
+{
+    app.UseMiddleware<Afrobotics.Bit.Api.Middleware.ExceptionHandlingMiddleware>();
+}
 
 app.UseCors("AllowFrontendClient");
 
