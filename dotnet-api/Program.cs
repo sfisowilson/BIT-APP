@@ -89,10 +89,50 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAssetService, AssetService>();
 builder.Services.AddScoped<ILogService, LogService>();
 
-// Compositing pipeline — swap implementation to change AI engine
-// Current:  BasicCompositingService (System.Drawing)
-// Future:   builder.Services.AddScoped<ICompositingService, RunwayCompositingService>();
-builder.Services.AddScoped<ICompositingService, BasicCompositingService>();
+// ── AI Engine Registration — admin-configurable via Platform Settings ──
+// Each engine reads its setting at startup. Admin changes take effect on next app restart.
+// Defaults to "basic" (no external API) if setting is missing.
+
+// Surface detection engine
+builder.Services.AddScoped<ISurfaceDetectionService>(sp =>
+{
+    var settings = sp.GetRequiredService<IPlatformSettingsService>();
+    var engine = settings.GetAsync("engine_detection").Result;
+    return engine switch
+    {
+        "replicate" => ActivatorUtilities.CreateInstance<ReplicateSurfaceDetectionService>(sp),
+        "google"    => ActivatorUtilities.CreateInstance<GoogleVisionDetectionService>(sp),
+        _           => ActivatorUtilities.CreateInstance<BasicSurfaceDetectionService>(sp),
+    };
+});
+
+// Brand analysis engine
+builder.Services.AddScoped<IBrandAnalysisService>(sp =>
+{
+    var settings = sp.GetRequiredService<IPlatformSettingsService>();
+    var engine = settings.GetAsync("engine_brand_analysis").Result;
+    return engine switch
+    {
+        "google" => ActivatorUtilities.CreateInstance<GoogleVisionBrandAnalysisService>(sp),
+        "gemini" => ActivatorUtilities.CreateInstance<GeminiBrandAnalysisService>(sp),
+        _        => ActivatorUtilities.CreateInstance<BasicBrandAnalysisService>(sp),
+    };
+});
+
+// Compositing engine
+builder.Services.AddScoped<ICompositingService>(sp =>
+{
+    var settings = sp.GetRequiredService<IPlatformSettingsService>();
+    var engine = settings.GetAsync("engine_compositing").Result;
+    return engine switch
+    {
+        "opencv" => ActivatorUtilities.CreateInstance<OpenCvCompositingService>(sp),
+        _        => ActivatorUtilities.CreateInstance<BasicCompositingService>(sp),
+    };
+});
+
+// Brand-safety check pipeline (MReq 4)
+builder.Services.AddScoped<IBrandSafetyCheckService, BrandSafetyCheckService>();
 
 // Event logging (MReq 20) — emits events from pipeline stages automatically
 builder.Services.AddScoped<IEventLogService, EventLogService>();
