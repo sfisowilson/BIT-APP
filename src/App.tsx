@@ -333,7 +333,7 @@ export default function App() {
       .finally(() => setStatsLoading(false));
   }, [activeView, user]);
 
-  // Secure request broker (MReq 8 over secure JWT authorization)
+  // Secure request broker
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     const res = await apiFetchWithAuth(url, options);
     // Auto-logout if token is invalid or expired
@@ -344,13 +344,15 @@ export default function App() {
     if (!res.ok) {
       const clone = res.clone();
       const text = await clone.text();
-      throw new Error(`HTTP ${res.status} on ${url}: ${text.substring(0, 100)}`);
+      console.error(`API error ${res.status} on ${url}: ${text.substring(0, 200)}`);
+      throw new Error('Something went wrong. Please try again or contact support.');
     }
     const contentType = res.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
       const clone = res.clone();
       const text = await clone.text();
-      throw new Error(`Expected JSON from ${url} but got content-type "${contentType}" and body: ${text.substring(0, 100)}`);
+      console.error(`Non-JSON response from ${url}: ${text.substring(0, 200)}`);
+      throw new Error('Something went wrong. Please try again or contact support.');
     }
     return res;
   };

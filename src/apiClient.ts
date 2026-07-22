@@ -53,7 +53,11 @@ export async function fetchWithAuth(
     ...options.headers,
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
-  return fetch(url, { ...options, headers });
+  try {
+    return await fetch(url, { ...options, headers });
+  } catch {
+    throw new Error('Unable to connect to the server. Please check your connection and try again.');
+  }
 }
 
 /** Unauthenticated fetch (for login). */
@@ -65,7 +69,11 @@ export async function fetchPublic(
     'Content-Type': 'application/json',
     ...options.headers,
   };
-  return fetch(url, { ...options, headers });
+  try {
+    return await fetch(url, { ...options, headers });
+  } catch {
+    throw new Error('Unable to connect to the server. Please check your connection and try again.');
+  }
 }
 
 /** fetch + json() convenience helper (authenticated). */
