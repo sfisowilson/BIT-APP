@@ -193,7 +193,7 @@ export function useChunkedUpload(
         setState(prev => ({ ...prev, uploading: false }));
         return;
       }
-      setState(prev => ({ ...prev, uploading: false, error: err.message || 'Upload failed.' }));
+      setState(prev => ({ ...prev, uploading: false, error: err.message }));
       throw err;
     }
   }, [chunkSizeBytes, maxConcurrent]);

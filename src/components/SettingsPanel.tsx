@@ -51,7 +51,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
       await res.json();
       setSaveMsg({ type: 'success', text: 'Settings saved successfully.' });
     } catch (err: any) {
-      setSaveMsg({ type: 'error', text: err.message || 'Failed to save settings.' });
+      setSaveMsg({ type: 'error', text: err.message });
     } finally {
       setSaving(false);
       setTimeout(() => setSaveMsg(null), 4000);
@@ -70,7 +70,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
       if (!res.ok) throw new Error(data.error);
       setSaveMsg({ type: 'success', text: data.message });
     } catch (err: any) {
-      setSaveMsg({ type: 'error', text: err.message || 'Test email failed.' });
+      setSaveMsg({ type: 'error', text: err.message });
     } finally {
       setTestingEmail(false);
       setTimeout(() => setSaveMsg(null), 4000);

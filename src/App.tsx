@@ -216,7 +216,7 @@ export default function App() {
       setLoginPassword('');
     } catch (err: any) {
       console.error(err);
-      setAuthError(err.message || "Identity Service connection error.");
+      setAuthError(err.message || "Authentication failed.");
     }
   };
 
@@ -276,7 +276,7 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || 'Failed.');
       setForgotMsg({ type: 'success', text: data.message });
     } catch (err: any) {
-      setForgotMsg({ type: 'error', text: err.message || 'Something went wrong.' });
+      setForgotMsg({ type: 'error', text: err.message });
     } finally {
       setForgotSending(false);
     }
@@ -297,7 +297,7 @@ export default function App() {
       setPasswordChangeMsg({ type: 'success', text: data.message });
       setCurrentPassword(''); setNewPassword('');
     } catch (err: any) {
-      setPasswordChangeMsg({ type: 'error', text: err.message || 'Something went wrong.' });
+      setPasswordChangeMsg({ type: 'error', text: err.message });
     } finally {
       setChangingPassword(false);
     }
@@ -333,26 +333,12 @@ export default function App() {
       .finally(() => setStatsLoading(false));
   }, [activeView, user]);
 
-  // Secure request broker
+  // Secure request broker — 500/network errors intercepted by apiClient
   const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
     const res = await apiFetchWithAuth(url, options);
-    // Auto-logout if token is invalid or expired
     if (res.status === 401) {
       handleLogout();
       throw new Error('Session expired. Please sign in again.');
-    }
-    if (!res.ok) {
-      const clone = res.clone();
-      const text = await clone.text();
-      console.error(`API error ${res.status} on ${url}: ${text.substring(0, 200)}`);
-      throw new Error('Something went wrong. Please try again or contact support.');
-    }
-    const contentType = res.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      const clone = res.clone();
-      const text = await clone.text();
-      console.error(`Non-JSON response from ${url}: ${text.substring(0, 200)}`);
-      throw new Error('Something went wrong. Please try again or contact support.');
     }
     return res;
   };
@@ -764,7 +750,7 @@ export default function App() {
         fetchAllData();
       } catch (err: any) {
         if (err.name !== 'AbortError') {
-          setIngestError(err.message || 'Chunked upload failed.');
+          setIngestError(err.message);
         }
         setIngesting(false);
         setUploadProgress(0);

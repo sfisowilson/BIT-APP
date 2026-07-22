@@ -94,7 +94,7 @@ export function usePaginatedData<T>(
       setState(prev => ({
         ...prev,
         loading: false,
-        error: err.message || 'Failed to fetch data.',
+        error: err.message,
       }));
     }
   }, [endpoint, defaultPageSize]);

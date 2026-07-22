@@ -39,9 +39,15 @@ export function setSavedUser<T = unknown>(user: T): void {
 
 // ─── Core fetch wrappers ────────────────────────────────────────────────
 
+const FRIENDLY_ERROR = 'Something went wrong. Please try again or contact support.';
+const NETWORK_ERROR = 'Unable to connect to the server. Please check your connection and try again.';
+
 /**
  * fetch() with JWT Bearer token attached from localStorage.
- * Relative URLs like '/api/content' work because of the Vite proxy.
+ * Intercepts at the network level:
+ *   - Network failures → friendly "Unable to connect" message
+ *   - 500-range responses → friendly generic error
+ *   - 400-range responses → returned as-is so callers can extract data.error
  */
 export async function fetchWithAuth(
   url: string,
@@ -54,13 +60,24 @@ export async function fetchWithAuth(
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
   try {
-    return await fetch(url, { ...options, headers });
-  } catch {
-    throw new Error('Unable to connect to the server. Please check your connection and try again.');
+    const res = await fetch(url, { ...options, headers });
+    if (res.status >= 500) {
+      throw new Error(FRIENDLY_ERROR);
+    }
+    return res;
+  } catch (err: any) {
+    // Network error (TypeError: Failed to fetch) → friendly
+    if (err.name === 'TypeError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+      throw new Error(NETWORK_ERROR);
+    }
+    // Already a friendly error from our 500 check — rethrow
+    if (err.message === FRIENDLY_ERROR) throw err;
+    // Unexpected — still don't leak raw details
+    throw new Error(NETWORK_ERROR);
   }
 }
 
-/** Unauthenticated fetch (for login). */
+/** Unauthenticated fetch (for login, forgot-password). Same interceptor behavior. */
 export async function fetchPublic(
   url: string,
   options: RequestInit = {},
@@ -70,9 +87,17 @@ export async function fetchPublic(
     ...options.headers,
   };
   try {
-    return await fetch(url, { ...options, headers });
-  } catch {
-    throw new Error('Unable to connect to the server. Please check your connection and try again.');
+    const res = await fetch(url, { ...options, headers });
+    if (res.status >= 500) {
+      throw new Error(FRIENDLY_ERROR);
+    }
+    return res;
+  } catch (err: any) {
+    if (err.name === 'TypeError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
+      throw new Error(NETWORK_ERROR);
+    }
+    if (err.message === FRIENDLY_ERROR) throw err;
+    throw new Error(NETWORK_ERROR);
   }
 }
 
