@@ -144,6 +144,9 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
 RecurringJob.AddOrUpdate<Afrobotics.Bit.Api.Controllers.ContentController>("cleanup-chunk-temp",
     c => c.CleanupChunkUploadDirectories(), Cron.Daily);
 
+RecurringJob.AddOrUpdate<Afrobotics.Bit.Api.Controllers.UsageController>("archive-usage-records",
+    c => c.ArchiveUsageRecords(), Cron.Weekly);
+
 app.Run();
 
 // Apply EF Core migrations on startup & seed initial data if database is empty

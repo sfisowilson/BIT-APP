@@ -77,7 +77,7 @@ namespace Afrobotics.Bit.Api.Services
             await _campaignRepository.AddAsync(campaign);
             await _campaignRepository.SaveChangesAsync();
 
-            _ = _email.SendAsync(_config["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
+            _email.Enqueue(_config["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
                 $"Campaign Created — {campaign.Name}",
                 $"Campaign '{campaign.Name}' ({campaign.NamingStructureCode}) has been created.\n\nRegion: {campaign.TargetRegion}\nBudget: {campaign.TotalBudget:C}",
                 "CampaignCreated");

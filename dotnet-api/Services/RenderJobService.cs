@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -80,10 +81,10 @@ public class RenderJobService
             await eventLog.LogEventAsync("RenderEngine", "RENDER_COMPLETED", "Info",
                 $"Render '{render.Id}' completed in {elapsed.TotalSeconds:F1}s.");
 
-            _ = email.SendAsync(config["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
+            BackgroundJob.Enqueue<IEmailService>(s => s.SendAsync(config["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
                 $"Render Complete — {render.ExportPreset}",
                 $"Render job '{render.Id}' completed.\n\nContent: {render.ContentId}\nCampaign: {render.CampaignId}\nDuration: {elapsed.TotalSeconds:F1}s",
-                "RenderCompleted");
+                "RenderCompleted"));
         }
         catch (OperationCanceledException)
         {
@@ -101,10 +102,10 @@ public class RenderJobService
             await eventLog.LogEventAsync("RenderEngine", "RENDER_FAILED", "Warning",
                 $"Render '{render.Id}' failed: {ex.Message}");
 
-            _ = email.SendAsync(config["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
+            BackgroundJob.Enqueue<IEmailService>(s => s.SendAsync(config["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
                 $"Render Failed — {render.ExportPreset}",
                 $"Render job '{render.Id}' failed.\n\nError: {ex.Message}\nContent: {render.ContentId}\nCampaign: {render.CampaignId}",
-                "RenderFailed");
+                "RenderFailed"));
 
             throw; // re-throw so Hangfire can retry
         }

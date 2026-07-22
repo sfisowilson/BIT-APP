@@ -45,7 +45,7 @@ public class AdminSettingsController : ControllerBase
         if (string.IsNullOrWhiteSpace(dto?.ToEmail))
             return BadRequest(new { error = "Recipient email is required." });
 
-        await _email.SendAsync(dto.ToEmail, "BIT Platform — SMTP Test",
+        await _email.SendAsync(dto.ToEmail, "BIT Platform — SMTP Test",  // test email — must be synchronous to give instant feedback
             "This is a test email from the Afrobotics BIT platform.\n\nIf you received this, your SMTP configuration is working correctly.",
             "TestEmail");
 

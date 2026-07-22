@@ -89,6 +89,30 @@ public class UsageController : ControllerBase
 
         return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"usage_export_{DateTime.UtcNow:yyyyMMdd}.csv");
     }
+
+    /// <summary>Hangfire recurring job: archives last week's usage records to CSV.</summary>
+    [NonAction]
+    public async Task ArchiveUsageRecords()
+    {
+        var weekAgo = DateTime.UtcNow.AddDays(-7);
+        var records = await _context.UsageRecords
+            .Where(r => r.Timestamp >= weekAgo)
+            .OrderByDescending(r => r.Timestamp)
+            .Take(50000)
+            .ToListAsync();
+
+        if (records.Count == 0) return;
+
+        var archiveDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "archive");
+        Directory.CreateDirectory(archiveDir);
+
+        var csv = "Timestamp,UserId,UserEmail,Path,Method,StatusCode,DurationMs,IpAddress\n";
+        foreach (var r in records)
+            csv += $"{r.Timestamp:O},{r.UserId},{r.UserEmail},{r.RequestPath},{r.HttpMethod},{r.StatusCode},{r.DurationMs},{r.IpAddress}\n";
+
+        var filePath = Path.Combine(archiveDir, $"usage_{DateTime.UtcNow:yyyyMMdd}.csv");
+        await System.IO.File.WriteAllTextAsync(filePath, csv);
+    }
 }
 
 public class UsageFilterParams

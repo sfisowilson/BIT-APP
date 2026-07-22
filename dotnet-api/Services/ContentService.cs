@@ -234,14 +234,14 @@ namespace Afrobotics.Bit.Api.Services
             // Notify on completion or failure
             if (targetStage == PipelineStages.Completed)
             {
-                _ = _email.SendAsync(_config["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
+                _email.Enqueue(_config["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
                     $"Ingestion Complete — {content.Title}",
                     $"Content '{content.Title}' has completed ingestion and is ready for QA.\n\nDuration: {content.Duration}\nResolution: {content.Resolution}",
                     "IngestionCompleted");
             }
             else if (targetStage == PipelineStages.Failed)
             {
-                _ = _email.SendAsync(_config["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
+                _email.Enqueue(_config["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
                     $"Ingestion Failed — {content.Title}",
                     $"Content '{content.Title}' ingestion failed.\n\nError: {errorMessage ?? "Unknown error."}\nStorage: {content.StorageKey}",
                     "IngestionFailed");

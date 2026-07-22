@@ -89,7 +89,7 @@ public class AdminRoleRequestsController : ControllerBase
         await _context.SaveChangesAsync();
 
         // Notify user
-        _ = _email.SendAsync(user.Email, "BIT — Role Request Approved",
+        _email.Enqueue(user.Email, "BIT — Role Request Approved",
             $"Hello {user.FullName},\n\nYour request to be elevated to '{request.RequestedRole}' has been approved.\n\nYou now have {request.RequestedRole} access.",
             "RoleRequestApproved");
 
@@ -119,7 +119,7 @@ public class AdminRoleRequestsController : ControllerBase
         await _context.SaveChangesAsync();
 
         // Notify user
-        _ = _email.SendAsync(user.Email, "BIT — Role Request Update",
+        _email.Enqueue(user.Email, "BIT — Role Request Update",
             $"Hello {user.FullName},\n\nYour request to be elevated to '{request.RequestedRole}' was not approved at this time.\n\nPlease contact your administrator for more information.",
             "RoleRequestRejected");
 

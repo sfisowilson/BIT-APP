@@ -56,7 +56,7 @@ namespace Afrobotics.Bit.Api.Services
             await _userRepository.SaveChangesAsync();
 
             // Notify the new user
-            _ = _email.SendAsync(user.Email,
+            _email.Enqueue(user.Email,
                 "Welcome to BIT Platform",
                 $"Hello {user.FullName},\n\nAn account has been created for you on the Afrobotics BIT platform.\n\n" +
                 $"Role: {user.Role}\nEmail: {user.Email}\n\nPlease contact your administrator for login credentials.",
@@ -162,13 +162,13 @@ namespace Afrobotics.Bit.Api.Services
             // Notify user of changes (fire-and-forget — don't block the response)
             if (user.Role != oldRole)
             {
-                _ = _email.SendAsync(user.Email, "BIT — Role Updated",
+                _email.Enqueue(user.Email, "BIT — Role Updated",
                     $"Hello {user.FullName},\n\nYour account role has been changed from '{oldRole}' to '{user.Role}'.",
                     "RoleChanged");
             }
             if (user.AccountStatus != oldStatus)
             {
-                _ = _email.SendAsync(user.Email, $"BIT — Account {user.AccountStatus}",
+                _email.Enqueue(user.Email, $"BIT — Account {user.AccountStatus}",
                     $"Hello {user.FullName},\n\nYour account status has been changed to '{user.AccountStatus}'.",
                     "StatusChanged");
             }
@@ -208,7 +208,7 @@ namespace Afrobotics.Bit.Api.Services
             await _userRepository.SaveChangesAsync();
 
             // Notify the deleted user
-            _ = _email.SendAsync(user.Email, "BIT — Account Removed",
+            _email.Enqueue(user.Email, "BIT — Account Removed",
                 $"Hello {user.FullName},\n\nYour account on the Afrobotics BIT platform has been removed.\n\nPlease contact your administrator if you believe this was an error.",
                 "UserDeleted");
 

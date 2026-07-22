@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.Net.Mail;
 using System.Threading.Tasks;
+using Hangfire;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Afrobotics.Bit.Api.Data;
@@ -10,12 +11,14 @@ using Afrobotics.Bit.Api.Models;
 namespace Afrobotics.Bit.Api.Services;
 
 /// <summary>
-/// MReq 12, 15: Sends email notifications via SMTP and logs every notification to the database.
-/// Falls back gracefully if SMTP is not configured — logs a warning instead of throwing.
+/// Sends email notifications via SMTP and logs every notification to the database.
+/// Falls back gracefully if SMTP is not configured — logs a warning instead.
+/// EnqueueAsync() wraps SendAsync in a Hangfire background job for retry + dashboard visibility.
 /// </summary>
 public interface IEmailService
 {
     Task SendAsync(string toEmail, string subject, string body, string notificationType);
+    void Enqueue(string toEmail, string subject, string body, string notificationType);
 }
 
 public class EmailService : IEmailService
@@ -33,6 +36,12 @@ public class EmailService : IEmailService
 
         var host = _config["Smtp:Host"];
         _isConfigured = !string.IsNullOrWhiteSpace(host);
+    }
+
+    /// <summary>Enqueue an email send as a Hangfire background job. Survives restarts, retries on failure.</summary>
+    public void Enqueue(string toEmail, string subject, string body, string notificationType)
+    {
+        BackgroundJob.Enqueue<IEmailService>(s => s.SendAsync(toEmail, subject, body, notificationType));
     }
 
     public async Task SendAsync(string toEmail, string subject, string body, string notificationType)

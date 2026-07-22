@@ -86,7 +86,7 @@ namespace Afrobotics.Bit.Api.Services
                 };
                 await _surfaceRepository.AddApprovalAsync(approval);
 
-                _ = _email.SendAsync(approverEmail,
+                _email.Enqueue(approverEmail,
                     "Placement Approved",
                     $"Surface '{surface.SurfaceType}' has been approved.\n\nCampaign: {campaignId}\nAd Slot: {adSlot.Id}\nViability: {surface.ViabilityScore:P0}",
                     "PlacementApproved");
@@ -96,7 +96,7 @@ namespace Afrobotics.Bit.Api.Services
                 surface.Status = "Excluded";
                 surface.ExclusionReason = dto.RejectionReason ?? "Editor manual exclusion.";
 
-                _ = _email.SendAsync(approverEmail,
+                _email.Enqueue(approverEmail,
                     "Placement Rejected",
                     $"Surface '{surface.SurfaceType}' has been rejected.\n\nReason: {surface.ExclusionReason}",
                     "PlacementRejected");
