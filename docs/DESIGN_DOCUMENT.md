@@ -1,8 +1,8 @@
-# Afrobotics BIT — System Design Document
+# Brand Inserts Technology (BIT) — System Design Document
 
 **Document Version:** 1.0  
 **Date:** 20 July 2026  
-**Author:** Afrobotics Engineering  
+**Author:** BIT Platform Engineering  
 **Status:** Draft  
 **Classification:** Confidential
 
@@ -34,7 +34,7 @@
 
 | Field | Value |
 |---|---|
-| **Project Name** | Afrobotics Brand Insertion Technology (BIT) — Dynamic Virtual Product Placement & In-Content Advertising Platform |
+| **Project Name** | Brand Inserts Technology (BIT) — Dynamic Virtual Product Placement & In-Content Advertising Platform |
 | **Document Purpose** | Technical design specification describing system architecture, components, interfaces, AI pipeline, data model, and implementation strategy |
 | **Intended Audience** | Engineering team, technical architects, QA, DevOps, stakeholders |
 | **Reference Documents** | `REQUIREMENT_SPECIFICATION.md` (MReq 1–25), Functional Specification, Testing Manual |
@@ -44,7 +44,7 @@
 
 ## 2. Executive Summary
 
-Afrobotics Brand Insertion Technology (BIT) is an **AI-powered video inventory creation platform** that enables brands to be inserted into existing video content after production. It transforms suitable surfaces inside video — billboards, screens, walls, signage, product spaces — into monetisable advertising inventory while appearing visually indistinguishable from the original scene.
+Brand Inserts Technology (BIT) is an **AI-powered video inventory creation platform** that enables brands to be inserted into existing video content after production. It transforms suitable surfaces inside video — billboards, screens, walls, signage, product spaces — into monetisable advertising inventory while appearing visually indistinguishable from the original scene.
 
 The platform targets African broadcasters, streaming platforms (SVOD/AVOD), and production houses, creating a new **non-interruptive advertising layer** inside content that currently generates zero revenue from its internal visual real estate.
 

@@ -2,7 +2,7 @@ export const DOCUMENT_CONTENT = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Afrobotics Brand Insertion Technology (BIT) - Release 1 Implementation Plan</title>
+    <title>Brand Inserts Technology (BIT) - Release 1 Implementation Plan</title>
     <style>
         @page {
             size: A4;
@@ -13,7 +13,7 @@ export const DOCUMENT_CONTENT = `<!DOCTYPE html>
                 font-size: 9pt;
             }
             @bottom-left {
-                content: "Afrobotics BIT - Confidential";
+                content: "Brand Inserts Technology (BIT) - Confidential";
                 font-family: Arial, sans-serif;
                 font-size: 9pt;
             }
@@ -163,14 +163,14 @@ export const DOCUMENT_CONTENT = `<!DOCTYPE html>
     <!-- COVER PAGE -->
     <div class="cover-page">
         <div class="cover-header">
-            <div style="font-size: 14pt; font-weight: bold; color: #1E40AF; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px;">Afrobotics BIT</div>
+            <div style="font-size: 14pt; font-weight: bold; color: #1E40AF; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px;">Brand Inserts Technology (BIT)</div>
             <div class="cover-title">Brand Insertion Technology (BIT)</div>
             <div class="cover-subtitle">Release 1 - Master Implementation Plan</div>
         </div>
         
         <div class="cover-meta">
             <div class="meta-row"><span class="meta-label">Document Type:</span> Project Delivery &amp; Architectural Plan</div>
-            <div class="meta-row"><span class="meta-label">Author:</span> Delivery Team Lead (Afrobotics)</div>
+            <div class="meta-row"><span class="meta-label">Author:</span> Delivery Team Lead (BIT Platform Team)</div>
             <div class="meta-row"><span class="meta-label">Target Audience:</span> Executive Sponsors &amp; Technical Teams</div>
             <div class="meta-row"><span class="meta-label">Strategic Timeline:</span> 2 Weeks (14 Days)</div>
             <div class="meta-row"><span class="meta-label">Technology Stack:</span> Vue.js (UI) | C# ASP.NET Core (Backend) | PostgreSQL (Database)</div>
@@ -198,7 +198,7 @@ export const DOCUMENT_CONTENT = `<!DOCTYPE html>
     <div class="page-break">
         <h2>1. Executive Summary &amp; High-Level Timeline</h2>
         <p>
-            The <strong>Afrobotics Brand Insertion Technology (BIT)</strong> platform is an AI-powered in-content advertising solution. It transforms suitable surfaces inside produced video content (such as billboards, television screens, stadium signage, and product labels) into monetizable, dynamic ad placements. This document outlines the accelerated, professional 14-day delivery roadmap to design, build, test, and release the platform.
+            The <strong>Brand Inserts Technology (BIT)</strong> platform is an AI-powered in-content advertising solution. It transforms suitable surfaces inside produced video content (such as billboards, television screens, stadium signage, and product labels) into monetizable, dynamic ad placements. This document outlines the accelerated, professional 14-day delivery roadmap to design, build, test, and release the platform.
         </p>
         <p>
             To meet the aggressive time-to-market constraints, the project is structured into two strict phases:
@@ -217,7 +217,7 @@ export const DOCUMENT_CONTENT = `<!DOCTYPE html>
     <div class="page-break">
         <h2>2. Decoupled Architecture &amp; Flexible AI Engine Design</h2>
         <p>
-            A core business and technical requirement of Afrobotics BIT is that <strong>the AI engine must not be rigid</strong>. As computer-vision research advances, the platform must allow different models (e.g., swapping SAM 2 for a newer segmentation model, or changing YOLO to custom object detection) to be evaluated and swapped with ease. 
+            A core business and technical requirement of Brand Inserts Technology (BIT) is that <strong>the AI engine must not be rigid</strong>. As computer-vision research advances, the platform must allow different models (e.g., swapping SAM 2 for a newer segmentation model, or changing YOLO to custom object detection) to be evaluated and swapped with ease. 
         </p>
         <p>
             To satisfy this requirement without introducing downstream UI breakage or requiring heavy code rewrites, the architecture utilizes a strict <strong>decoupled design pattern</strong> driven by Object-Oriented C# interfaces:
@@ -659,7 +659,7 @@ export const DOCUMENT_CONTENT = `<!DOCTYPE html>
     <div class="page-break">
         <h2>7. System Redundancy, Operations, &amp; Failure Modes</h2>
         <p>
-            The Afrobotics BIT platform runs as a mission-critical advertising pipeline. Operating in live broadcasting environments dictates strict, non-negotiable standards for infrastructure resilience, telemetry monitoring, and audit compliance.
+            The Brand Inserts Technology (BIT) platform runs as a mission-critical advertising pipeline. Operating in live broadcasting environments dictates strict, non-negotiable standards for infrastructure resilience, telemetry monitoring, and audit compliance.
         </p>
 
         <h3>7.1 Infrastructure Redundancy (MReq 17)</h3>

@@ -57,6 +57,7 @@ import { CampaignSelector } from './components/CampaignSelector';
 import { CampaignSidebar, type SidebarView } from './components/CampaignSidebar';
 import { CampaignDashboard } from './components/CampaignDashboard';
 import { AnalyticsTab } from './components/AnalyticsTab';
+import { BitLogo } from './components/BitLogo';
 import { useIdleTimer } from './hooks/useIdleTimer';
 import { NotificationPreferencesPanel } from './components/NotificationPreferencesPanel';
 import { AttentionBell } from './components/AttentionBell';
@@ -473,13 +474,13 @@ export default function App() {
       ? activeView.charAt(0).toUpperCase() + activeView.slice(1)
       : '';
     if (campaignName && viewLabel) {
-      document.title = `${campaignName} · ${viewLabel} — Afrobotics BIT`;
+      document.title = `${campaignName} · ${viewLabel} — BIT Platform`;
     } else if (campaignName) {
-      document.title = `${campaignName} — Afrobotics BIT`;
+      document.title = `${campaignName} — BIT Platform`;
     } else if (activeView) {
-      document.title = `${viewLabel} — Afrobotics BIT`;
+      document.title = `${viewLabel} — BIT Platform`;
     } else {
-      document.title = 'Afrobotics BIT — Brand Insertion Technology';
+      document.title = 'Brand Inserts Technology (BIT)';
     }
   }, [activeView, selectedCampaignId, campaignList]);
 
@@ -1222,7 +1223,7 @@ export default function App() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'Afrobotics_BIT_Implementation_Plan.doc';
+        a.download = 'Brand_Inserts_Technology_Implementation_Plan.doc';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1244,24 +1245,19 @@ export default function App() {
         <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-12 gap-8 items-stretch">
           
           {/* Brand Info Panel */}
-          <div className="md:col-span-5 flex flex-col justify-between p-8 bg-gradient-to-br from-blue-700 to-indigo-900 rounded-2xl shadow-2xl text-white">
+          <div className="md:col-span-5 flex flex-col justify-between p-8 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-2xl shadow-2xl text-white border border-slate-800">
             <div>
               <div className="mb-6 flex items-center">
-                <img 
-                  src="https://static.wixstatic.com/media/b8640c_265e3e68123947c9a20bcbc636f9d98e~mv2.png" 
-                  alt="Afrobotics Logo" 
-                  className="h-14 w-auto object-contain brightness-0 invert"
-                  referrerPolicy="no-referrer"
-                />
+                <BitLogo variant="dark" height={52} />
               </div>
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 text-[10px] font-bold uppercase tracking-wider mb-6">
                 <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 IDENTITY SERVICES GATEWAY
               </div>
               <h2 className="text-2xl font-black tracking-tight leading-tight">
-                Afrobotics Brand Insertion Technology
+                Brand Inserts Technology
               </h2>
-              <p className="text-xs text-blue-100 mt-3 leading-relaxed">
+              <p className="text-xs text-slate-300 mt-3 leading-relaxed">
                 Unlock enterprise access to South Africa's premier video stream dynamic advertising platform. Ingest video files, schedule visual overlay insertions, customize with generative AI models, and dispatch GPU compositing processes.
               </p>
             </div>
@@ -1294,7 +1290,7 @@ export default function App() {
                     type="email"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="e.g. admin@afrobotics.co.za"
+                    placeholder="e.g. admin@brandinserts.tech"
                     className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-lg text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                     required
                   />
@@ -1352,7 +1348,7 @@ export default function App() {
                   { 
                     role: 'Admin', 
                     name: 'Sabelo Nkosi', 
-                    email: 'admin@afrobotics.co.za', 
+                    email: 'admin@brandinserts.tech', 
                     pass: 'admin123',
                     badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                   },
@@ -1366,7 +1362,7 @@ export default function App() {
                   { 
                     role: 'Advertiser', 
                     name: 'Thabo Ndlovu', 
-                    email: 'advertiser@afrobotics.co.za', 
+                    email: 'advertiser@brandinserts.tech', 
                     pass: 'advertiser123',
                     badge: 'bg-purple-500/10 text-purple-400 border-purple-500/20'
                   }
@@ -1403,20 +1399,13 @@ export default function App() {
         <div className="max-w-full mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
-              <img 
-                src="https://static.wixstatic.com/media/b8640c_265e3e68123947c9a20bcbc636f9d98e~mv2.png" 
-                alt="Afrobotics Logo" 
-                className="h-10 w-auto object-contain shrink-0"
-                referrerPolicy="no-referrer"
-              />
-              <div>
-                <div className="flex items-center gap-2 mb-0.5">
+              <BitLogo variant="light" height={42} />
+              <div className="hidden sm:block pl-3 border-l border-slate-200">
+                <div className="flex items-center gap-1.5 mb-0.5">
                   <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 font-mono">Afrobotics BIT</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 font-mono">BIT PLATFORM</span>
                 </div>
-                <h1 className="text-base font-extrabold text-slate-900 tracking-tight font-display">
-                  Brand Insertion Technology
-                </h1>
+                <div className="text-[11px] font-semibold text-slate-500">Dynamic In-Content Overlay</div>
               </div>
             </div>
             {/* Campaign Selector — always visible */}
@@ -1483,7 +1472,7 @@ export default function App() {
                   <LogOut className="h-4 w-4" />
                 </button>
 
-                <a href="mailto:support@afrobotics.co.za" className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 cursor-pointer transition-all border border-slate-200" title="Contact Support">
+                <a href="mailto:support@brandinserts.tech" className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 cursor-pointer transition-all border border-slate-200" title="Contact Support">
                   <HelpCircle className="h-4 w-4" />
                 </a>
               </div>
@@ -1896,8 +1885,8 @@ export default function App() {
 
       {/* FOOTER */}
       <footer className="max-w-7xl mx-auto px-6 mt-12 pt-6 border-t border-slate-200 text-center text-xs text-slate-400 font-mono" id="portal_footer">
-        <div>Afrobotics BIT Brand Insertion Technology • Release 1 Operational Portal • Confidential Document</div>
-        <div className="mt-1">Copyright © 2026 Afrobotics. All rights reserved. Registered under secure cloud-compliance guidelines.</div>
+        <div>Brand Inserts Technology (BIT) • Release 1 Operational Portal • Confidential Document</div>
+        <div className="mt-1">Copyright © 2026 Brand Inserts Technology. All rights reserved. Registered under secure cloud-compliance guidelines.</div>
       </footer>
     </div>
   );

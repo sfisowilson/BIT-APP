@@ -96,7 +96,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(newEmail)) {
-      setFormError("Please enter a valid email address (e.g., test@afrobotics.co.za).");
+      setFormError("Please enter a valid email address (e.g., test@brandinserts.tech).");
       return;
     }
 
@@ -130,7 +130,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
           "USER_ADMIN_ADD", 
           "Info", 
           "IdentityGateway", 
-          currentUser?.email || "admin@afrobotics.co.za", 
+          currentUser?.email || "admin@brandinserts.tech", 
           `Created user profile for "${newFullName.trim()}" (${newRole}).`
         );
       }
@@ -171,7 +171,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
           "USER_STATUS_CHANGE", 
           "Warning", 
           "IdentityGateway", 
-          currentUser?.email || "admin@afrobotics.co.za", 
+          currentUser?.email || "admin@brandinserts.tech", 
           `Changed status of ${userToUpdate.fullName} to ${nextStatus}.`
         );
       }
@@ -208,7 +208,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
           "USER_DELETED", 
           "Major", 
           "IdentityGateway", 
-          currentUser?.email || "admin@afrobotics.co.za", 
+          currentUser?.email || "admin@brandinserts.tech", 
           `Deleted user ID: ${userId}.`
         );
       }
@@ -249,7 +249,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
           "USER_ROLE_CHANGE", 
           "Info", 
           "IdentityGateway", 
-          currentUser?.email || "admin@afrobotics.co.za", 
+          currentUser?.email || "admin@brandinserts.tech", 
           `Updated profile config of user ID: ${userId}.`
         );
       }
@@ -586,7 +586,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                 </label>
                 <input
                   type="email"
-                  placeholder="e.g. sindi@afrobotics.co.za"
+                  placeholder="e.g. sindi@brandinserts.tech"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-300"

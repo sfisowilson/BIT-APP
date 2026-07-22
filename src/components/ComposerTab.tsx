@@ -76,7 +76,7 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
       initLogs.push("[WARN] No finished render jobs found. Run GPU compositing first.");
     } else {
       initLogs.push(`[STITCHER] Discovered ${finishedJobs.length} completed ad-insertion segment(s)...`);
-      finishedJobs.forEach(j => initLogs.push(`[FFMPEG] Loading render clip: s3://afrobotics-staging/renders/${j.id}_composed.mov`));
+      finishedJobs.forEach(j => initLogs.push(`[FFMPEG] Loading render clip: s3://bit-staging/renders/${j.id}_composed.mov`));
     }
     setStitchingLogs(initLogs);
 
@@ -390,8 +390,8 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
                             ? `R ${((job.processingDurationMs / 1000) * 180).toFixed(2)}`
                             : 'R —.—';
                           const invoice = [
-                            'AFROBOTICS BIT — CLIENT PLACEMENT INVOICE',
-                            '═══════════════════════════════════════════',
+                            'BRAND INSERTS TECHNOLOGY (BIT) — CLIENT PLACEMENT INVOICE',
+                            '═══════════════════════════════════════════════════════════',
                             '',
                             `Render Job:      ${job.id}`,
                             `Content ID:      ${job.contentId}`,
@@ -406,8 +406,8 @@ export const ComposerTab: React.FC<ComposerTabProps> = ({
                             `Total Charged:   ${totalCharged}`,
                             '',
                             `Generated: ${new Date().toISOString()}`,
-                            '═══════════════════════════════════════════',
-                            'Afrobotics BIT — Brand Insertion Technology',
+                            '═══════════════════════════════════════════════════════════',
+                            'Brand Inserts Technology (BIT)',
                           ].join('\n');
                           const blob = new Blob([invoice], { type: 'text/plain' });
                           const url = URL.createObjectURL(blob);

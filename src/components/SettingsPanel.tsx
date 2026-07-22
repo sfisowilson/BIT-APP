@@ -165,8 +165,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
               {renderField('smtp_user', 'SMTP Username', 'apikey')}
               {renderField('smtp_password', 'SMTP Password', '••••••••', 'password')}
             </div>
-            {renderField('smtp_from_email', 'From Email Address', 'noreply@afrobotics.co.za')}
-            {renderField('support_email', 'Support Contact Email', 'support@afrobotics.co.za')}
+            {renderField('smtp_from_email', 'From Email Address', 'noreply@brandinserts.tech')}
+            {renderField('support_email', 'Support Contact Email', 'support@brandinserts.tech')}
 
             <div className="pt-4 border-t border-slate-100">
               <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-2">

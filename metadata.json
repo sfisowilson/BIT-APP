@@ -1,6 +1,6 @@
 {
-  "name": "Afrobotics BIT Implementation Portal",
-  "description": "Interactive Executive Portal and Master Implementation Plan for the Afrobotics Brand Insertion Technology (BIT) platform, detailing the 2-week decoupled Vue/C# delivery roadmap.",
+  "name": "Brand Inserts Technology Portal",
+  "description": "Interactive Executive Portal and Master Implementation Plan for the Brand Inserts Technology (BIT) platform, detailing the 2-week decoupled Vue/C# delivery roadmap.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
