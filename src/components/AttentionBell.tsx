@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, AlertTriangle, UserPlus, MonitorSmartphone, Cpu, Film, ShieldAlert } from 'lucide-react';
+import { Bell, AlertTriangle, UserPlus, MonitorSmartphone, Cpu, Film, ShieldAlert, ArrowRight } from 'lucide-react';
 import { fetchWithAuth } from '../apiClient';
 
 interface AttentionCounts {
@@ -16,14 +17,14 @@ export const AttentionBell: React.FC = () => {
   const [counts, setCounts] = useState<AttentionCounts | null>(null);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchCounts();
-    const interval = setInterval(fetchCounts, 30000); // poll every 30s
+    const interval = setInterval(fetchCounts, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -39,16 +40,21 @@ export const AttentionBell: React.FC = () => {
     } catch { /* silent */ }
   };
 
+  const handleItemClick = (path: string | null) => {
+    setOpen(false);
+    if (path) navigate(path);
+  };
+
   const total = counts?.totalAttention ?? 0;
   const hasAttention = total > 0;
 
   const items = [
-    { key: 'pendingRoleRequests', label: 'Pending Role Requests', icon: UserPlus, color: 'text-amber-600', bg: 'bg-amber-50', path: '/admin' },
-    { key: 'pendingSurfaces', label: 'Surfaces Awaiting Review', icon: MonitorSmartphone, color: 'text-blue-600', bg: 'bg-blue-50', path: null },
-    { key: 'failedRenders', label: 'Failed Render Jobs', icon: Cpu, color: 'text-red-600', bg: 'bg-red-50', path: null },
-    { key: 'failedContent', label: 'Failed Content Ingestions', icon: Film, color: 'text-red-600', bg: 'bg-red-50', path: null },
-    { key: 'activeAlarms', label: 'Active Platform Alarms', icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-50', path: '/telemetry' },
-  ] as const;
+    { key: 'pendingRoleRequests' as const, label: 'Pending Role Requests', icon: UserPlus, color: 'text-amber-600', bg: 'bg-amber-50', path: '/admin' },
+    { key: 'pendingSurfaces' as const, label: 'Surfaces Awaiting Review', icon: MonitorSmartphone, color: 'text-blue-600', bg: 'bg-blue-50', path: null, hint: 'Open a campaign to review' },
+    { key: 'failedRenders' as const, label: 'Failed Render Jobs', icon: Cpu, color: 'text-red-600', bg: 'bg-red-50', path: null, hint: 'Open a campaign to view renders' },
+    { key: 'failedContent' as const, label: 'Failed Content Ingestions', icon: Film, color: 'text-red-600', bg: 'bg-red-50', path: null, hint: 'Open a campaign to view content' },
+    { key: 'activeAlarms' as const, label: 'Active Platform Alarms', icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-50', path: '/telemetry' },
+  ];
 
   return (
     <div ref={ref} className="relative">
@@ -90,20 +96,27 @@ export const AttentionBell: React.FC = () => {
                 {items.map(item => {
                   const count = counts?.[item.key] ?? 0;
                   if (count === 0) return null;
+                  const hasPath = !!item.path;
                   return (
                     <div
                       key={item.key}
-                      className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 transition-colors"
+                      onClick={() => handleItemClick(item.path)}
+                      className={`flex items-center gap-3 px-4 py-3 border-b border-slate-50 last:border-0 transition-colors ${
+                        hasPath ? 'hover:bg-slate-50 cursor-pointer' : 'cursor-default opacity-60'
+                      }`}
+                      title={hasPath ? `Go to ${item.label}` : (item as any).hint || ''}
                     >
                       <div className={`p-1.5 rounded-lg ${item.bg}`}>
                         <item.icon className={`h-3.5 w-3.5 ${item.color}`} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-slate-700">{item.label}</p>
+                        {!hasPath && <p className="text-[9px] text-slate-400 mt-0.5">{(item as any).hint}</p>}
                       </div>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${item.bg} ${item.color}`}>
                         {count}
                       </span>
+                      {hasPath && <ArrowRight className="h-3 w-3 text-slate-300" />}
                     </div>
                   );
                 })}
