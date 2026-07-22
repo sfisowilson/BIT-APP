@@ -26,6 +26,7 @@ namespace Afrobotics.Bit.Api.Data
         public DbSet<PlatformSetting> PlatformSettings { get; set; } = null!;
         public DbSet<RoleRequest> RoleRequests { get; set; } = null!;
         public DbSet<BrandSafetyRule> BrandSafetyRules { get; set; } = null!;
+        public DbSet<PasswordResetToken> PasswordResetTokens { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

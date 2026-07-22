@@ -51,6 +51,7 @@ public class PlatformSettingsService : IPlatformSettingsService
         ["fallback_scene_secs"]     = "Pipeline:FallbackSceneSeconds",
         ["idle_timeout_minutes"]    = "Session:IdleTimeoutMinutes",
         ["idle_countdown_seconds"]  = "Session:IdleCountdownSeconds",
+        ["support_email"]           = "Support:Email",
     };
 
     public PlatformSettingsService(PostgresDbContext context, IConfiguration config, ILogger<PlatformSettingsService> logger)

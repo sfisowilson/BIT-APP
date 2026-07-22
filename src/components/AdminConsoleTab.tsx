@@ -618,21 +618,6 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                 </button>
               </div>
             </form>
-
-            <div className="mt-5 pt-4 border-t border-slate-100 space-y-2">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">
-                Default Account Passwords
-              </h4>
-              <p className="text-[10px] text-slate-500 leading-relaxed">
-                New accounts are provisioned with role-based default credentials:
-                <br />
-                • Admin role: <code className="bg-slate-100 text-slate-800 px-1 py-0.5 rounded font-mono">admin123</code>
-                <br />
-                • Editor role: <code className="bg-slate-100 text-slate-800 px-1 py-0.5 rounded font-mono">editor123</code>
-                <br />
-                • Advertiser role: <code className="bg-slate-100 text-slate-800 px-1 py-0.5 rounded font-mono">advertiser123</code>
-              </p>
-            </div>
           </div>
         </div>
       </div>

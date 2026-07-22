@@ -24,7 +24,8 @@ import {
   Moon,
   BarChart3,
   Clock,
-  UserPlus
+  UserPlus,
+  HelpCircle
 } from 'lucide-react';
 
 import { 
@@ -133,6 +134,14 @@ export default function App() {
   const [requestedRole, setRequestedRole] = useState('Editor');
   const [roleRequestReason, setRoleRequestReason] = useState('');
   const [roleRequestMsg, setRoleRequestMsg] = useState<{type:'success'|'error',text:string}|null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSending, setForgotSending] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState<{type:'success'|'error',text:string}|null>(null);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordChangeMsg, setPasswordChangeMsg] = useState<{type:'success'|'error',text:string}|null>(null);
   const [campaignList, setCampaignList] = useState<CampaignItem[]>([]);
   const [assetList, setAssetList] = useState<CreativeAsset[]>([]);
   const [renderList, setRenderList] = useState<RenderItem[]>([]);
@@ -249,6 +258,47 @@ export default function App() {
       setTimeout(() => { setShowRoleRequest(false); setRoleRequestMsg(null); }, 2000);
     } catch (err: any) {
       setRoleRequestMsg({ type: 'error', text: err.message });
+    }
+  };
+
+  // Forgot password handler
+  const handleForgotPassword = async () => {
+    if (!forgotEmail.trim()) return;
+    setForgotSending(true);
+    setForgotMsg(null);
+    try {
+      const res = await fetchWithAuth('/api/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed.');
+      setForgotMsg({ type: 'success', text: data.message });
+    } catch (err: any) {
+      setForgotMsg({ type: 'error', text: err.message || 'Something went wrong.' });
+    } finally {
+      setForgotSending(false);
+    }
+  };
+
+  // Change password handler
+  const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword) return;
+    setChangingPassword(true);
+    setPasswordChangeMsg(null);
+    try {
+      const res = await fetchWithAuth('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed.');
+      setPasswordChangeMsg({ type: 'success', text: data.message });
+      setCurrentPassword(''); setNewPassword('');
+    } catch (err: any) {
+      setPasswordChangeMsg({ type: 'error', text: err.message || 'Something went wrong.' });
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -1278,6 +1328,30 @@ export default function App() {
                   Sign In to Console
                 </button>
               </form>
+
+              <p className="text-xs text-slate-500 text-center mt-4">
+                <span onClick={() => setShowForgotPassword(!showForgotPassword)} className="cursor-pointer hover:text-blue-400 underline">
+                  Forgot password?
+                </span>
+              </p>
+
+              {showForgotPassword && (
+                <div className="mt-4 p-4 bg-slate-800/50 border border-slate-700 rounded-xl space-y-3">
+                  <p className="text-xs text-slate-400">Enter your email to receive a reset link.</p>
+                  <div className="flex gap-2">
+                    <input type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)}
+                      placeholder="your@email.com" className="flex-1 px-3 py-2 bg-slate-950/80 border border-slate-800 rounded-lg text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-blue-500" />
+                    <button onClick={handleForgotPassword} disabled={forgotSending}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg cursor-pointer transition-colors disabled:opacity-50 shrink-0">
+                      {forgotSending ? 'Sending...' : 'Send Link'}
+                    </button>
+                  </div>
+                  {forgotMsg && (
+                    <div className={`text-xs font-bold ${forgotMsg.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>{forgotMsg.text}</div>
+                  )}
+                </div>
+              )}
+
             </div>
 
             <div className="mt-8 pt-6 border-t border-slate-800">
@@ -1419,6 +1493,10 @@ export default function App() {
                 <button onClick={handleLogout} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-all border border-slate-200 hover:border-red-100" title="Logout">
                   <LogOut className="h-4 w-4" />
                 </button>
+
+                <a href="mailto:support@afrobotics.co.za" className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 cursor-pointer transition-all border border-slate-200" title="Contact Support">
+                  <HelpCircle className="h-4 w-4" />
+                </a>
               </div>
             )}
           </div>
@@ -1463,6 +1541,22 @@ export default function App() {
             >
               Submit Request
             </button>
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono mb-2">Change Password</h4>
+              <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)}
+                placeholder="Current password" className="w-full px-2 py-1.5 bg-slate-50 border rounded text-xs mb-2 focus:outline-none focus:border-blue-500" />
+              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                placeholder="New password" className="w-full px-2 py-1.5 bg-slate-50 border rounded text-xs mb-2 focus:outline-none focus:border-blue-500" />
+              <button onClick={handleChangePassword} disabled={changingPassword}
+                className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded text-xs cursor-pointer transition-colors disabled:opacity-50">
+                {changingPassword ? 'Changing...' : 'Change Password'}
+              </button>
+              {passwordChangeMsg && (
+                <div className={`text-[10px] font-bold mt-1.5 ${passwordChangeMsg.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {passwordChangeMsg.text}
+                </div>
+              )}
+            </div>
             <div className="mt-4 pt-3 border-t border-slate-100">
               <NotificationPreferencesPanel />
             </div>
