@@ -14,6 +14,7 @@ namespace Afrobotics.Bit.Api.Services
         Task<PaginatedResult<CampaignItem>> GetCampaignsAsync(CampaignFilterParams filter);
         Task<CampaignItem?> GetCampaignByIdAsync(string id);
         Task<CampaignItem> CreateCampaignAsync(CreateCampaignDto dto);
+        Task<CampaignItem?> UpdateCampaignAsync(string id, UpdateCampaignDto dto);
         Task<bool> DeleteCampaignAsync(string id);
     }
 
@@ -77,10 +78,51 @@ namespace Afrobotics.Bit.Api.Services
             await _campaignRepository.AddAsync(campaign);
             await _campaignRepository.SaveChangesAsync();
 
-            _email.Enqueue(_config["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
+            _email.Enqueue(_config?["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
                 $"Campaign Created — {campaign.Name}",
                 $"Campaign '{campaign.Name}' ({campaign.NamingStructureCode}) has been created.\n\nRegion: {campaign.TargetRegion}\nBudget: {campaign.TotalBudget:C}",
                 "CampaignCreated");
+
+            return campaign;
+        }
+
+        public async Task<CampaignItem?> UpdateCampaignAsync(string id, UpdateCampaignDto dto)
+        {
+            var campaign = await _campaignRepository.GetByIdAsync(id);
+            if (campaign == null) return null;
+
+            // Only update fields that are provided (non-null for value types: check HasValue)
+            if (dto.Name != null)
+                campaign.Name = dto.Name;
+
+            if (dto.NamingStructureCode != null)
+            {
+                var namingRegex = new Regex(@"^[A-Z0-9]{8,10}_[A-Z0-9]+$");
+                if (!namingRegex.IsMatch(dto.NamingStructureCode))
+                {
+                    throw new ArgumentException("Naming structure violation! Code must match: 8- or 10-character scene-code, underscore, brand identifier (e.g. UZ01EP12_COKE or GEN23EP100_UNIL).");
+                }
+                campaign.NamingStructureCode = dto.NamingStructureCode;
+            }
+
+            if (dto.TargetRegion != null)
+                campaign.TargetRegion = dto.TargetRegion;
+
+            if (dto.TotalBudget.HasValue)
+                campaign.TotalBudget = dto.TotalBudget.Value;
+
+            if (dto.Status != null)
+            {
+                var validStatuses = new[] { "Draft", "Active", "Completed", "Paused" };
+                if (!validStatuses.Contains(dto.Status))
+                {
+                    throw new ArgumentException($"Invalid status '{dto.Status}'. Must be one of: {string.Join(", ", validStatuses)}");
+                }
+                campaign.Status = dto.Status;
+            }
+
+            await _campaignRepository.UpdateAsync(campaign);
+            await _campaignRepository.SaveChangesAsync();
 
             return campaign;
         }

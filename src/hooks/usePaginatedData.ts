@@ -119,7 +119,23 @@ export function usePaginatedData<T>(
   }, [fetchData]);
 
   const setFilters = useCallback((newFilters: Record<string, unknown>) => {
-    filtersRef.current = { ...filtersRef.current, ...newFilters };
+    const merged = { ...filtersRef.current, ...newFilters };
+    // Strip undefined values and skip if nothing actually changed (prevents redundant refetch on mount)
+    const stripUndefined = (obj: Record<string, unknown>) => {
+      const clean: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (v !== undefined) clean[k] = v;
+      }
+      return clean;
+    };
+    const prevClean = stripUndefined(filtersRef.current);
+    const mergedClean = stripUndefined(merged);
+    const prevKeys = Object.keys(prevClean);
+    const mergedKeys = Object.keys(mergedClean);
+    if (prevKeys.length === mergedKeys.length && prevKeys.every(k => mergedClean[k] === prevClean[k])) {
+      return;
+    }
+    filtersRef.current = mergedClean;
     pageRef.current = 1; // Reset to first page on filter change
     fetchData(1, filtersRef.current);
   }, [fetchData]);

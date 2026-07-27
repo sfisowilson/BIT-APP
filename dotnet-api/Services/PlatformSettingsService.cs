@@ -18,6 +18,7 @@ public interface IPlatformSettingsService
 {
     Task<string> GetAsync(string key, string fallback = "");
     Task<int> GetIntAsync(string key, int fallback = 0);
+    Task<double> GetDoubleAsync(string key, double fallback = 0.0);
     Task<bool> GetBoolAsync(string key, bool fallback = false);
     Task<Dictionary<string, string>> GetAllAsync();
     Task SetAsync(string key, string value, string? description = null);
@@ -59,6 +60,40 @@ public class PlatformSettingsService : IPlatformSettingsService
         ["replicate_api_key"]        = "Engine:ReplicateApiKey",
         ["google_vision_api_key"]    = "Engine:GoogleVisionApiKey",
         ["gemini_api_key"]           = "Engine:GeminiApiKey",
+        ["falai_api_key"]            = "Engine:FalAiApiKey",
+        // ── Replicate cloud API settings ──
+        ["replicate_gd_model"]       = "Engine:ReplicateGdModel",      // deprecated — kept for rollback
+        ["replicate_sam_model"]      = "Engine:ReplicateSamModel",     // deprecated — kept for rollback
+        ["replicate_sam3_model"]     = "Engine:ReplicateSam3Model",
+        ["replicate_sam3_version"]   = "Engine:ReplicateSam3Version",    // version hash — pin this to avoid silent upstream changes
+        ["replicate_box_threshold"]  = "Engine:ReplicateBoxThreshold",
+        ["replicate_text_threshold"] = "Engine:ReplicateTextThreshold",
+        // ── Gemini model selection ──
+        ["gemini_model"]             = "Engine:GeminiModel",
+        ["gemini_timeout_seconds"]   = "Engine:GeminiTimeoutSeconds",  // per-request HTTP timeout; generous default to survive rate-limit backoff
+        ["yolo_service_url"]         = "Engine:YoloServiceUrl",
+        // ── Fal.ai SAM 3 ──
+        ["falai_sam3_endpoint"]      = "Engine:Sam3Endpoint",
+        ["yolo_model_size"]          = "Engine:YoloModelSize",
+        ["yolo_confidence"]          = "Engine:YoloConfidence",
+        ["yolo_iou"]                 = "Engine:YoloIou",
+        ["yolo_frame_skip"]         = "Engine:YoloFrameSkip",
+        // ── Phase 2: Grounding DINO v2 engine ──
+        ["gd_model_variant"]         = "Engine:GdModelVariant",
+        ["gd_box_threshold"]         = "Engine:GdBoxThreshold",
+        ["gd_text_threshold"]        = "Engine:GdTextThreshold",
+        ["gd_enable_sam"]            = "Engine:GdEnableSam",
+        ["gd_enable_depth"]          = "Engine:GdEnableDepth",
+        ["gd_enable_brand_safety"]   = "Engine:GdEnableBrandSafety",
+        // ── Phase 3: Tracking & adaptive frame-skip ──
+        ["gd_enable_tracking"]       = "Engine:GdEnableTracking",
+        ["gd_adaptive_frame_skip"]   = "Engine:GdAdaptiveFrameSkip",
+        ["gd_detection_interval"]    = "Engine:GdDetectionInterval",
+        ["gd_flow_motion_threshold"] = "Engine:GdFlowMotionThreshold",
+        ["gd_track_min_frames"]      = "Engine:GdTrackMinFrames",
+        // ── Phase 3: Surface tracking ──
+        ["engine_tracking"]           = "Engine:Tracking",
+        ["sam3_tracking_endpoint"]    = "Engine:Sam3TrackingEndpoint",
     };
 
     public PlatformSettingsService(PostgresDbContext context, IConfiguration config, ILogger<PlatformSettingsService> logger)
@@ -98,6 +133,15 @@ public class PlatformSettingsService : IPlatformSettingsService
         return int.TryParse(val, out var result) ? result : fallback;
     }
 
+    public async Task<double> GetDoubleAsync(string key, double fallback = 0.0)
+    {
+        var val = await GetAsync(key);
+        return double.TryParse(val,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var result) ? result : fallback;
+    }
+
     public async Task<bool> GetBoolAsync(string key, bool fallback = false)
     {
         var val = await GetAsync(key);
@@ -113,7 +157,11 @@ public class PlatformSettingsService : IPlatformSettingsService
         {
             var dbSettings = await _context.PlatformSettings.ToListAsync();
             foreach (var s in dbSettings)
+            {
+                // Skip internal/comment keys
+                if (s.Key.StartsWith("_")) continue;
                 result[s.Key] = s.Value;
+            }
         }
         catch (Exception ex)
         {
@@ -123,7 +171,7 @@ public class PlatformSettingsService : IPlatformSettingsService
         // Fill gaps from appsettings.json
         foreach (var (key, configPath) in AppsettingsFallbacks)
         {
-            if (!result.ContainsKey(key))
+            if (!result.ContainsKey(key) && !key.StartsWith("_"))
             {
                 var configValue = _config[configPath];
                 if (!string.IsNullOrEmpty(configValue))

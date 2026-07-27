@@ -1,0 +1,1024 @@
+'Afrobotics.Bit.Api.exe' (CoreCLR: DefaultDomain): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Private.CoreLib.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Afrobotics.Bit.Api.dll'. Symbols loaded.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Runtime.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'c:\program files\microsoft visual studio\2022\community\common7\ide\extensions\microsoft\web tools\projectsystem\net7.0\Microsoft.WebTools.ApiEndpointDiscovery.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Linq.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Collections.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\SDK\8.0.121\DotnetTools\dotnet-watch\8.0.121-servicing.25475.16\tools\net8.0\any\middleware\Microsoft.AspNetCore.Watch.BrowserRefresh.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\Extensions\Microsoft\Web Tools\Browser Link\Microsoft.WebTools.BrowserLink.Net.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'c:\program files\microsoft visual studio\2022\community\common7\ide\commonextensions\microsoft\hotreload\Microsoft.Extensions.DotNetDeltaApplier.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.IO.Pipes.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Console.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Threading.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Runtime.InteropServices.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Threading.Overlapped.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Security.AccessControl.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Security.Principal.Windows.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Security.Claims.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Runtime.Loader.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Collections.Concurrent.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Hosting.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.DependencyInjection.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Logging.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Diagnostics.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Configuration.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Http.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Routing.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.ComponentModel.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Features.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Hangfire.Core.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\netstandard.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Linq.Expressions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Microsoft.EntityFrameworkCore.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Configuration.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Primitives.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Configuration.Binder.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Hosting.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Hosting.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Server.Kestrel.Core.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Server.Kestrel.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Mvc.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Mvc.Core.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Cors.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Authentication.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Authentication.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Microsoft.AspNetCore.Authentication.JwtBearer.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Hangfire.NetCore.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Authorization.Policy.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Hangfire.AspNetCore.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Microsoft.EntityFrameworkCore.Relational.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Diagnostics.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Step into: Stepping over non-user code 'Program.<>c__DisplayClass0_0..ctor'
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Hosting.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Configuration.EnvironmentVariables.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.FileProviders.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.FileProviders.Physical.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Configuration.FileExtensions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Options.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Logging.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Diagnostics.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Diagnostics.DiagnosticSource.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Configuration.Json.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Memory.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.IO.FileSystem.Watcher.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.ComponentModel.Primitives.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\Microsoft.Win32.Primitives.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Text.Json.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Text.Encoding.Extensions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Configuration.UserSecrets.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Logging.EventLog.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Logging.Configuration.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Options.ConfigurationExtensions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Logging.Console.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Logging.Debug.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Logging.EventSource.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Diagnostics.Tracing.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.DependencyInjection.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Server.Kestrel.Transport.NamedPipes.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Net.Quic.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Net.Sockets.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Net.Primitives.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\Microsoft.Win32.Registry.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Server.IIS.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Server.IISIntegration.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Http.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Mvc.ApiExplorer.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Mvc.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Connections.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Hosting.Server.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.ObjectPool.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.HostFiltering.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.HttpOverrides.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Routing.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.ObjectModel.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.ComponentModel.TypeConverter.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Private.Uri.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Authentication.Core.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Authorization.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Mvc.Cors.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Mvc.DataAnnotations.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.DataProtection.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.DataProtection.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Cryptography.Internal.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.WebEncoders.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Text.Encodings.Web.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Localization.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Mvc.Razor.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Http.Extensions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Threading.Thread.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\System.Diagnostics.EventLog.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Collections.Specialized.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Threading.ThreadPool.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\System.IO.Pipelines.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Runtime.Intrinsics.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Reflection.Emit.Lightweight.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Numerics.Vectors.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+The thread '.NET TP Worker' (24372) has exited with code 0 (0x0).
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Net.Http.Headers.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+The thread '.NET TP Worker' (28792) has exited with code 0 (0x0).
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Reflection.Emit.ILGeneration.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Reflection.Primitives.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Http.Features.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Runtime.Numerics.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Net.Http.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Metadata.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.ComponentModel.Annotations.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Hangfire.PostgreSql.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Npgsql.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Data.Common.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Transactions.Local.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Text.RegularExpressions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Net.Security.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Security.Cryptography.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Collections.NonGeneric.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Threading.Channels.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Net.NameResolution.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Hangfire.PostgreSql.PostgreSqlStorage: Information: Start installing Hangfire SQL objects...
+Hangfire.PostgreSql.PostgreSqlStorage: Information: Hangfire SQL objects installed.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Dapper.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Xml.ReaderWriter.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Private.Xml.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Xml.XDocument.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Private.Xml.Linq.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Dapper.AOT.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Newtonsoft.Json.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Runtime.Serialization.Formatters.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Runtime.Serialization.Primitives.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Diagnostics.TraceSource.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'Anonymously Hosted DynamicMethods Assembly'. 
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\System.Collections.Immutable.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Caching.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Npgsql.EntityFrameworkCore.PostgreSQL.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Microsoft.EntityFrameworkCore.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Net.NetworkInformation.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Caching.Memory.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (14ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND
+          c.relname='__EFMigrationsHistory'
+)
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT "MigrationId", "ProductVersion"
+FROM "__EFMigrationsHistory"
+ORDER BY "MigrationId";
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND
+          c.relname='__EFMigrationsHistory'
+)
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND
+          c.relname='__EFMigrationsHistory'
+)
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT "MigrationId", "ProductVersion"
+FROM "__EFMigrationsHistory"
+ORDER BY "MigrationId";
+Microsoft.EntityFrameworkCore.Migrations: Information: Applying migration '20260724183855_AddSceneThumbnailPath'.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (10ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+CREATE INDEX "IX_SurfaceItems_SceneId" ON "SurfaceItems" ("SceneId");
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+CREATE INDEX "IX_SceneItems_ContentId" ON "SceneItems" ("ContentId");
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (12ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+CREATE INDEX "IX_Renders_ContentId" ON "Renders" ("ContentId");
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+CREATE INDEX "IX_Renders_SurfaceId" ON "Renders" ("SurfaceId");
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+CREATE INDEX "IX_Approvals_AdSlotId" ON "Approvals" ("AdSlotId");
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+CREATE INDEX "IX_AdSlots_SurfaceId" ON "AdSlots" ("SurfaceId");
+Microsoft.EntityFrameworkCore.Database.Command: Error: Failed executing DbCommand (99ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+ALTER TABLE "AdSlots" ADD CONSTRAINT "FK_AdSlots_SurfaceItems_SurfaceId" FOREIGN KEY ("SurfaceId") REFERENCES "SurfaceItems" ("Id") ON DELETE CASCADE;
+Exception thrown: 'Npgsql.PostgresException' in Microsoft.EntityFrameworkCore.Relational.dll
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Diagnostics.StackTrace.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Reflection.Metadata.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.IO.MemoryMappedFiles.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Program: Warning: Migration failed (tables may already exist). Continuing to seed step.
+
+Npgsql.PostgresException (0x80004005): 23503: insert or update on table "AdSlots" violates foreign key constraint "FK_AdSlots_SurfaceItems_SurfaceId"
+
+DETAIL: Detail redacted as it may contain sensitive data. Specify 'Include Error Detail' in the connection string to include this information.
+   at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+   at System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder`1.StateMachineBox`1.System.Threading.Tasks.Sources.IValueTaskSource<TResult>.GetResult(Int16 token)
+   at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlDataReader.NextResult()
+   at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlCommand.ExecuteNonQuery(Boolean async, CancellationToken cancellationToken)
+   at Npgsql.NpgsqlCommand.ExecuteNonQuery()
+   at Microsoft.EntityFrameworkCore.Storage.RelationalCommand.ExecuteNonQuery(RelationalCommandParameterObject parameterObject)
+   at Microsoft.EntityFrameworkCore.Migrations.MigrationCommand.ExecuteNonQuery(IRelationalConnection connection, IReadOnlyDictionary`2 parameterValues)
+   at Microsoft.EntityFrameworkCore.Migrations.Internal.MigrationCommandExecutor.ExecuteNonQuery(IEnumerable`1 migrationCommands, IRelationalConnection connection)
+   at Microsoft.EntityFrameworkCore.Migrations.Internal.Migrator.Migrate(String targetMigration)
+   at Npgsql.EntityFrameworkCore.PostgreSQL.Migrations.Internal.NpgsqlMigrator.Migrate(String targetMigration)
+   at Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.Migrate(DatabaseFacade databaseFacade)
+   at Program.<Main>$(String[] args) in C:\Projects\BIT-APP\dotnet-api\Program.cs:line 217
+  Exception data:
+    Severity: ERROR
+    SqlState: 23503
+    MessageText: insert or update on table "AdSlots" violates foreign key constraint "FK_AdSlots_SurfaceItems_SurfaceId"
+    Detail: Detail redacted as it may contain sensitive data. Specify 'Include Error Detail' in the connection string to include this information.
+    SchemaName: public
+    TableName: AdSlots
+    ConstraintName: FK_AdSlots_SurfaceItems_SurfaceId
+    File: ri_triggers.c
+    Line: 2783
+    Routine: ri_ReportViolation
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Linq.Queryable.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\BCrypt-Net-Next.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (7ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Users" AS u)
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT u."Id", u."AccountStatus", u."Email", u."FullName", u."LastLoginAt", u."MutedNotifications", u."PasswordHash", u."Role"
+FROM "Users" AS u
+WHERE u."Email" = 'admin@afrobotics.co.za'
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Users" AS u
+    WHERE u."Role" = 'Admin' AND u."AccountStatus" = 'Active')
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (5ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "ContentItems" AS c)
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "SceneItems" AS s)
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (2ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "SurfaceItems" AS s)
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Campaigns" AS c)
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "CreativeAssets" AS c)
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (4ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Renders" AS r)
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (3ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "EventLogs" AS e)
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (3ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT EXISTS (
+    SELECT 1
+    FROM "Alarms" AS a)
+Program: Information: Database seeding completed.
+Microsoft.Extensions.Hosting.Internal.Host: Debug: Hosting starting
+Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager: Information: User profile is available. Using 'C:\Users\Sfiso\AppData\Local\ASP.NET\DataProtection-Keys' as key repository and Windows DPAPI to encrypt keys at rest.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Runtime.Extensions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.Diagnostics.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Microsoft.Hosting.Lifetime: Information: Now listening on: https://localhost:57219
+Microsoft.Hosting.Lifetime: Information: Now listening on: http://localhost:57220
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Net.WebSockets.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Threading.Tasks.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/2 GET https://localhost:57219/ - - -
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\System.IdentityModel.Tokens.Jwt.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Hangfire.BackgroundJobServer: Information: Starting Hangfire Server using job storage: 'PostgreSQL Server: Host: localhost, DB: afrobotics_bit, Schema: hangfire'
+Hangfire.BackgroundJobServer: Information: Using the following options for PostgreSQL job storage:
+Hangfire.BackgroundJobServer: Information:     Queue poll interval: 00:00:15.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Microsoft.IdentityModel.Tokens.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Hangfire.BackgroundJobServer: Information:     Invisibility timeout: 00:30:00.
+Hangfire.BackgroundJobServer: Information:     Use sliding invisibility timeout: False.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Microsoft.IdentityModel.JsonWebTokens.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Hangfire.BackgroundJobServer: Information: Using the following options for Hangfire Server:
+    Worker count: 20
+    Listening queues: 'default'
+    Shutdown timeout: 00:00:15
+    Schedule polling interval: 00:00:15
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Microsoft.IdentityModel.Protocols.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Microsoft.IdentityModel.Protocols.OpenIdConnect.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Microsoft.IdentityModel.Logging.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop BackgroundServerProcess:f45cf88f has started in 1380,9884 ms
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Web.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Diagnostics.Process.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Microsoft.Hosting.Lifetime: Information: Application started. Press Ctrl+C to shut down.
+Microsoft.Hosting.Lifetime: Information: Hosting environment: Development
+Microsoft.Hosting.Lifetime: Information: Content root path: C:\Projects\BIT-APP\dotnet-api
+Microsoft.Extensions.Hosting.Internal.Host: Debug: Hosting started
+Hangfire.Server.BackgroundServerProcess: Information: Server desktop-jj0g3nj:17072:1b8561b2 successfully announced in 188,7711 ms
+Hangfire.Server.BackgroundServerProcess: Information: Server desktop-jj0g3nj:17072:1b8561b2 is starting the registered dispatchers: ServerWatchdog, ServerJobCancellationWatcher, ExpirationManager, CountersAggregator, Worker, DelayedJobScheduler, RecurringJobScheduler...
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop ServerHeartbeatProcess:ec83d731 has started in 182,3399 ms
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop ServerWatchdog:cc90092e has started in 639,6528 ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/renders?campaignId=c-c23c - application/json -
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/logs - application/json -
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/alarms - application/json -
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop ServerJobCancellationWatcher:3d5bfd3e has started in 1498,0826 ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/notifications/attention - application/json -
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop ExpirationManager:29cf9168 has started in 668,4986 ms
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop CountersAggregator:af26eb7e has started in 758,3841 ms
+Hangfire.PostgreSql.CountersAggregator: Debug: Aggregating records in 'Counter' table...
+Hangfire.PostgreSql.ExpirationManager: Debug: Removing outdated records from table 'aggregatedcounter'...
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Projects\BIT-APP\dotnet-api\bin\Debug\net8.0\Microsoft.IdentityModel.Abstractions.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:00aceb5f has started in 720,7738 ms
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:b028e3d9 has started in 1305,2045 ms
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:ee0ab0bf has started in 2050,2367 ms
+Hangfire.PostgreSql.ExpirationManager: Debug: Removing outdated records from table 'counter'...
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:260a673b has started in 2050,2565 ms
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:3d8a66a5 has started in 3117,0643 ms
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.Extensions.Identity.Core.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:d2da8630 has started in 3954,1664 ms
+Hangfire.PostgreSql.ExpirationManager: Debug: Removing outdated records from table 'job'...
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:8c4cbf88 has started in 3954,22 ms
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:323f96f6 has started in 3963,0505 ms
+Hangfire.PostgreSql.ExpirationManager: Debug: Removing outdated records from table 'list'...
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:c5a829ce has started in 4777,8445 ms
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:ada0a50c has started in 6147,0055 ms
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:127cc94c has started in 6840,6922 ms
+Hangfire.PostgreSql.ExpirationManager: Debug: Removing outdated records from table 'set'...
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:0fab093e has started in 7572,3726 ms
+Hangfire.PostgreSql.ExpirationManager: Debug: Removing outdated records from table 'hash'...
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:fda3a41a has started in 8363,5141 ms
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:81a2088a has started in 8240,2562 ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/2 GET https://localhost:57219/ - 404 0 - 16558.9297ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request reached the end of the middleware pipeline without being handled by application code. Request path: GET https://localhost:57219/, Response status code: 404
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.AttentionController.GetAttentionCounts (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api)'
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:ffd8b07d has started in 8528,859 ms
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:3139886f has started in 8761,3456 ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:2e3ff838 has started in 9963,344 ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:cdce8db5 has started in 12478,0489 ms
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:61b67a09 has started in 13034,7063 ms
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop Worker:76cb67a1 has started in 13864,022 ms
+Hangfire.Server.BackgroundServerProcess: Information: Server desktop-jj0g3nj:17072:1b8561b2 all the dispatchers started
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop DelayedJobScheduler:787967d1 has started in 1272,9659 ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetAttentionCounts", controller = "Attention"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetAttentionCounts() on controller Afrobotics.Bit.Api.Controllers.AttentionController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetRenders", controller = "Renders"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.RenderItem]]] GetRenders(Afrobotics.Bit.Api.DTOs.RenderFilterParams) on controller Afrobotics.Bit.Api.Controllers.RendersController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetLogs", controller = "Logs"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.EventLog]]] GetLogs(Afrobotics.Bit.Api.DTOs.LogFilterParams) on controller Afrobotics.Bit.Api.Controllers.LogsController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetAlarms", controller = "Alarms"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.AlarmItem]]] GetAlarms(Afrobotics.Bit.Api.DTOs.AlarmFilterParams) on controller Afrobotics.Bit.Api.Controllers.AlarmsController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Hangfire.Processing.BackgroundExecution: Debug: Execution loop RecurringJobScheduler:bd4c35d0 has started in 808,2099 ms
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\System.Threading.Tasks.Parallel.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.AspNetCore.App\8.0.21\Microsoft.AspNetCore.WebUtilities.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+'Afrobotics.Bit.Api.exe' (CoreCLR: clrhost): Loaded 'C:\Program Files\dotnet\shared\Microsoft.NETCore.App\8.0.21\mscorlib.dll'. Skipped loading symbols. Module is optimized and the debugger option 'Just My Code' is enabled.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (315ms) [Parameters=[@__filter_CampaignId_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Renders" AS r
+WHERE r."CampaignId" = @__filter_CampaignId_0
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (315ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (335ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1,229ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Alarms" AS a
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1,259ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "RoleRequests" AS r
+WHERE r."Status" = 'Pending'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (308ms) [Parameters=[@__filter_CampaignId_0='?', @__p_2='?' (DbType = Int32), @__p_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT r."Id", r."AssetId", r."CampaignId", r."ContentId", r."CreatedAt", r."ExportPreset", r."ProcessingDurationMs", r."Progress", r."RenderStatus", r."StorageKey", r."SurfaceId"
+FROM "Renders" AS r
+WHERE r."CampaignId" = @__filter_CampaignId_0
+ORDER BY r."CreatedAt" DESC
+LIMIT @__p_2 OFFSET @__p_1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (200ms) [Parameters=[@__p_1='?' (DbType = Int32), @__p_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT a."Id", a."Description", a."IsActive", a."Severity", a."Source", a."Timestamp"
+FROM "Alarms" AS a
+ORDER BY a."Timestamp" DESC
+LIMIT @__p_1 OFFSET @__p_0
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (299ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1,235ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "EventLogs" AS e
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (263ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (245ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "SurfaceItems" AS s
+WHERE s."Status" = 'Candidate'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (51ms) [Parameters=[@__p_1='?' (DbType = Int32), @__p_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT e."Id", e."Description", e."EventCode", e."Module", e."Severity", e."Timestamp", e."User"
+FROM "EventLogs" AS e
+ORDER BY e."Timestamp" DESC
+LIMIT @__p_1 OFFSET @__p_0
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.AlarmItem, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (152ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Renders" AS r
+WHERE r."RenderStatus" = 'Failed'
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.EventLog, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.RenderItem, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (274ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "ContentItems" AS c
+WHERE c."IngestionStatus" = 'Failed'
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (301ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Alarms" AS a
+WHERE a."IsActive"
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api) in 5208.3234ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 4931.6666ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType7`6[[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api) in 5401.212ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.AttentionController.GetAttentionCounts (Afrobotics.Bit.Api) in 6268.8582ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.AttentionController.GetAttentionCounts (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api) in 5401.0857ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 5124.9942ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (20ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (60ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (44ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (30ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/notifications/attention - 200 - application/json;+charset=utf-8 24322.9278ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/renders?campaignId=c-c23c - 200 - application/json;+charset=utf-8 25805.2363ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (254ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (223ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/logs - 200 - application/json;+charset=utf-8 24965.3643ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 33828.9268ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/logs - application/json -
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/alarms - application/json -
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (4ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetLogs", controller = "Logs"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.EventLog]]] GetLogs(Afrobotics.Bit.Api.DTOs.LogFilterParams) on controller Afrobotics.Bit.Api.Controllers.LogsController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetAlarms", controller = "Alarms"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.AlarmItem]]] GetAlarms(Afrobotics.Bit.Api.DTOs.AlarmFilterParams) on controller Afrobotics.Bit.Api.Controllers.AlarmsController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/alarms - 200 - application/json;+charset=utf-8 24708.1931ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 10716.9128ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (172ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "EventLogs" AS e
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/renders?campaignId=c-c23c - application/json -
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (296ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Alarms" AS a
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (218ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (80ms) [Parameters=[@__p_1='?' (DbType = Int32), @__p_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT e."Id", e."Description", e."EventCode", e."Module", e."Severity", e."Timestamp", e."User"
+FROM "EventLogs" AS e
+ORDER BY e."Timestamp" DESC
+LIMIT @__p_1 OFFSET @__p_0
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.EventLog, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (962ms) [Parameters=[@__p_1='?' (DbType = Int32), @__p_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT a."Id", a."Description", a."IsActive", a."Severity", a."Source", a."Timestamp"
+FROM "Alarms" AS a
+ORDER BY a."Timestamp" DESC
+LIMIT @__p_1 OFFSET @__p_0
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 1738.4575ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api) in 1902.0264ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.AlarmItem, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (72ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api) in 2696.6279ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 4609.5625ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Hangfire.Server.ServerHeartbeatProcess: Debug: Server desktop-jj0g3nj:17072:1b8561b2 heartbeat successfully sent
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (224ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (279ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/alarms - 200 - application/json;+charset=utf-8 4770.1369ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/logs - 200 - application/json;+charset=utf-8 4539.6681ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (96ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/logs - application/json -
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (185ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetRenders", controller = "Renders"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.RenderItem]]] GetRenders(Afrobotics.Bit.Api.DTOs.RenderFilterParams) on controller Afrobotics.Bit.Api.Controllers.RendersController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetLogs", controller = "Logs"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.EventLog]]] GetLogs(Afrobotics.Bit.Api.DTOs.LogFilterParams) on controller Afrobotics.Bit.Api.Controllers.LogsController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (39ms) [Parameters=[@__filter_CampaignId_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Renders" AS r
+WHERE r."CampaignId" = @__filter_CampaignId_0
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (79ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "EventLogs" AS e
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (760ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (899ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (187ms) [Parameters=[@__filter_CampaignId_0='?', @__p_2='?' (DbType = Int32), @__p_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT r."Id", r."AssetId", r."CampaignId", r."ContentId", r."CreatedAt", r."ExportPreset", r."ProcessingDurationMs", r."Progress", r."RenderStatus", r."StorageKey", r."SurfaceId"
+FROM "Renders" AS r
+WHERE r."CampaignId" = @__filter_CampaignId_0
+ORDER BY r."CreatedAt" DESC
+LIMIT @__p_2 OFFSET @__p_1
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.RenderItem, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 5324.5486ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api) in 1012.7157ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (377ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 3948.271ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (188ms) [Parameters=[@__p_1='?' (DbType = Int32), @__p_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT e."Id", e."Description", e."EventCode", e."Module", e."Severity", e."Timestamp", e."User"
+FROM "EventLogs" AS e
+ORDER BY e."Timestamp" DESC
+LIMIT @__p_1 OFFSET @__p_0
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (987ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.EventLog, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/renders?campaignId=c-c23c - 200 - application/json;+charset=utf-8 10226.8647ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (34ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/alarms - application/json -
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 7082.9797ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api) in 4919.6207ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetAlarms", controller = "Alarms"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.AlarmItem]]] GetAlarms(Afrobotics.Bit.Api.DTOs.AlarmFilterParams) on controller Afrobotics.Bit.Api.Controllers.AlarmsController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/notifications/attention - application/json -
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (44ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Alarms" AS a
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.AttentionController.GetAttentionCounts (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1,694ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (118ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (157ms) [Parameters=[@__p_1='?' (DbType = Int32), @__p_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT a."Id", a."Description", a."IsActive", a."Severity", a."Source", a."Timestamp"
+FROM "Alarms" AS a
+ORDER BY a."Timestamp" DESC
+LIMIT @__p_1 OFFSET @__p_0
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetAttentionCounts", controller = "Attention"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetAttentionCounts() on controller Afrobotics.Bit.Api.Controllers.AttentionController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/logs - 200 - application/json;+charset=utf-8 7500.4412ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.AlarmItem, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 12415.4052ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api) in 492.6445ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (125ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "RoleRequests" AS r
+WHERE r."Status" = 'Pending'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (302ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (277ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 13386.0896ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1,302ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "SurfaceItems" AS s
+WHERE s."Status" = 'Candidate'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/alarms - 200 - application/json;+charset=utf-8 3799.4954ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/renders?campaignId=c-c23c - application/json -
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (2,326ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetRenders", controller = "Renders"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.RenderItem]]] GetRenders(Afrobotics.Bit.Api.DTOs.RenderFilterParams) on controller Afrobotics.Bit.Api.Controllers.RendersController (Afrobotics.Bit.Api).
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (214ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (26ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 17304.8697ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/logs - application/json -
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 3613.8722ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetLogs", controller = "Logs"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.EventLog]]] GetLogs(Afrobotics.Bit.Api.DTOs.LogFilterParams) on controller Afrobotics.Bit.Api.Controllers.LogsController (Afrobotics.Bit.Api).
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (210ms) [Parameters=[@__filter_CampaignId_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Renders" AS r
+WHERE r."CampaignId" = @__filter_CampaignId_0
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (24ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Renders" AS r
+WHERE r."RenderStatus" = 'Failed'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (6ms) [Parameters=[@__filter_CampaignId_0='?', @__p_2='?' (DbType = Int32), @__p_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT r."Id", r."AssetId", r."CampaignId", r."ContentId", r."CreatedAt", r."ExportPreset", r."ProcessingDurationMs", r."Progress", r."RenderStatus", r."StorageKey", r."SurfaceId"
+FROM "Renders" AS r
+WHERE r."CampaignId" = @__filter_CampaignId_0
+ORDER BY r."CreatedAt" DESC
+LIMIT @__p_2 OFFSET @__p_1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (684ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.RenderItem, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 7525.1010ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api) in 3534.3291ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (5ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "EventLogs" AS e
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (339ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "ContentItems" AS c
+WHERE c."IngestionStatus" = 'Failed'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/alarms - application/json -
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (323ms) [Parameters=[@__p_1='?' (DbType = Int32), @__p_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT e."Id", e."Description", e."EventCode", e."Module", e."Severity", e."Timestamp", e."User"
+FROM "EventLogs" AS e
+ORDER BY e."Timestamp" DESC
+LIMIT @__p_1 OFFSET @__p_0
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.EventLog, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetAlarms", controller = "Alarms"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.AlarmItem]]] GetAlarms(Afrobotics.Bit.Api.DTOs.AlarmFilterParams) on controller Afrobotics.Bit.Api.Controllers.AlarmsController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api) in 3412.6785ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1,192ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1,000ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Alarms" AS a
+WHERE a."IsActive"
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/renders?campaignId=c-c23c - 200 - application/json;+charset=utf-8 8589.0442ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType7`6[[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (102ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Alarms" AS a
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (557ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.AttentionController.GetAttentionCounts (Afrobotics.Bit.Api) in 11125.1729ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/logs - 200 - application/json;+charset=utf-8 6451.3343ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (176ms) [Parameters=[@__p_1='?' (DbType = Int32), @__p_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT a."Id", a."Description", a."IsActive", a."Severity", a."Source", a."Timestamp"
+FROM "Alarms" AS a
+ORDER BY a."Timestamp" DESC
+LIMIT @__p_1 OFFSET @__p_0
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.AttentionController.GetAttentionCounts (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (324ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (394ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.AlarmItem, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (15ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/notifications/attention - 200 - application/json;+charset=utf-8 13690.3396ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (48ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 1217.2651ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api) in 2577.2552ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (3ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (360ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (165ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 984.3832ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (108ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 2537.1762ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (5ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (30ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/renders?campaignId=c-c23c - application/json -
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 2838.3515ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (241ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 1831.7006ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetRenders", controller = "Renders"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.RenderItem]]] GetRenders(Afrobotics.Bit.Api.DTOs.RenderFilterParams) on controller Afrobotics.Bit.Api.Controllers.RendersController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (30ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (42ms) [Parameters=[@__filter_CampaignId_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Renders" AS r
+WHERE r."CampaignId" = @__filter_CampaignId_0
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 3066.5177ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 3346.0519ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/logs - application/json -
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (190ms) [Parameters=[@__filter_CampaignId_0='?', @__p_2='?' (DbType = Int32), @__p_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT r."Id", r."AssetId", r."CampaignId", r."ContentId", r."CreatedAt", r."ExportPreset", r."ProcessingDurationMs", r."Progress", r."RenderStatus", r."StorageKey", r."SurfaceId"
+FROM "Renders" AS r
+WHERE r."CampaignId" = @__filter_CampaignId_0
+ORDER BY r."CreatedAt" DESC
+LIMIT @__p_2 OFFSET @__p_1
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.RenderItem, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetLogs", controller = "Logs"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.EventLog]]] GetLogs(Afrobotics.Bit.Api.DTOs.LogFilterParams) on controller Afrobotics.Bit.Api.Controllers.LogsController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api) in 882.0951ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (100ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 16643.1348ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (814ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "EventLogs" AS e
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (821ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (110ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (20ms) [Parameters=[@__p_1='?' (DbType = Int32), @__p_0='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT e."Id", e."Description", e."EventCode", e."Module", e."Severity", e."Timestamp", e."User"
+FROM "EventLogs" AS e
+ORDER BY e."Timestamp" DESC
+LIMIT @__p_1 OFFSET @__p_0
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (383ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (501ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.EventLog, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api) in 2821.578ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 2498.2847ms
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.LogsController.GetLogs (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 2942.5419ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (139ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/logs - 200 - application/json;+charset=utf-8 5452.1666ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (913ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (5ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (140ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/renders?campaignId=c-c23c - 200 - application/json;+charset=utf-8 8012.2284ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 8208.3080ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Hangfire.Server.ServerHeartbeatProcess: Debug: Server desktop-jj0g3nj:17072:1b8561b2 heartbeat successfully sent
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/renders?campaignId=c-c23c - application/json -
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (731ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.RendersController.GetRenders (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (381ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetRenders", controller = "Renders"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.RenderItem]]] GetRenders(Afrobotics.Bit.Api.DTOs.RenderFilterParams) on controller Afrobotics.Bit.Api.Controllers.RendersController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 29982.9025ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 3240.0189ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (554ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (296ms) [Parameters=[@__filter_CampaignId_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Renders" AS r
+WHERE r."CampaignId" = @__filter_CampaignId_0
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (859ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/alarms - 200 - application/json;+charset=utf-8 19720.1606ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetDetectionStatus", controller = "Scenes"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetDetectionStatus(System.String) on controller Afrobotics.Bit.Api.Controllers.ScenesController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/alarms - application/json -
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.AlarmsController.GetAlarms (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetAlarms", controller = "Alarms"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.ActionResult`1[Afrobotics.Bit.Api.DTOs.PaginatedResult`1[Afrobotics.Bit.Api.Models.AlarmItem]]] GetAlarms(Afrobotics.Bit.Api.DTOs.AlarmFilterParams) on controller Afrobotics.Bit.Api.Controllers.AlarmsController (Afrobotics.Bit.Api).
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1,207ms) [Parameters=[@__filter_CampaignId_0='?', @__p_2='?' (DbType = Int32), @__p_1='?' (DbType = Int32)], CommandType='Text', CommandTimeout='30']
+SELECT r."Id", r."AssetId", r."CampaignId", r."ContentId", r."CreatedAt", r."ExportPreset", r."ProcessingDurationMs", r."Progress", r."RenderStatus", r."StorageKey", r."SurfaceId"
+FROM "Renders" AS r
+WHERE r."CampaignId" = @__filter_CampaignId_0
+ORDER BY r."CreatedAt" DESC
+LIMIT @__p_2 OFFSET @__p_1
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/notifications/attention - application/json -
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1,465ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (1,389ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.AttentionController.GetAttentionCounts (Afrobotics.Bit.Api)'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 6490.6220ms
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Route matched with {action = "GetAttentionCounts", controller = "Attention"}. Executing controller action with signature System.Threading.Tasks.Task`1[Microsoft.AspNetCore.Mvc.IActionResult] GetAttentionCounts() on controller Afrobotics.Bit.Api.Controllers.AttentionController (Afrobotics.Bit.Api).
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 4772.2305ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (827ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT p."Key", p."Description", p."UpdatedAt", p."Value"
+FROM "PlatformSettings" AS p
+WHERE p."Key" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (176ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "RoleRequests" AS r
+WHERE r."Status" = 'Pending'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (42ms) [Parameters=[@__p_0='?'], CommandType='Text', CommandTimeout='30']
+SELECT c."Id", c."CampaignId", c."CreatedAt", c."DetectionJobId", c."DetectionProgress", c."Duration", c."FrameRate", c."IngestionStatus", c."LastErrorAt", c."LastErrorMessage", c."Resolution", c."SceneDetectingCompletedAt", c."SceneDetectingStartedAt", c."SourceChannel", c."StagingCompletedAt", c."StorageKey", c."Title", c."TranscodingCompletedAt", c."TranscodingStartedAt"
+FROM "ContentItems" AS c
+WHERE c."Id" = @__p_0
+LIMIT 1
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (345ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "SurfaceItems" AS s
+WHERE s."Status" = 'Candidate'
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type '<>f__AnonymousType28`7[[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Int32, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Boolean, System.Private.CoreLib, Version=8.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]'.
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (243ms) [Parameters=[@p0='?', @p1='?' (DbType = Int64), @p2='?', @p3='?', @p4='?', @p5='?' (DbType = Int32), @p6='?' (DbType = DateTime), @p7='?', @p8='?'], CommandType='Text', CommandTimeout='30']
+INSERT INTO "UsageRecords" ("Id", "DurationMs", "HttpMethod", "IpAddress", "RequestPath", "StatusCode", "Timestamp", "UserEmail", "UserId")
+VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8);
+Microsoft.AspNetCore.Mvc.Infrastructure.ControllerActionInvoker: Information: Executed action Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api) in 2670.2828ms
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request finished HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - 200 - application/json;+charset=utf-8 7678.5259ms
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (201ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Renders" AS r
+WHERE r."RenderStatus" = 'Failed'
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executed endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (14ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "ContentItems" AS c
+WHERE c."IngestionStatus" = 'Failed'
+Microsoft.AspNetCore.Hosting.Diagnostics: Information: Request starting HTTP/1.1 GET http://localhost:57220/api/content/v-e1ba/detection-status - application/json -
+Microsoft.AspNetCore.Mvc.Infrastructure.ObjectResultExecutor: Information: Executing OkObjectResult, writing value of type 'Afrobotics.Bit.Api.DTOs.PaginatedResult`1[[Afrobotics.Bit.Api.Models.RenderItem, Afrobotics.Bit.Api, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]'.
+Microsoft.AspNetCore.Routing.EndpointMiddleware: Information: Executing endpoint 'Afrobotics.Bit.Api.Controllers.ScenesController.GetDetectionStatus (Afrobotics.Bit.Api)'
+Microsoft.EntityFrameworkCore.Database.Command: Information: Executed DbCommand (467ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+SELECT count(*)::int
+FROM "Alarms" AS a
+WHERE a."IsActive"

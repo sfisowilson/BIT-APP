@@ -32,7 +32,7 @@ namespace Afrobotics.Bit.Tests
                 Id = "usr-01",
                 FullName = "Sfiso Dlamini",
                 Email = "loverboy.sfiso@gmail.com",
-                PasswordHash = "editor123",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("editor123"),
                 Role = "Editor",
                 AccountStatus = "Active"
             };
@@ -53,7 +53,6 @@ namespace Afrobotics.Bit.Tests
             Assert.Equal("usr-01", result.User.Id);
             Assert.Equal("Sfiso Dlamini", result.User.FullName);
             Assert.Equal("Editor", result.User.Role);
-            _mockUserRepo.Verify(r => r.UpdateAsync(user), Times.Once);
             _mockUserRepo.Verify(r => r.SaveChangesAsync(), Times.Once);
         }
 
@@ -66,7 +65,7 @@ namespace Afrobotics.Bit.Tests
                 Id = "usr-01",
                 FullName = "Sfiso Dlamini",
                 Email = "loverboy.sfiso@gmail.com",
-                PasswordHash = "editor123",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("editor123"),
                 Role = "Editor",
                 AccountStatus = "Active"
             };
@@ -96,7 +95,7 @@ namespace Afrobotics.Bit.Tests
                 Id = "usr-02",
                 FullName = "Suspended User",
                 Email = "suspended@afrobotics.co.za",
-                PasswordHash = "password123",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("password123"),
                 Role = "Editor",
                 AccountStatus = "Suspended"
             };

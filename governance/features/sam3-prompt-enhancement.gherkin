@@ -1,0 +1,82 @@
+Feature: SAM3 Prompt Enhancement — Gemini-Generated Segmentation Descriptions
+  As a platform operator
+  I want Gemini to generate detailed visual descriptions for each detected surface
+  So that SAM3 can accurately segment and track the surface across video frames
+
+  Background:
+    Given the BIT platform uses Gemini for surface detection
+    And SAM3 (fal.ai) for per-frame surface tracking
+    And currently SAM3 receives only a single center-point with no text guidance
+    And this causes SAM3 to fail tracking, producing all-black output
+
+  # ── Gemini Prompt Generation ──
+
+  Scenario: Gemini generates SAM3 prompt alongside surface detection
+    Given a video frame with a visible surface
+    When Gemini detects a surface of type "plaster wall surface"
+    Then the response includes a "sam3_prompt" field
+    And the prompt contains a visual description of the surface
+    And the prompt describes color, texture, shape, and edges
+    And the prompt does NOT contain viability or brand-safety commentary
+
+  Scenario: Gemini generates SAM3 prompt for multiple surfaces
+    Given a video frame with 5 visible surfaces
+    When Gemini detects all 5 surfaces
+    Then each surface in the response has a unique "sam3_prompt"
+    And each prompt describes that specific surface's visual appearance
+
+  Scenario: Non-Gemini detection engines gracefully handle missing prompt
+    Given the detection engine is "yolo" or "basic"
+    When surfaces are detected without SAM3 prompts
+    Then SurfaceItem.Sam3Prompt is null
+    And the SAM3 payload excludes the "prompt" field
+    And no errors are thrown
+
+  # ── SAM3 Payload Enhancement ──
+
+  Scenario: SAM3 receives full boundary as point prompts with object grouping
+    Given a surface with boundary [[790,250],[1080,250],[1080,520],[790,520]]
+    And a valid SAM3 prompt from Gemini
+    When SAM3 tracking is invoked
+    Then the payload includes "point_prompts" with all 4 corner points plus center
+    And each point has frame_index, x, y, label=1, and object_id=0
+    And the payload includes "box_prompts" with the full bounding box
+    And the box has frame_index and object_id=0
+    And the payload includes "prompt" with the Gemini-generated description
+    And "apply_mask" is set to true
+    And "detection_threshold" is set to 0.3
+    And "video_output_type" is "X264 (.mp4)"
+
+  Scenario: SAM3 tracking succeeds with enhanced prompt
+    Given a surface with valid boundary and SAM3 prompt
+    When SAM3 processes the video
+    Then the returned segmented video is not all-black
+    And the video file size is greater than 100KB
+    And the event log shows TRACKING_COMPLETE with success
+
+  # ── Render Compositing with Luma Mask ──
+
+  Scenario: Render uses SAM3 video as per-pixel luma mask
+    Given a completed SAM3 tracking job returning a segmented video
+    When the render pipeline composites the asset
+    Then ffmpeg extracts luma from the SAM3 video as a binary mask
+    And the asset is scaled to video dimensions and converted to RGBA
+    And the SAM3 mask is applied as alpha channel via alphamerge
+    And the masked asset is overlaid on the ORIGINAL source video
+    And the output format is yuv420p with H.264 encoding
+
+  Scenario: Render output shows asset only on tracked surface
+    Given a completed render job
+    When the output video is opened
+    Then the video shows the original scene content
+    And the brand asset is visible ONLY on the tracked surface region
+    And the background shows the original content without the asset
+    And the asset visibility tracks the surface across frames
+
+  # ── Data Integrity ──
+
+  Scenario: SAM3 prompt survives detection-to-tracking round-trip
+    Given Gemini detected surface "sf-01" with sam3_prompt "white plaster wall..."
+    When the surface is persisted to the database
+    And later retrieved for SAM3 tracking
+    Then the prompt passed to SAM3 matches the Gemini-generated prompt

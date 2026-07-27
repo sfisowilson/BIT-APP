@@ -1,0 +1,68 @@
+Feature: Scene Detection Pipeline — Real AI Engine Integration
+  As a platform operator
+  I want scene detection to use real AI engines (YOLO) instead of mock random data
+  So that detected surfaces reflect actual video content and are useful for ad placement
+
+  Background:
+    Given the BIT platform has a content ingestion pipeline
+    And AI engine configuration is managed via Platform Settings
+
+  Scenario: Scene detection uses real YOLO engine by default
+    Given the platform setting "engine_detection" is set to "yolo"
+    And the Python YOLO detection service is running on port 8001
+    When I run scene detection on an uploaded video
+    Then the Hangfire background job is enqueued
+    And the YOLO service is called for each detected scene
+    And real surface detections are persisted to the database
+    And NO random mock surfaces are generated
+
+  Scenario: Scene detection fails clearly when YOLO is unreachable
+    Given the platform setting "engine_detection" is set to "yolo"
+    And the Python YOLO detection service is NOT running
+    When I run scene detection on an uploaded video
+    Then the Hangfire job fails with a clear error message
+    And the content status is set to "Failed"
+    And the error message indicates the YOLO service is unreachable
+    And NO random mock surfaces are generated as fallback
+
+  Scenario: Basic engine throws instead of generating mock data
+    Given the platform setting "engine_detection" is set to "basic"
+    When the detection engine is invoked
+    Then an InvalidOperationException is thrown
+    And the error message instructs the operator to configure a real engine
+
+  Scenario: Single-scene video produces exactly one scene
+    Given a video with no scene changes (continuous footage)
+    When I run scene detection
+    Then exactly 1 scene is created covering the entire video duration
+    And no artificial 30-second scene chunks are generated
+
+  Scenario: Re-detect scenes enqueues the Hangfire job
+    Given a content item that has completed scene detection
+    When I click "Re-detect Scenes"
+    Then the content transitions to SceneDetecting stage
+    And a Hangfire background job is enqueued
+    And the job runs the full detection pipeline
+    And old scenes and surfaces are deleted before new ones are created
+
+  Scenario: Scene detection generates surface thumbnails
+    Given scene detection completes successfully with detected surfaces
+    When the detection pipeline finishes
+    Then each surface has a thumbnail image saved to Uploads/thumbnails/
+    And the PlacementImageUrl field is set to the thumbnail path
+    And failed thumbnail generation does not block the pipeline
+
+  Scenario: Re-detect does not fail when already in SceneDetecting
+    Given a content item whose status is "SceneDetecting"
+    When I click "Re-detect Scenes"
+    Then the pipeline transition is skipped (no self-transition error)
+    And the Hangfire job is still enqueued
+    And the detection pipeline runs normally
+
+  Scenario: Re-detect enqueues exactly one Hangfire job
+    Given a content item eligible for re-detection
+    When I click "Re-detect Scenes"
+    Then exactly ONE Hangfire background job is enqueued
+    And the frontend does NOT also call /api/video/ai-split-analyze
+    And the frontend polls /api/content/{id}/detection-status for completion
+    And on completion, scenes are refreshed and the first scene is auto-selected

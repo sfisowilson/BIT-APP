@@ -1,0 +1,13 @@
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+ultralytics>=8.2.0
+opencv-python>=4.9.0
+numpy>=1.26.0
+
+# ── Phase 2: Open-vocabulary detection pipeline ──
+# Install with: pip install -r requirements.txt
+# GPU recommended (CPU-only is very slow for these models)
+transformers>=4.40.0        # Grounding DINO, Depth Anything V2, CLIP
+torch>=2.2.0                # PyTorch backend (CUDA recommended)
+pillow>=10.0.0              # Image handling
+segment-anything>=1.0       # Meta SAM (downloads sam_vit_b_01ec64.pth on first use)

@@ -43,20 +43,22 @@ import {
   TIMELINE_DATA 
 } from './types';
 import { DOCUMENT_CONTENT } from './document';
-import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession, retranscode, redetectScenes, resetPipeline, refreshToken, fetchStatsSummary, type StatsSummary } from './apiClient';
+import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession, retranscode, redetectScenes, detectScenesOnly, detectSurfacesForScene, resetPipeline, refreshToken, fetchStatsSummary, fetchSurfacesBatch, type StatsSummary } from './apiClient';
 import { useChunkedUpload } from './hooks/useChunkedUpload';
+import { useSignalR, type DetectionProgressEvent, type RenderProgressEvent, type ContentStatusEvent, type AlarmEvent, type NotificationEvent } from './hooks/useSignalR';
 
 // Import our modular sub-components
 import { CampaignsTab } from './components/CampaignsTab';
 import { IngestionTab } from './components/IngestionTab';
 import { EditorTab } from './components/EditorTab';
-import { ComposerTab } from './components/ComposerTab';
+import { RendersTab } from './components/RendersTab';
 import { TelemetryTab } from './components/TelemetryTab';
 import { AdminConsoleTab } from './components/AdminConsoleTab';
 import { CampaignSelector } from './components/CampaignSelector';
 import { CampaignSidebar, type SidebarView } from './components/CampaignSidebar';
 import { CampaignDashboard } from './components/CampaignDashboard';
 import { AnalyticsTab } from './components/AnalyticsTab';
+import { JobsTab } from './components/JobsTab';
 import { BitLogo } from './components/BitLogo';
 import { useIdleTimer } from './hooks/useIdleTimer';
 import { NotificationPreferencesPanel } from './components/NotificationPreferencesPanel';
@@ -83,6 +85,7 @@ export default function App() {
     if (parts[0] === 'admin') return { activeView: 'admin' as SidebarView, selectedCampaignId: null };
     if (parts[0] === 'telemetry') return { activeView: 'telemetry' as SidebarView, selectedCampaignId: null };
     if (parts[0] === 'analytics') return { activeView: 'analytics' as SidebarView, selectedCampaignId: null };
+    if (parts[0] === 'jobs') return { activeView: 'jobs' as SidebarView, selectedCampaignId: null };
     return { activeView: null, selectedCampaignId: null };
   }, [location.pathname]);
 
@@ -130,6 +133,7 @@ export default function App() {
   const [contentList, setContentList] = useState<ContentItem[]>([]);
   const [aiAnalyzingVideoId, setAiAnalyzingVideoId] = useState<string | null>(null);
   const [isPipelineActionPending, setIsPipelineActionPending] = useState<string | null>(null);
+  const [sceneRefreshKey, setSceneRefreshKey] = useState(0); // incremented to force scene refresh on detection complete
   const [statsSummary, setStatsSummary] = useState<StatsSummary | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [showRoleRequest, setShowRoleRequest] = useState(false);
@@ -157,6 +161,7 @@ export default function App() {
   const [surfacesForScene, setSurfacesForScene] = useState<SurfaceItem[]>([]);
   const [selectedSurfaceId, setSelectedSurfaceId] = useState<string>('');
   const [rejectionReason, setRejectionReason] = useState<string>('');
+  const [surfacesByScene, setSurfacesByScene] = useState<Record<string, SurfaceItem[]>>({});
 
   // Phase 2: Asset placement tracking (surfaceId -> assetId)
   const [surfaceAssetPairs, setSurfaceAssetPairs] = useState<Record<string, string>>({});
@@ -345,18 +350,41 @@ export default function App() {
   };
 
   // Restore saved session from localStorage on mount (MReq 8)
-  // No auto-login — user must explicitly authenticate via the login form
+  // Validates the stored token against the API — stale/fake tokens are discarded.
+  // If the API is unreachable, we optimistically restore (don't punish for cold starts).
   useEffect(() => {
-    const savedToken = getToken();
-    const savedUser = getSavedUser<UserSession>();
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(savedUser);
-    }
+    const restore = async () => {
+      const savedToken = getToken();
+      const savedUser = getSavedUser<UserSession>();
+      if (!savedToken || !savedUser) return;
+
+      try {
+        const res = await fetchPublic('/api/auth/validate', {
+          method: 'POST',
+          body: JSON.stringify({ token: savedToken }),
+        });
+        if (res.ok) {
+          setToken(savedToken);
+          setUser(savedUser);
+        } else if (res.status === 401) {
+          // Token explicitly rejected — clear stale session
+          clearToken();
+        } else {
+          // Unexpected response — restore optimistically
+          setToken(savedToken);
+          setUser(savedUser);
+        }
+      } catch {
+        // API unreachable (cold start, network) — restore optimistically
+        setToken(savedToken);
+        setUser(savedUser);
+      }
+    };
+    restore();
   }, []);
 
-  // Fetch all core operational datasets from backend APIs
-  const fetchAllData = async () => {
+  // Fetch exactly the data needed for the current view — no over-fetching.
+  const fetchViewData = async () => {
     if (!token) return;
     try {
       const fetchJson = async (url: string) => {
@@ -365,39 +393,101 @@ export default function App() {
       };
 
       const campaignParam = selectedCampaignId ? `?campaignId=${selectedCampaignId}` : '';
-      const [
-        contentRes,
-        campaignsRes,
-        assetsRes,
-        rendersRes,
-        logsRes,
-        alarmsRes
-      ] = await Promise.allSettled([
+
+      // Campaigns are always needed (sidebar navigation)
+      const campaignsPromise = fetchJson('/api/campaigns').then((data: any) => {
+        setCampaignList(data.items || data);
+      });
+
+      // Logs + alarms are lightweight and cross-cutting
+      const logsPromise = fetchJson('/api/logs').then((data: any) => {
+        setLogList(data.items || data);
+      });
+      const alarmsPromise = fetchJson('/api/alarms').then((data: any) => {
+        setAlarmList(data.items || data);
+      });
+
+      // Content / assets / renders only needed in campaign-scoped views
+      const isCampaignView = activeView && !['admin', 'telemetry', 'analytics', 'jobs'].includes(activeView) && selectedCampaignId;
+
+      if (isCampaignView) {
+        const [contentRes, assetsRes, rendersRes] = await Promise.allSettled([
+          fetchJson(`/api/content${campaignParam}`),
+          fetchJson(`/api/assets${campaignParam}`),
+          fetchJson(`/api/renders${campaignParam}`),
+        ]);
+        if (contentRes.status === 'fulfilled') { const data = contentRes.value as any; setContentList(data.items || data); }
+        if (assetsRes.status === 'fulfilled') {
+          const data = assetsRes.value as any;
+          const assets = (data.items || data) as CreativeAsset[];
+          setAssetList(assets.map(a => ({ ...a, thumbnailUrl: a.storageKey?.startsWith('/api/') ? a.storageKey : a.thumbnailUrl })));
+        }
+        if (rendersRes.status === 'fulfilled') { const data = rendersRes.value as any; setRenderList(data.items || data); }
+      } else {
+        // Non-campaign views: still need campaigns, logs, alarms
+      }
+
+      await Promise.allSettled([campaignsPromise, logsPromise, alarmsPromise]);
+    } catch (err) {
+      console.error("API Fetch Error:", err);
+    }
+  };
+
+  // Full data refresh — only used after mutations (render, detect, approve, etc.)
+  const fetchAllData = async () => {
+    if (!token) return;
+    try {
+      const fetchJson = async (url: string) => {
+        const r = await fetchWithAuth(url);
+        return r.json();
+      };
+      const campaignParam = selectedCampaignId ? `?campaignId=${selectedCampaignId}` : '';
+      const [contentRes, campaignsRes, assetsRes, rendersRes, logsRes, alarmsRes] = await Promise.allSettled([
         fetchJson(`/api/content${campaignParam}`),
         fetchJson('/api/campaigns'),
         fetchJson(`/api/assets${campaignParam}`),
         fetchJson(`/api/renders${campaignParam}`),
         fetchJson('/api/logs'),
-        fetchJson('/api/alarms')
+        fetchJson('/api/alarms'),
       ]);
-
-      if (contentRes.status === 'fulfilled') {
-        const data = contentRes.value as any;
-        setContentList(data.items || data);
-      }
-      if (campaignsRes.status === 'fulfilled') {
-        const data = campaignsRes.value as any;
-        setCampaignList(data.items || data);
-      }
+      if (contentRes.status === 'fulfilled') { const data = contentRes.value as any; setContentList(data.items || data); }
+      if (campaignsRes.status === 'fulfilled') { const data = campaignsRes.value as any; setCampaignList(data.items || data); }
       if (assetsRes.status === 'fulfilled') {
         const data = assetsRes.value as any;
-        const assets = data.items || data;
-        const assetsWithThumbnails = (assets as CreativeAsset[]).map(a => ({
-          ...a,
-          thumbnailUrl: a.storageKey?.startsWith('/api/') ? a.storageKey : a.thumbnailUrl
-        }));
-        setAssetList(assetsWithThumbnails);
+        const assets = (data.items || data) as CreativeAsset[];
+        setAssetList(assets.map(a => ({ ...a, thumbnailUrl: a.storageKey?.startsWith('/api/') ? a.storageKey : a.thumbnailUrl })));
       }
+      if (rendersRes.status === 'fulfilled') { const data = rendersRes.value as any; setRenderList(data.items || data); }
+      if (logsRes.status === 'fulfilled') { const data = logsRes.value as any; setLogList(data.items || data); }
+      if (alarmsRes.status === 'fulfilled') { const data = alarmsRes.value as any; setAlarmList(data.items || data); }
+
+      const failures = [
+        { name: 'content', res: contentRes }, { name: 'campaigns', res: campaignsRes },
+        { name: 'assets', res: assetsRes }, { name: 'renders', res: rendersRes },
+        { name: 'logs', res: logsRes }, { name: 'alarms', res: alarmsRes },
+      ].filter(f => f.res.status === 'rejected');
+      if (failures.length > 0) console.warn('Some API endpoints failed:', failures.map(f => `${f.name}: ${(f.res as PromiseRejectedResult).reason}`));
+    } catch (err) {
+      console.error("API Fetch Error:", err);
+    }
+  };
+
+  // Lightweight poll: only refresh operational data (renders, alarms, logs).
+  // Never touches contentList/campaignList/assetList — avoids disrupting the video player
+  // and placement workbench which depend on stable content/scene/surface state.
+  const fetchOperationalData = async () => {
+    if (!token) return;
+    try {
+      const fetchJson = async (url: string) => {
+        const r = await fetchWithAuth(url);
+        return r.json();
+      };
+      const campaignParam = selectedCampaignId ? `?campaignId=${selectedCampaignId}` : '';
+      const [rendersRes, logsRes, alarmsRes] = await Promise.allSettled([
+        fetchJson(`/api/renders${campaignParam}`),
+        fetchJson('/api/logs'),
+        fetchJson('/api/alarms')
+      ]);
       if (rendersRes.status === 'fulfilled') {
         const data = rendersRes.value as any;
         setRenderList(data.items || data);
@@ -410,38 +500,61 @@ export default function App() {
         const data = alarmsRes.value as any;
         setAlarmList(data.items || data);
       }
-
-      const failures = [
-        { name: 'content', res: contentRes },
-        { name: 'campaigns', res: campaignsRes },
-        { name: 'assets', res: assetsRes },
-        { name: 'renders', res: rendersRes },
-        { name: 'logs', res: logsRes },
-        { name: 'alarms', res: alarmsRes }
-      ].filter(f => f.res.status === 'rejected');
-
-      if (failures.length > 0) {
-        console.warn('Some API endpoints failed to load:', failures.map(f => `${f.name}: ${(f.res as PromiseRejectedResult).reason}`));
-      }
-    } catch (err) {
-      console.error("API Fetch Error:", err);
-    }
+    } catch { /* silent — polling should never break the UI */ }
   };
 
-  // Run initial load
+  // Load only what the current view needs. Re-fetches when route changes.
   useEffect(() => {
     if (token) {
-      fetchAllData();
-
-      // Poll for fresh data every 5 seconds (renders, alarms, logs)
-      const interval = setInterval(() => {
-        fetchAllData();
-      }, 5000);
-      return () => {
-        clearInterval(interval);
-      };
+      fetchViewData();
     }
-  }, [token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, activeView, selectedCampaignId]);
+
+  // ── SignalR — real-time push for detection/render progress, content status, alarms & logs ──
+  // All live updates flow through here; no polling needed.
+  const { connectionState: _signalRState } = useSignalR({
+    onDetectionProgress: (e: DetectionProgressEvent) => {
+      // Update detection progress for the content item in local state
+      setContentList(prev => prev.map(c =>
+        c.id === e.contentId ? { ...c, detectionProgress: e.percent } : c
+      ));
+      // Clear AI analyzing flag when complete or failed
+      if (e.percent >= 100 || e.status === 'Failed') {
+        setAiAnalyzingVideoId(prev => prev === e.contentId ? null : prev);
+        setIsPipelineActionPending(prev => prev === e.contentId ? null : prev);
+        // Force scene refresh for the currently selected video
+        setSceneRefreshKey(k => k + 1);
+        // Refresh content data on completion
+        fetchAllData();
+      }
+    },
+    onRenderProgress: (e: RenderProgressEvent) => {
+      setRenderList(prev => prev.map(r =>
+        r.id === e.renderId ? { ...r, progress: e.percent, renderStatus: e.percent >= 100 ? 'Finished' : r.renderStatus } : r
+      ));
+      if (e.percent >= 100) {
+        fetchOperationalData();
+      }
+    },
+    onContentStatusChanged: (e: ContentStatusEvent) => {
+      setContentList(prev => prev.map(c =>
+        c.id === e.contentId ? { ...c, ingestionStatus: e.newStatus } : c
+      ));
+      if (e.newStatus === 'Completed' || e.newStatus === 'Ready' || e.newStatus === 'Failed' || e.newStatus === 'SurfacesReady') {
+        setAiAnalyzingVideoId(prev => prev === e.contentId ? null : prev);
+        setIsPipelineActionPending(prev => prev === e.contentId ? null : prev);
+        setSceneRefreshKey(k => k + 1);
+        fetchAllData();
+      }
+    },
+    onAlarmEvent: (_alarm: AlarmEvent) => {
+      fetchOperationalData();
+    },
+    onNotification: (_n: NotificationEvent) => {
+      fetchOperationalData();
+    },
+  });
 
   // Redirect to landing if the campaign ID in the URL doesn't exist (once campaigns are loaded)
   useEffect(() => {
@@ -454,7 +567,7 @@ export default function App() {
   }, [selectedCampaignId, campaignList, navigate]);
 
   // Validate that the URL view is a known SidebarView — redirect to dashboard if not
-  const VALID_VIEWS: string[] = ['dashboard', 'assets', 'content', 'placements', 'renders', 'reports', 'admin', 'telemetry', 'analytics'];
+  const VALID_VIEWS: string[] = ['dashboard', 'assets', 'content', 'placements', 'renders', 'reports', 'admin', 'telemetry', 'analytics', 'jobs'];
   useEffect(() => {
     if (activeView && !VALID_VIEWS.includes(activeView)) {
       if (selectedCampaignId) {
@@ -495,18 +608,35 @@ export default function App() {
     }
   }, [contentList, token]);
 
-  // Fetch scenes when selected video changes
+  // Fetch scenes when selected video changes — also batch-fetch all surfaces
   useEffect(() => {
     if (!selectedVideo || !token) return;
     fetchWithAuth(`/api/content/${selectedVideo}/scenes`)
       .then(r => r.json())
-      .then(data => {
+      .then(async (data: SceneItem[]) => {
         setScenesForVideo(data);
         if (data.length > 0) {
           setSelectedSceneId(data[0].id);
+          // Batch-fetch surfaces for ALL scenes in one request
+          const sceneIds = data.map((s: SceneItem) => s.id);
+          try {
+            const allSurfaces = await fetchSurfacesBatch(sceneIds);
+            const byScene: Record<string, SurfaceItem[]> = {};
+            for (const sf of allSurfaces) {
+              const parsed = parseSurfaceItem(sf);
+              if (!byScene[sf.sceneId]) byScene[sf.sceneId] = [];
+              byScene[sf.sceneId].push(parsed);
+            }
+            setSurfacesByScene(byScene);
+            setSurfacesForScene(byScene[data[0].id] || []);
+          } catch {
+            setSurfacesByScene({});
+            setSurfacesForScene([]);
+          }
         } else {
           setSelectedSceneId('');
           setSurfacesForScene([]);
+          setSurfacesByScene({});
           setSelectedSurfaceId('');
         }
       })
@@ -514,25 +644,27 @@ export default function App() {
         setScenesForVideo([]);
         setSelectedSceneId('');
         setSurfacesForScene([]);
+        setSurfacesByScene({});
         setSelectedSurfaceId('');
       });
-  }, [selectedVideo, token]);
+  }, [selectedVideo, token, sceneRefreshKey]);
 
-  // Fetch surfaces when selected scene changes
+  // Use cached surfaces from batch fetch when selected scene changes
   useEffect(() => {
-    if (!selectedSceneId || !token) return;
-    fetchWithAuth(`/api/scenes/${selectedSceneId}/surfaces`)
-      .then(r => r.json())
-      .then((rawData: SurfaceItemResponse[]) => {
-        const parsed = rawData.map(parseSurfaceItem);
-        setSurfacesForScene(parsed);
-        if (parsed.length > 0) {
-          setSelectedSurfaceId(parsed[0].id);
-        } else {
-          setSelectedSurfaceId('');
-        }
-      });
-  }, [selectedSceneId]);
+    if (!selectedSceneId) return;
+    const cached = surfacesByScene[selectedSceneId];
+    if (cached) {
+      setSurfacesForScene(cached);
+      if (cached.length > 0) {
+        setSelectedSurfaceId(cached[0].id);
+      } else {
+        setSelectedSurfaceId('');
+      }
+    } else {
+      setSurfacesForScene([]);
+      setSelectedSurfaceId('');
+    }
+  }, [selectedSceneId, surfacesByScene]);
 
   // Sync composer campaign with selected campaign context (MReq 10)
   useEffect(() => {
@@ -837,9 +969,11 @@ export default function App() {
 
   // Handle Surface Approval Decision (MReq 11: real campaign context, audit trail)
   const handleSurfaceDecision = async (decision: "Approved" | "Rejected") => {
-    if (!selectedSurfaceId || !user) return;
+    console.log('[approve] called', { decision, selectedSurfaceId, hasUser: !!user, selectedSceneId });
+    if (!selectedSurfaceId) { alert('No surface selected. Click a surface on the video first.'); return; }
+    if (!user) { alert('User session not found. Please log in again.'); return; }
     try {
-      await fetchWithAuth(`/api/surfaces/${selectedSurfaceId}/approve`, {
+      const r = await fetchWithAuth(`/api/surfaces/${selectedSurfaceId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -849,12 +983,20 @@ export default function App() {
           userId: user.id
         })
       });
+      if (!r.ok) {
+        const data = await r.json();
+        alert(data.error || 'Approval failed.');
+        return;
+      }
       setRejectionReason('');
-      // Force refresh of surfaces list
       const rawUpdated = await fetchWithAuth(`/api/scenes/${selectedSceneId}/surfaces`).then(r => r.json()) as SurfaceItemResponse[];
-      setSurfacesForScene(rawUpdated.map(parseSurfaceItem));
-      fetchAllData();
-    } catch (err) {
+      const parsed = rawUpdated.map(parseSurfaceItem);
+      setSurfacesForScene(parsed);
+      setSurfacesByScene(prev => ({ ...prev, [selectedSceneId]: parsed }));
+      fetchOperationalData();
+      alert(`Surface ${decision === 'Approved' ? 'approved' : 'rejected'} successfully.`);
+    } catch (err: any) {
+      alert(err.message || 'Approval failed. Check console.');
       console.error(err);
     }
   };
@@ -899,7 +1041,7 @@ export default function App() {
           surfaceId,
           assetId,
           contentId: selectedVideo,
-          frameNumber: 0,
+          frameNumber: surface.detectedAtFrame ?? 0,
           boundaryCoordinatesJson: JSON.stringify(surface.boundaryCoordinates)
         })
       });
@@ -915,76 +1057,51 @@ export default function App() {
 
   // Handle scene-level approval (approve scene with its placed assets for rendering)
   const handleSceneApprove = async (sceneId: string) => {
+    console.log('[approve] handleSceneApprove called', { sceneId, selectedVideo });
     try {
-      await fetchWithAuth(`/api/scenes/update`, {
+      const r = await fetchWithAuth(`/api/scenes/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: sceneId, qaStatus: 'Approved' })
       });
+      if (!r.ok) {
+        const data = await r.json();
+        alert(data.error || 'Scene approval failed.');
+        return;
+      }
       if (selectedVideo) {
         const refreshed = await fetchWithAuth(`/api/content/${selectedVideo}/scenes`).then(r => r.json());
         setScenesForVideo(refreshed);
       }
       fetchAllData();
-    } catch (err) {
+      alert('Scene approved successfully! You can now submit for rendering.');
+    } catch (err: any) {
+      alert(err.message || 'Scene approval failed.');
       console.error('Failed to approve scene:', err);
     }
   };
 
-  // Handle AI video splitting and opportunity detection using Gemini (Engine core)
+  // Handle AI video splitting (scenes only — no surfaces). User triggers surfaces per-scene afterwards.
   const handleAiSplitAnalyze = async (contentId: string, videoTitle: string) => {
     if (!contentId || !videoTitle) return;
     setAiAnalyzingVideoId(contentId);
+    setSelectedVideo(contentId);
+
+    // Safety timeout: clear analyzing flag after 10 min if SignalR never delivers completion
+    const safetyTimer = setTimeout(() => {
+      setAiAnalyzingVideoId(prev => prev === contentId ? null : prev);
+      console.warn('[SceneDetection] Safety timeout cleared analyzing flag for', contentId);
+    }, 10 * 60 * 1000);
 
     try {
-      // 1. Call our backend to detect scene cuts via FFprobe
-      const res = await fetchWithAuth('/api/video/ai-split-analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoTitle, contentId })
-      });
-
-      if (!res.ok) {
-        let errorMsg = `Scene detection failed (HTTP ${res.status}).`;
-        try {
-          const errData = await res.json();
-          errorMsg = errData.error || errorMsg;
-        } catch { /* response wasn't JSON */ }
-        throw new Error(errorMsg);
-      }
-
-      const responseData = await res.json();
-
-      // 2. Save the generated scenes & surfaces
-      const saveRes = await fetchWithAuth('/api/video/ai-split-save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contentId,
-          scenes: responseData.data.scenes
-        })
-      });
-
-      if (!saveRes.ok) {
-        let saveError = 'Failed to save scenes.';
-        try { const errData = await saveRes.json(); saveError = errData.error || saveError; } catch { }
-        throw new Error(saveError);
-      }
-
-      // 3. Reload everything
-      await fetchAllData();
-      
-      // Trigger a reload of scenes for the active video
-      const refreshedScenes = await fetchWithAuth(`/api/content/${contentId}/scenes`).then(r => r.json());
-      setScenesForVideo(refreshedScenes);
-      if (refreshedScenes.length > 0) {
-        setSelectedSceneId(refreshedScenes[0].id);
-      }
+      // Queue scenes-only detection — SignalR DetectionProgress pushes live updates.
+      // onDetectionProgress callback handles completion + scene refresh.
+      await detectScenesOnly(contentId, videoTitle);
     } catch (err: any) {
       console.error("AI Split/Analyze Error:", err);
       alert("Scene detection failed. Please try again or contact support.");
-    } finally {
       setAiAnalyzingVideoId(null);
+      clearTimeout(safetyTimer);
     }
   };
 
@@ -994,15 +1111,15 @@ export default function App() {
   const handleRedetectScenes = async (contentId: string, videoTitle: string) => {
     if (!contentId) return;
     setIsPipelineActionPending(contentId);
+    setAiAnalyzingVideoId(contentId);
+    setSelectedVideo(contentId);
     try {
-      // Transition to SceneDetecting via the pipeline endpoint
+      // Queue re-detect — SignalR DetectionProgress pushes live updates.
       await redetectScenes(contentId);
-      // Then trigger the full scene analysis + save flow
-      await handleAiSplitAnalyze(contentId, videoTitle);
     } catch (err: any) {
       console.error('Re-detect scenes error:', err);
       alert("Failed to re-detect scenes. Please try again or contact support.");
-    } finally {
+      setAiAnalyzingVideoId(null);
       setIsPipelineActionPending(null);
     }
   };
@@ -1019,6 +1136,33 @@ export default function App() {
       alert("Failed to restart transcoding. Please try again or contact support.");
     } finally {
       setIsPipelineActionPending(null);
+    }
+  };
+
+  /** Trigger surface detection for a single scene (Gemini + SAM3). */
+  const handleDetectSurfacesForScene = async (sceneId: string, contentId: string) => {
+    if (!sceneId) return;
+    try {
+      await detectSurfacesForScene(sceneId);
+
+      // Optimistically update the scene's status in local state
+      setScenesForVideo(prev => prev.map(s =>
+        s.id === sceneId ? { ...s, surfaceStatus: 'Detecting' as const } : s
+      ));
+
+      // Safety timeout: refresh scenes after 5 min to clear detecting state if SignalR doesn't deliver
+      setTimeout(async () => {
+        try {
+          const refreshed = await fetchWithAuth(`/api/content/${contentId}/scenes`).then(r => r.json());
+          setScenesForVideo(refreshed);
+        } catch { /* silent */ }
+      }, 5 * 60 * 1000);
+
+      // SignalR DetectionProgress + ContentStatusChanged will trigger fetchAllData()
+      // and scene refresh when detection completes — no polling needed.
+    } catch (err: any) {
+      console.error('Surface detection error:', err);
+      alert(err.message || 'Failed to start surface detection.');
     }
   };
 
@@ -1102,7 +1246,7 @@ export default function App() {
   const handleSubmitPlacement = async (surfaceId: string, assetId: string, campaignId: string) => {
     if (!selectedVideo) return;
     try {
-      await fetchWithAuth('/api/renders', {
+      const r = await fetchWithAuth('/api/renders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1113,9 +1257,17 @@ export default function App() {
           exportPreset: composerPreset
         })
       });
+      if (!r.ok) {
+        const data = await r.json();
+        alert(data.error || 'Failed to submit render.');
+        return false;
+      }
       fetchAllData();
-    } catch (err) {
+      return true;
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit render. Check the console for details.');
       console.error('Failed to submit placement:', err);
+      return false;
     }
   };
 
@@ -1290,7 +1442,7 @@ export default function App() {
                     type="email"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="e.g. admin@brandinserts.tech"
+                    placeholder="e.g. admin@afrobotics.co.za"
                     className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-lg text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
                     required
                   />
@@ -1348,7 +1500,7 @@ export default function App() {
                   { 
                     role: 'Admin', 
                     name: 'Sabelo Nkosi', 
-                    email: 'admin@brandinserts.tech', 
+                    email: 'admin@afrobotics.co.za', 
                     pass: 'admin123',
                     badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
                   },
@@ -1362,7 +1514,7 @@ export default function App() {
                   { 
                     role: 'Advertiser', 
                     name: 'Thabo Ndlovu', 
-                    email: 'advertiser@brandinserts.tech', 
+                    email: 'advertiser@afrobotics.co.za', 
                     pass: 'advertiser123',
                     badge: 'bg-purple-500/10 text-purple-400 border-purple-500/20'
                   }
@@ -1621,6 +1773,9 @@ export default function App() {
                 {activeView === 'analytics' && (
                   <AnalyticsTab summary={statsSummary} loading={statsLoading} />
                 )}
+                {activeView === 'jobs' && (
+                  <JobsTab onJobChanged={fetchAllData} />
+                )}
                 {!activeView && (location.pathname === '/' || location.pathname === '') && (
                   <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto space-y-8 py-12" key="no_campaign">
                     <div className="text-center">
@@ -1783,6 +1938,7 @@ export default function App() {
                     onRedetectScenes={handleRedetectScenes}
                     onResetPipeline={handleResetPipeline}
                     isPipelineActionPending={isPipelineActionPending}
+                    onDetectSurfacesForScene={handleDetectSurfacesForScene}
                   />
                 )}
 
@@ -1811,6 +1967,7 @@ export default function App() {
                     // Phase 1
                     handleAiSplitAnalyze={handleAiSplitAnalyze}
                     aiAnalyzingVideoId={aiAnalyzingVideoId}
+                    onDetectSurfacesForScene={handleDetectSurfacesForScene}
                     // Phase 2
                     selectedCampaignId={selectedCampaignId ?? undefined}
                     surfaceAssetPairs={surfaceAssetPairs}
@@ -1832,20 +1989,9 @@ export default function App() {
                 )}
 
                 {activeView === 'renders' && (
-                  <ComposerTab
-                    selectedSurfaceId={selectedSurfaceId}
-                    selectedVideo={selectedVideo}
-                    campaignList={campaignList}
-                    composerCampaignId={composerCampaignId}
-                    setComposerCampaignId={setComposerCampaignId}
-                    assetList={assetList}
-                    composerAssetId={composerAssetId}
-                    setComposerAssetId={setComposerAssetId}
-                    composerPreset={composerPreset}
-                    setComposerPreset={setComposerPreset}
-                    handleQueueRender={handleQueueRender}
+                  <RendersTab
                     renderList={renderList.filter(r => selectedCampaignId && r.campaignId === selectedCampaignId)}
-                    scenesForVideo={scenesForVideo}
+                    campaignName={campaignList.find(c => c.id === selectedCampaignId)?.name}
                   />
                 )}
 

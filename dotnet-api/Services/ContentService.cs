@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Afrobotics.Bit.Api.Data;
 using Afrobotics.Bit.Api.DTOs;
 using Afrobotics.Bit.Api.Models;
 using Afrobotics.Bit.Api.Repositories;
@@ -76,13 +79,15 @@ namespace Afrobotics.Bit.Api.Services
         private readonly IEventLogService _eventLog;
         private readonly IEmailService _email;
         private readonly IConfiguration _config;
+        private readonly PostgresDbContext _db;
 
-        public ContentService(IContentRepository contentRepository, IEventLogService eventLog, IEmailService email, IConfiguration config)
+        public ContentService(IContentRepository contentRepository, IEventLogService eventLog, IEmailService email, IConfiguration config, PostgresDbContext db)
         {
             _contentRepository = contentRepository;
             _eventLog = eventLog;
             _email = email;
             _config = config;
+            _db = db;
         }
 
         public async Task<PaginatedResult<ContentItem>> GetContentAsync(ContentFilterParams filter)
@@ -114,9 +119,16 @@ namespace Afrobotics.Bit.Api.Services
             if (!DurationRegex.IsMatch(dto.Duration))
                 throw new ArgumentException("Duration must be in HH:MM:SS format (e.g. 00:05:00).");
 
-            // MReq 1: Validate frame rate is within a sensible range (1–240 FPS)
-            if (dto.FrameRate < MinFrameRate || dto.FrameRate > MaxFrameRate)
-                throw new ArgumentException($"Frame rate must be between {MinFrameRate}–{MaxFrameRate} FPS. Received: {dto.FrameRate}.");
+            // MReq 1: Validate frame rate — auto-correct clearly wrong values (e.g. 3840 is a resolution, not FPS)
+            var frameRate = dto.FrameRate;
+            if (frameRate < MinFrameRate || frameRate > MaxFrameRate)
+            {
+                // If it looks like a resolution (>= 480) or impossibly high, default to 25 FPS
+                if (frameRate >= 480)
+                    frameRate = 25;
+                else
+                    throw new ArgumentException($"Frame rate must be between {MinFrameRate}–{MaxFrameRate} FPS. Received: {dto.FrameRate}.");
+            }
 
             // Generate storage key from title if not provided
             var storageKey = !string.IsNullOrWhiteSpace(dto.StorageKey)
@@ -129,7 +141,9 @@ namespace Afrobotics.Bit.Api.Services
                 Title = dto.Title.Trim(),
                 Duration = dto.Duration,
                 Resolution = dto.Resolution,
-                FrameRate = dto.FrameRate,
+                Width = dto.Width,
+                Height = dto.Height,
+                FrameRate = frameRate,
                 SourceChannel = dto.SourceChannel,
                 StorageKey = storageKey,
                 IngestionStatus = "Staging",
@@ -153,8 +167,25 @@ namespace Afrobotics.Bit.Api.Services
             var content = await _contentRepository.GetByIdAsync(id);
             if (content == null) return false;
 
+            // ── Clean up child entities before deleting parent (belt-and-suspenders with EF cascade) ──
+            var ct = CancellationToken.None;
+
+            // Delete RenderItems for this content
+            var renders = await _db.Renders
+                .Where(r => r.ContentId == id)
+                .ToListAsync(ct);
+            if (renders.Count > 0)
+                _db.Renders.RemoveRange(renders);
+
+            // Delete scenes + their child surfaces/ad-slots/approvals
+            await SceneDetectionJobService.DeleteExistingScenes(_db, id, ct);
+
+            // Now delete the content item itself
             await _contentRepository.DeleteAsync(content);
             await _contentRepository.SaveChangesAsync();
+
+            await _eventLog.LogEventAsync("ContentManagement", "CONTENT_DELETED",
+                "Info", $"Content '{content.Title}' ({id}) deleted with all child entities.");
             return true;
         }
 

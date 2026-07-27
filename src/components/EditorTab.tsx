@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import {
   Tv, Play, Shield, CheckCircle, AlertTriangle, Sparkles, Wand2,
   Loader2, Eye, Layout, Image, Package, ArrowRight, Search, Cpu,
-  MapPin, ChevronRight, X, Upload
+  MapPin, ChevronRight, X, Upload, RefreshCw
 } from 'lucide-react';
 import { ContentItem, SceneItem, SurfaceItem, CreativeAsset, CampaignItem, SurfaceAssetPair } from '../types';
 
@@ -32,13 +32,14 @@ interface EditorTabProps {
   // Phase 1: AI analysis trigger from placements screen
   handleAiSplitAnalyze?: (contentId: string, videoTitle: string) => Promise<void>;
   aiAnalyzingVideoId?: string | null;
+  onDetectSurfacesForScene?: (sceneId: string, contentId: string) => Promise<void>;
 
   // Phase 2: Asset placement on surfaces
   selectedCampaignId?: string;
   surfaceAssetPairs: Record<string, string>; // surfaceId -> assetId
   onPlaceAsset: (surfaceId: string, assetId: string) => void;
   onRemoveAsset: (surfaceId: string) => void;
-  onSubmitPlacement: (surfaceId: string, assetId: string, campaignId: string) => void;
+  onSubmitPlacement: (surfaceId: string, assetId: string, campaignId: string) => Promise<boolean>;
 
   // Phase 3: AI asset suggestion
   onAiSuggestAssets?: (surfaceId: string) => Promise<{ assetId: string; reason: string }[]>;
@@ -82,6 +83,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   // Phase 1
   handleAiSplitAnalyze,
   aiAnalyzingVideoId,
+  onDetectSurfacesForScene,
   // Phase 2
   selectedCampaignId,
   surfaceAssetPairs = {},
@@ -109,15 +111,92 @@ export const EditorTab: React.FC<EditorTabProps> = ({
 }) => {
   const [previewMode, setPreviewMode] = React.useState(false);
   const [aiPromptText, setAiPromptText] = React.useState('');
+  const [aiPlacing, setAiPlacing] = React.useState(false);
+  const [aiExplanation, setAiExplanation] = React.useState('');
   const [previewAssetId, setPreviewAssetId] = React.useState<string>('');
   const [selectedBlendMode, setSelectedBlendMode] = React.useState<'multiply' | 'overlay' | 'normal'>('multiply');
   const [ambientIntensity, setAmbientIntensity] = React.useState<number>(0.85);
   const [showingPlacementPanel, setShowingPlacementPanel] = React.useState<boolean>(true);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
   const [submitConfirming, setSubmitConfirming] = React.useState<string>('');
 
+  // ── Derived data ──────────────────────────────────────────────────
   const currentScene = scenesForVideo.find(s => s.id === selectedSceneId);
   const activeVideo = contentList.find(v => v.id === selectedVideo);
   const isLocalVideo = activeVideo?.storageKey?.startsWith('/api/content/file/');
+
+  // Track video playback position as frame number
+  const [currentVideoFrame, setCurrentVideoFrame] = React.useState<number>(0);
+  React.useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid || !activeVideo?.frameRate) { console.warn('[timeupdate] no video ref or frameRate'); return; }
+    const fps = activeVideo.frameRate;
+    console.log('[timeupdate] listener attached, fps:', fps);
+    const onTimeUpdate = () => {
+      const frame = Math.round(vid.currentTime * fps);
+      setCurrentVideoFrame(frame);
+    };
+    vid.addEventListener('timeupdate', onTimeUpdate);
+    return () => { console.log('[timeupdate] listener removed'); vid.removeEventListener('timeupdate', onTimeUpdate); };
+  }, [activeVideo?.frameRate]);
+
+  // Filter surfaces: only show those detected near the current video frame (±30 frames)
+  const visibleSurfaces = React.useMemo(() => {
+    const frameWindow = 30;
+    const result = surfacesForScene.filter(sf => {
+      if (sf.id === selectedSurfaceId) return true;
+      if (sf.detectedAtFrame == null || sf.detectedAtFrame === 0) return true;
+      return Math.abs(sf.detectedAtFrame - currentVideoFrame) <= frameWindow;
+    });
+    console.log('[visibleSurfaces]', { total: surfacesForScene.length, visible: result.length, currentVideoFrame, selectedSurfaceId, window: frameWindow });
+    return result;
+  }, [surfacesForScene, currentVideoFrame, selectedSurfaceId]);
+
+  // Seek video to the exact frame where this surface was detected
+  const seekToSurface = (surfaceId: string) => {
+    console.log('[seekToSurface] clicked surface:', surfaceId);
+    setSelectedSurfaceId(surfaceId);
+    const vid = videoRef.current;
+    if (!vid || !activeVideo) { console.warn('[seekToSurface] no video ref or activeVideo'); return; }
+    const surface = surfacesForScene.find(s => s.id === surfaceId);
+    if (!surface || !activeVideo.frameRate) { console.warn('[seekToSurface] surface not found or no frameRate', { surface: !!surface, frameRate: activeVideo?.frameRate }); return; }
+    const fps = activeVideo.frameRate;
+    console.log('[seekToSurface] surface:', { type: surface.surfaceType, detectedAtFrame: surface.detectedAtFrame, fps });
+
+    let seekFrame: number;
+    if (surface.detectedAtFrame != null && surface.detectedAtFrame >= 0) {
+      seekFrame = surface.detectedAtFrame;
+    } else {
+      const scene = scenesForVideo.find(s => s.id === surface.sceneId);
+      if (!scene) { console.warn('[seekToSurface] scene not found for surface'); return; }
+      seekFrame = scene.startFrame + (scene.endFrame - scene.startFrame) / 2;
+      console.log('[seekToSurface] no detectedAtFrame, using scene midpoint:', { startFrame: scene.startFrame, endFrame: scene.endFrame, seekFrame });
+    }
+    let seekTime = seekFrame / fps;
+    // Clamp to valid video range
+    const maxSafeTime = Math.max(0.1, (vid.duration || 10) - 0.1);
+    if (seekTime > maxSafeTime) seekTime = maxSafeTime;
+    console.log('[seekToSurface] seeking to:', { seekFrame, seekTime: seekTime.toFixed(2), fps, videoDuration: vid.duration, readyState: vid.readyState });
+    if (!isFinite(seekTime) || seekTime < 0) { console.warn('[seekToSurface] invalid seekTime'); return; }
+
+    const doSeek = () => {
+      if (!vid || vid.readyState < 1) { console.warn('[seekToSurface] doSeek: video not ready'); return; }
+      console.log('[seekToSurface] doSeek: setting currentTime to', seekTime.toFixed(2));
+      vid.currentTime = seekTime;
+      vid.pause();
+    };
+
+    if (vid.readyState >= 1) {
+      doSeek();
+    } else {
+      console.log('[seekToSurface] waiting for loadedmetadata...');
+      const onLoaded = () => {
+        vid.removeEventListener('loadedmetadata', onLoaded);
+        doSeek();
+      };
+      vid.addEventListener('loadedmetadata', onLoaded);
+    }
+  };
   const hasCompletedVideos = contentList.some(v => v.ingestionStatus === 'Completed' && selectedCampaignId && v.campaignId === selectedCampaignId);
   const hasScenes = scenesForVideo.length > 0;
 
@@ -141,9 +220,39 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   const placedSurfaceCount = Object.keys(surfaceAssetPairs).length;
 
   // Dynamic viewBox from video resolution (fallback 1280x720)
-  const videoWidth = activeVideo?.resolution ? parseInt(activeVideo.resolution.split('x')[0]) || 1280 : 1280;
-  const videoHeight = activeVideo?.resolution ? parseInt(activeVideo.resolution.split('x')[1]) || 720 : 720;
+  const videoWidth = videoRef.current?.videoWidth || activeVideo?.width || 1920;
+  const videoHeight = videoRef.current?.videoHeight || activeVideo?.height || 1080;
   const viewBoxValue = `0 0 ${videoWidth} ${videoHeight}`;
+
+  // Calculate letterbox offset so the SVG overlay aligns exactly with the rendered video content
+  const [videoRect, setVideoRect] = React.useState<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 1, h: 1 });
+  React.useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid || !activeVideo?.resolution) return;
+    const updateRect = () => {
+      if (!vid || vid.videoWidth === 0) return;
+      const elW = vid.clientWidth;
+      const elH = vid.clientHeight;
+      const vidW = vid.videoWidth;
+      const vidH = vid.videoHeight;
+      if (vidW === 0 || vidH === 0) return;
+      const scale = Math.min(elW / vidW, elH / vidH);
+      const dispW = vidW * scale;
+      const dispH = vidH * scale;
+      const offsetX = (elW - dispW) / 2;
+      const offsetY = (elH - dispH) / 2;
+      console.log('[videoRect]', { elW, elH, vidW, vidH, scale, dispW, dispH, offsetX, offsetY });
+      setVideoRect({ x: offsetX, y: offsetY, w: dispW, h: dispH });
+    };
+    updateRect();
+    const observer = new ResizeObserver(updateRect);
+    observer.observe(vid);
+    vid.addEventListener('loadedmetadata', updateRect);
+    return () => {
+      observer.disconnect();
+      vid.removeEventListener('loadedmetadata', updateRect);
+    };
+  }, [activeVideo?.resolution]);
 
   return (
     <motion.div
@@ -234,29 +343,35 @@ export const EditorTab: React.FC<EditorTabProps> = ({
             <div className="flex-1">
               <h3 className="text-sm font-bold text-amber-800 font-display">No Advertising Surfaces Detected</h3>
               <p className="text-xs text-amber-600 mt-1 leading-relaxed">
-                This scene hasn't been analyzed for placement opportunities yet. Run the AI Scene Analysis to detect
+                This scene hasn't been analyzed for placement opportunities yet. Run AI surface detection to find
                 billboards, screens, walls, and other surfaces where brand assets can be placed.
               </p>
               <div className="flex items-center gap-3 mt-4">
-                {handleAiSplitAnalyze && activeVideo && (
+                {onDetectSurfacesForScene && activeVideo && selectedSceneId && (() => {
+                  const currentScene = scenesForVideo.find(s => s.id === selectedSceneId);
+                  const isDetecting = currentScene?.surfaceStatus === 'Detecting';
+                  return (
                   <button
-                    onClick={() => handleAiSplitAnalyze(selectedVideo, activeVideo.title)}
-                    disabled={aiAnalyzingVideoId === selectedVideo}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-amber-300 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer shadow-sm"
+                    onClick={() => onDetectSurfacesForScene(selectedSceneId, selectedVideo)}
+                    className={`inline-flex items-center gap-2 px-4 py-2 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer shadow-sm ${
+                      isDetecting ? 'bg-amber-500 hover:bg-amber-400' : 'bg-amber-600 hover:bg-amber-500'
+                    }`}
+                    title={isDetecting ? 'Detection may be stuck. Click to retry.' : 'Run AI surface detection'}
                   >
-                    {aiAnalyzingVideoId === selectedVideo ? (
+                    {isDetecting ? (
                       <>
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Analyzing Video...
+                        Detecting Surfaces...
                       </>
                     ) : (
                       <>
                         <Sparkles className="h-3.5 w-3.5" />
-                        Run AI Scene Analysis
+                        Run AI Surface Detection
                       </>
                     )}
                   </button>
-                )}
+                  );
+                })()}
                 {onNavigateToContent && (
                   <button
                     onClick={onNavigateToContent}
@@ -321,7 +436,6 @@ export const EditorTab: React.FC<EditorTabProps> = ({
       )}
 
       {/* ═══ Main layout ═══ */}
-      {hasCompletedVideos && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* ── LEFT (2/3): Video player + blend + AI enhance ── */}
           <div className="lg:col-span-2 space-y-6">
@@ -394,9 +508,9 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                       <button
                         onClick={() => onPreviewComposite(selectedSurfaceId, surfaceAssetPairs[selectedSurfaceId])}
                         disabled={compositingPreview}
-                        className="px-2.5 py-1 text-[10px] font-bold rounded-lg border border-fuchsia-200 bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 disabled:opacity-50 cursor-pointer transition-colors"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 disabled:bg-fuchsia-300 text-white cursor-pointer transition-all shadow-sm"
                       >
-                        {compositingPreview ? <><Loader2 className="h-3 w-3 inline animate-spin" /> Compositing...</> : '🎬 Composite Preview'}
+                        {compositingPreview ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating Preview...</> : <>🎬 Preview Composite</>}
                       </button>
                     )}
                     <button onClick={() => setPreviewMode(!previewMode)}
@@ -432,11 +546,20 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               }`}>
                 {isLocalVideo && activeVideo ? (
                   <video
+                    ref={videoRef}
                     src={activeVideo.storageKey}
                     className="absolute inset-0 w-full h-full object-contain"
                     controls
                     preload="metadata"
                     id="qa_video_player"
+                    onLoadedMetadata={() => {
+                      const v = videoRef.current;
+                      console.log('[video] loadedmetadata:', { duration: v?.duration, videoWidth: v?.videoWidth, videoHeight: v?.videoHeight, readyState: v?.readyState });
+                    }}
+                    onSeeked={() => {
+                      const v = videoRef.current;
+                      console.log('[video] seeked: currentTime=', v?.currentTime, 'frame=', Math.round((v?.currentTime || 0) * (activeVideo?.frameRate || 30)));
+                    }}
                   />
                 ) : (
                   <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center">
@@ -466,13 +589,57 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                 )}
 
                 {/* SVG surface overlay */}
-                <svg className="absolute inset-0 w-full h-full pointer-events-none z-10" viewBox={viewBoxValue} id="player_overlay_svg" preserveAspectRatio="none">
+                <svg
+                  className="pointer-events-none z-10"
+                  style={{
+                    position: 'absolute',
+                    left: `${videoRect.x}px`,
+                    top: `${videoRect.y}px`,
+                    width: `${videoRect.w}px`,
+                    height: `${videoRect.h}px`,
+                  }}
+                  viewBox={viewBoxValue}
+                  id="player_overlay_svg"
+                  preserveAspectRatio="xMidYMid meet"
+                >
                   <defs>
+                    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                      <feGaussianBlur stdDeviation="3" result="blur" />
+                      <feMerge>
+                        <feMergeNode in="blur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
                     <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
                       <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" />
                     </pattern>
                   </defs>
-                  {surfacesForScene.map(sf => {
+                  {/* Debug: always-visible surface count badge */}
+                  <g className="pointer-events-none">
+                    <rect x="10" y="10" width="230" height="24" rx="6" fill="rgba(0,0,0,0.7)" stroke="rgba(255,255,255,0.3)" strokeWidth="1" />
+                    <text x="22" y="27" fill={surfacesForScene.length > 0 ? "#4ade80" : "#f87171"} fontSize="11" fontWeight="bold" fontFamily="monospace">
+                      {surfacesForScene.length > 0 ? `✓ ${surfacesForScene.length} surfaces` : '✗ No surfaces loaded'}
+                    </text>
+                  </g>
+                  {/* Debug: bright frame border — proves SVG overlay is alive */}
+                  <rect x="2" y="2" width={videoWidth - 4} height={videoHeight - 4} fill="none" stroke="#fbbf24" strokeWidth="3" strokeOpacity="0.6" rx="8" />
+                  {/* Debug: dump first surface coordinates as text */}
+                  {surfacesForScene.length > 0 && (() => {
+                    const first = visibleSurfaces[0] || surfacesForScene[0];
+                    const coords = first.boundaryCoordinates.slice(0, 4).map(p => `${p.x},${p.y}`).join(' → ');
+                    return (
+                      <g className="pointer-events-none">
+                        <rect x="10" y="40" width={videoWidth - 20} height="20" rx="4" fill="rgba(0,0,0,0.6)" />
+                        <text x="20" y="54" fill="#fbbf24" fontSize="9" fontWeight="bold" fontFamily="monospace">
+                          [{first.surfaceType}] coords: [{coords}] conf:{Math.round(first.confidenceScore * 100)}% | showing {visibleSurfaces.length}/{surfacesForScene.length}
+                        </text>
+                      </g>
+                    );
+                  })()}
+                  {/* Debug: crosshair at center to prove overlay position */}
+                  <line x1={videoWidth/2 - 30} y1={videoHeight/2} x2={videoWidth/2 + 30} y2={videoHeight/2} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+                  <line x1={videoWidth/2} y1={videoHeight/2 - 30} x2={videoWidth/2} y2={videoHeight/2 + 30} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+                  {visibleSurfaces.map(sf => {
                     const isSelected = selectedSurfaceId === sf.id;
                     const isExcluded = sf.status === "Excluded";
                     const isApproved = sf.status === "Approved";
@@ -484,17 +651,30 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     const centerY = ys.reduce((a, b) => a + b, 0) / ys.length;
                     const rotAngle = sf.orientationVector?.roll || 0;
                     const fillColor = isExcluded ? "#ef4444" : placedAsset ? "#10b981" : isApproved ? "#14b8a6" : "#3b82f6";
+                    // Validate we have actual coordinates before rendering
+                    if (!sf.boundaryCoordinates || sf.boundaryCoordinates.length < 3) return null;
 
                     return (
-                      <g key={sf.id} className="cursor-pointer pointer-events-auto" onClick={() => setSelectedSurfaceId(sf.id)} id={`svg_surface_${sf.id}`}>
+                      <g key={sf.id} className="cursor-pointer pointer-events-auto" onClick={() => seekToSurface(sf.id)} id={`svg_surface_${sf.id}`}>
+                        {/* Outer glow ring for visibility */}
+                        <polygon
+                          points={pointsString}
+                          fill="none"
+                          stroke={fillColor}
+                          strokeWidth={isSelected ? 8 : 5}
+                          strokeOpacity={0.25}
+                          className="transition-all duration-200"
+                        />
+                        {/* Main polygon */}
                         <polygon
                           points={pointsString}
                           fill={fillColor}
-                          fillOpacity={isSelected ? 0.45 : 0.25}
+                          fillOpacity={isSelected ? 0.55 : 0.4}
                           stroke={fillColor}
-                          strokeWidth={isSelected ? 3 : 2}
-                          strokeDasharray={isSelected ? "none" : "6 3"}
-                          className="transition-all duration-200"
+                          strokeWidth={isSelected ? 3.5 : 2.5}
+                          strokeDasharray="none"
+                          className={`transition-all duration-200 ${!isSelected && !isExcluded ? 'animate-pulse' : ''}`}
+                          filter={isSelected ? 'url(#glow)' : undefined}
                         />
                         {/* Placed asset overlay — actual image or colored fallback */}
                         {placedAsset && (
@@ -558,6 +738,89 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                   <div><span>{activeVideo?.resolution || '—'} · {activeVideo?.frameRate || '—'} FPS</span></div>
                 </div>
               </div>
+
+              {/* ── Surface Detection Summary — quick glance at all detected surfaces ── */}
+              {surfacesForScene.length > 0 && (
+                <div className="mt-4 bg-white border border-slate-200/90 rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider font-display">
+                      🎯 Detected Surfaces ({surfacesForScene.length})
+                    </h4>
+                    {onDetectSurfacesForScene && activeVideo && selectedSceneId && (() => {
+                      const currentScene = scenesForVideo.find(s => s.id === selectedSceneId);
+                      const isDetecting = currentScene?.surfaceStatus === 'Detecting';
+                      return (
+                        <button
+                          onClick={() => onDetectSurfacesForScene(selectedSceneId, selectedVideo)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-white font-semibold text-[10px] rounded-lg transition-all cursor-pointer shadow-sm ${
+                            isDetecting ? 'bg-amber-500 hover:bg-amber-400' : 'bg-blue-600 hover:bg-blue-500'
+                          }`}
+                          title={isDetecting ? 'Detection in progress...' : 'Re-run surface detection to find new or changed surfaces'}
+                        >
+                          {isDetecting ? (
+                            <><Loader2 className="h-3 w-3 animate-spin" /> Detecting...</>
+                          ) : (
+                            <><RefreshCw className="h-3 w-3" /> Re-run Detection</>
+                          )}
+                        </button>
+                      );
+                    })()}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {surfacesForScene.map(sf => {
+                      const isSelected = selectedSurfaceId === sf.id;
+                      const statusColor =
+                        sf.status === 'Approved' ? 'border-emerald-300 bg-emerald-50' :
+                        sf.status === 'Excluded' ? 'border-red-300 bg-red-50' :
+                        'border-blue-300 bg-blue-50';
+                      return (
+                        <button
+                          key={sf.id}
+                          onClick={() => seekToSurface(sf.id)}
+                          className={`text-left p-3 rounded-lg border cursor-pointer transition-all ${statusColor} ${isSelected ? 'ring-2 ring-blue-500 shadow-md' : 'hover:shadow-sm'}`}
+                        >
+                          <div className="flex items-start gap-2.5">
+                            {/* Surface thumbnail */}
+                            {sf.placementImageUrl ? (
+                              <img
+                                src={sf.placementImageUrl}
+                                alt={sf.surfaceType}
+                                className="h-12 w-16 rounded-md object-cover border border-slate-200 shrink-0 bg-slate-100"
+                                loading="lazy"
+                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div className="h-12 w-16 rounded-md bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center">
+                                <MapPin className="h-4 w-4 text-slate-300" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-bold text-slate-800 truncate">{sf.surfaceType}</span>
+                                <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                                  sf.confidenceScore > 0.7 ? 'bg-emerald-100 text-emerald-700' :
+                                  sf.confidenceScore > 0.4 ? 'bg-amber-100 text-amber-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  {Math.round(sf.confidenceScore * 100)}%
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
+                                <span>Viability: {Math.round(sf.viabilityScore * 100)}%</span>
+                                <span>·</span>
+                                <span>{sf.estimatedDepth}m</span>
+                              </div>
+                              {sf.exclusionReason && (
+                                <div className="mt-1 text-[10px] text-red-500 italic truncate">{sf.exclusionReason}</div>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Blend controls */}
               <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200/60 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -686,55 +949,45 @@ export const EditorTab: React.FC<EditorTabProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       if (!aiPromptText.trim()) return;
-                      const prompt = aiPromptText.toLowerCase();
-                      let placed = 0;
-                      for (const asset of campaignAssets) {
-                        if (surfaceAssetPairs[Object.keys(surfaceAssetPairs).find(sid => surfaceAssetPairs[sid] === asset.id) || '']) continue;
-                        for (const sf of surfacesForScene) {
-                          if (surfaceAssetPairs[sf.id]) continue;
-                          const assetNameLower = asset.name.toLowerCase();
-                          const surfaceLower = sf.surfaceType.toLowerCase();
-                          if (prompt.includes(assetNameLower) && prompt.includes(surfaceLower)) {
-                            onPlaceAsset(sf.id, asset.id);
-                            placed++;
-                            break;
-                          }
+                      setAiPlacing(true);
+                      try {
+                        const { suggestPlacements } = await import('../apiClient');
+                        const result = await suggestPlacements({
+                          prompt: aiPromptText,
+                          contentId: selectedVideo || '',
+                          sceneId: currentScene?.id || '',
+                          surfaces: surfacesForScene.map(sf => ({ id: sf.id, surfaceType: sf.surfaceType, confidenceScore: sf.confidenceScore })),
+                          assets: campaignAssets.map(a => ({ id: a.id, name: a.name, brandCategory: a.brandCategory })),
+                        });
+                        let placed = 0;
+                        for (const pair of result.placements) {
+                          if (surfaceAssetPairs[pair.surfaceId]) continue;
+                          if (Object.values(surfaceAssetPairs).includes(pair.assetId)) continue;
+                          onPlaceAsset(pair.surfaceId, pair.assetId);
+                          placed++;
                         }
+                        setAiExplanation(result.explanation);
+                        setAiPromptText('');
+                      } catch (err: any) {
+                        console.error('AI placement failed:', err);
+                        setAiExplanation(err.message || 'Placement failed. Check Gemini API key.');
+                      } finally {
+                        setAiPlacing(false);
                       }
-                      if (placed === 0) {
-                        for (const sf of surfacesForScene) {
-                          if (surfaceAssetPairs[sf.id]) continue;
-                          for (const asset of campaignAssets) {
-                            if (Object.values(surfaceAssetPairs).includes(asset.id)) continue;
-                            const assetWords = asset.name.toLowerCase().split(/\s+/);
-                            if (assetWords.some(w => prompt.includes(w))) {
-                              onPlaceAsset(sf.id, asset.id);
-                              placed++;
-                              break;
-                            }
-                          }
-                          if (placed >= surfacesForScene.filter(s => !surfaceAssetPairs[s.id]).length) break;
-                        }
-                      }
-                      if (placed === 0) {
-                        for (let i = 0; i < Math.min(campaignAssets.length, surfacesForScene.length); i++) {
-                          const sf = surfacesForScene[i];
-                          if (!surfaceAssetPairs[sf.id]) {
-                            onPlaceAsset(sf.id, campaignAssets[i].id);
-                            placed++;
-                          }
-                        }
-                      }
-                      setAiPromptText('');
                     }}
-                    disabled={!aiPromptText.trim() || campaignAssets.length === 0 || surfacesForScene.length === 0}
+                    disabled={!aiPromptText.trim() || campaignAssets.length === 0 || surfacesForScene.length === 0 || aiPlacing}
                     className="w-full inline-flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer shadow-sm"
                   >
-                    <Wand2 className="h-3.5 w-3.5" />
-                    Auto-Place Assets from Instructions
+                    {aiPlacing ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Asking Gemini...</> : <><Wand2 className="h-3.5 w-3.5" />Auto-Place Assets with AI</>}
                   </button>
+
+                  {aiExplanation && (
+                    <div className="text-[10px] text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 font-medium">
+                      💡 {aiExplanation}
+                    </div>
+                  )}
 
                   {campaignAssets.length === 0 && (
                     <div className="text-[10px] text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-200">
@@ -756,6 +1009,17 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 font-display">Surface Details</h3>
               {currentSurface ? (
                 <div className="space-y-4">
+                  {/* Surface thumbnail preview */}
+                  {currentSurface.placementImageUrl && (
+                    <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-300">
+                      <img
+                        src={currentSurface.placementImageUrl}
+                        alt={`${currentSurface.surfaceType} thumbnail`}
+                        className="w-full h-32 object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
                   <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80">
                     <div className="text-[10px] uppercase tracking-wider text-slate-400 font-mono font-bold">Surface Type</div>
                     <div className="text-sm font-bold text-slate-800 mt-0.5">{currentSurface.surfaceType}</div>
@@ -881,11 +1145,11 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     {getPlacedAsset(currentSurface.id) && currentScene && (
                       currentScene.qaStatus === 'Approved' ? (
                         <button
-                          onClick={() => { const asset = getPlacedAsset(currentSurface.id)!; setSubmitConfirming(currentSurface.id); onSubmitPlacement(currentSurface.id, asset.id, selectedCampaignId || ''); setTimeout(() => setSubmitConfirming(''), 2000); }}
+                          onClick={async () => { const asset = getPlacedAsset(currentSurface.id)!; setSubmitConfirming(currentSurface.id); const ok = await onSubmitPlacement(currentSurface.id, asset.id, selectedCampaignId || ''); setTimeout(() => setSubmitConfirming(''), 2000); if (ok) onNavigateToRenders?.(); }}
                           disabled={submitConfirming === currentSurface.id}
                           className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-300 text-white font-bold text-xs rounded-lg cursor-pointer transition-all shadow-sm"
                         >
-                          {submitConfirming === currentSurface.id ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Submitting to Render Queue...</> : <><Cpu className="h-3.5 w-3.5" />Submit Placement for Rendering</>}
+                          {submitConfirming === currentSurface.id ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Submitting to Render Queue...</> : <><Cpu className="h-3.5 w-3.5" />Submit & View Renders</>}
                         </button>
                       ) : (
                         <div className="text-[10px] text-amber-600 bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-center">
@@ -898,15 +1162,14 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               </div>
             )}
 
-            {/* PHASE 4: Continue to Renders */}
+            {/* PHASE 4: View renders (only after submitting at least one) */}
             {placedSurfaceCount > 0 && onNavigateToRenders && (
-              <button onClick={onNavigateToRenders} className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl cursor-pointer transition-all shadow-sm">
-                Continue to Renders <ArrowRight className="h-4 w-4" />
+              <button onClick={onNavigateToRenders} className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 bg-slate-600 hover:bg-slate-500 text-white font-bold text-sm rounded-xl cursor-pointer transition-all shadow-sm">
+                View Renders <ArrowRight className="h-4 w-4" />
               </button>
             )}
           </div>
         </div>
-      )}
     </motion.div>
   );
 };

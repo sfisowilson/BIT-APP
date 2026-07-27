@@ -30,9 +30,15 @@ export const RoleRequestsPanel: React.FC = () => {
     try {
       const qs = filter !== 'all' ? `?status=${filter}` : '';
       const res = await fetchWithAuth(`/api/admin/role-requests${qs}`);
-      setRequests(await res.json());
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).error || 'Failed to load role requests');
+      }
+      const data = await res.json();
+      setRequests(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load role requests', err);
+      setRequests([]);
     } finally {
       setLoading(false);
     }

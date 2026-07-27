@@ -26,16 +26,13 @@ public class AttentionController : ControllerBase
     {
         var isAdmin = User.IsInRole("Admin");
 
+        // With database indexes, each COUNT is sub-millisecond — sequential is fine
         var pendingRoleRequests = isAdmin
             ? await _context.RoleRequests.CountAsync(r => r.Status == "Pending")
             : 0;
-
         var pendingSurfaces = await _context.SurfaceItems.CountAsync(s => s.Status == "Candidate");
-
         var failedRenders = await _context.Renders.CountAsync(r => r.RenderStatus == "Failed");
-
         var failedContent = await _context.ContentItems.CountAsync(c => c.IngestionStatus == "Failed");
-
         var activeAlarms = await _context.Alarms.CountAsync(a => a.IsActive);
 
         var totalAttention = pendingRoleRequests + pendingSurfaces + failedRenders + failedContent + activeAlarms;

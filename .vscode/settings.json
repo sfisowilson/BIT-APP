@@ -1,0 +1,63 @@
+{
+  // ── Performance: exclude build artifacts & large dirs from file watching ──
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.venv/**": true,
+    "**/bin/**": true,
+    "**/obj/**": true,
+    "**/publish/**": true,
+    "**/Uploads/**": true,
+    "**/hashgen/**/bin/**": true,
+    "**/hashgen/**/obj/**": true,
+    "**/*.pt": true,
+    "**/*.mp4": true
+  },
+
+  // ── Exclude from full-text search ──
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/.venv": true,
+    "**/bin": true,
+    "**/obj": true,
+    "**/publish": true,
+    "**/Uploads": true,
+    "**/*.pt": true,
+    "**/*.mp4": true
+  },
+
+  // ── Exclude from file explorer (cleaner sidebar) ──
+  "files.exclude": {
+    "**/.git": false,
+    "**/node_modules": true,
+    "**/.venv": true,
+    "**/bin": true,
+    "**/obj": true,
+    "**/publish": true,
+    "**/Uploads": true,
+    "**/*.pt": true
+  },
+
+  // ── Limit language server scope ──
+  "typescript.tsserver.maxTsServerMemory": 4096,
+  "typescript.disableAutomaticTypeAcquisition": true,
+
+  // ── C# Dev Kit: only watch the .NET projects, not all 46K files ──
+  "dotnet.defaultSolution": "off",
+
+  // ── Pylance: limit analysis to detection-service only ──
+  "python.analysis.include": ["detection-service"],
+  "python.analysis.exclude": [
+    "**/node_modules",
+    "**/.venv",
+    "**/bin",
+    "**/obj",
+    "**/publish",
+    "**/Uploads"
+  ],
+
+  // ── General editor performance ──
+  "editor.minimap.enabled": false,
+  "workbench.editor.enablePreview": false
+}

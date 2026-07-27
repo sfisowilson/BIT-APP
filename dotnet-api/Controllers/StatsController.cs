@@ -27,21 +27,15 @@ public class StatsController : ControllerBase
         var now = DateTime.UtcNow;
         var sevenDaysAgo = now.AddDays(-7);
 
+        // With indexes, each COUNT is sub-millisecond — sequential is fine and avoids DbContext threading issues
         var totalContent = await _context.ContentItems.CountAsync();
         var totalScenes = await _context.SceneItems.CountAsync();
         var totalSurfaces = await _context.SurfaceItems.CountAsync();
         var totalRenders = await _context.Renders.CountAsync();
         var totalCampaigns = await _context.Campaigns.Where(c => c.Status == "Active").CountAsync();
         var activeAlarms = await _context.Alarms.Where(a => a.IsActive).CountAsync();
-
-        var rendersLast7Days = await _context.Renders
-            .Where(r => r.CreatedAt >= sevenDaysAgo)
-            .CountAsync();
-
-        var contentLast7Days = await _context.ContentItems
-            .Where(c => c.CreatedAt >= sevenDaysAgo)
-            .CountAsync();
-
+        var rendersLast7Days = await _context.Renders.Where(r => r.CreatedAt >= sevenDaysAgo).CountAsync();
+        var contentLast7Days = await _context.ContentItems.Where(c => c.CreatedAt >= sevenDaysAgo).CountAsync();
         var avgRenderTime = await _context.Renders
             .Where(r => r.ProcessingDurationMs > 0)
             .Select(r => (double?)r.ProcessingDurationMs)

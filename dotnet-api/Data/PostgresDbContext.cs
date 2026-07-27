@@ -37,24 +37,61 @@ namespace Afrobotics.Bit.Api.Data
                 .HasIndex(u => u.Email)
                 .IsUnique();
 
+            // ── ContentItem indexes ──
             modelBuilder.Entity<ContentItem>()
                 .HasIndex(c => c.StorageKey);
+            modelBuilder.Entity<ContentItem>()
+                .HasIndex(c => c.CampaignId);
+            modelBuilder.Entity<ContentItem>()
+                .HasIndex(c => c.IngestionStatus);
+            modelBuilder.Entity<ContentItem>()
+                .HasIndex(c => c.DetectionJobId);
 
+            // ── CampaignItem indexes ──
             modelBuilder.Entity<CampaignItem>()
                 .HasIndex(c => c.NamingStructureCode);
+            modelBuilder.Entity<CampaignItem>()
+                .HasIndex(c => c.Status);
 
+            // ── SceneItem indexes ──
+            modelBuilder.Entity<SceneItem>()
+                .HasIndex(s => s.ContentId);
+
+            // ── SurfaceItem indexes ──
+            modelBuilder.Entity<SurfaceItem>()
+                .HasIndex(sf => sf.SceneId);
+            modelBuilder.Entity<SurfaceItem>()
+                .HasIndex(sf => sf.Status);
+
+            // ── AdSlotItem indexes ──
+            modelBuilder.Entity<AdSlotItem>()
+                .HasIndex(a => a.SurfaceId);
+
+            // ── ApprovalItem indexes ──
+            modelBuilder.Entity<ApprovalItem>()
+                .HasIndex(a => a.AdSlotId);
+
+            // ── RenderItem indexes ──
+            modelBuilder.Entity<RenderItem>()
+                .HasIndex(r => r.CampaignId);
+            modelBuilder.Entity<RenderItem>()
+                .HasIndex(r => r.ContentId);
+            modelBuilder.Entity<RenderItem>()
+                .HasIndex(r => r.SurfaceId);
+
+            // ── CreativeAsset indexes ──
+            modelBuilder.Entity<CreativeAsset>()
+                .HasIndex(a => a.CampaignId);
+
+            // ── EventLog / Usage / Notification indexes ──
             modelBuilder.Entity<EventLog>()
                 .HasIndex(l => l.EventCode);
-
             modelBuilder.Entity<UsageRecord>()
                 .HasIndex(r => r.Timestamp);
-
             modelBuilder.Entity<UsageRecord>()
                 .HasIndex(r => r.UserId);
-
             modelBuilder.Entity<NotificationItem>()
                 .HasIndex(n => n.Timestamp);
-
             modelBuilder.Entity<NotificationItem>()
                 .HasIndex(n => n.RecipientEmail);
 
@@ -66,6 +103,49 @@ namespace Afrobotics.Bit.Api.Data
             modelBuilder.Entity<AdSlotItem>()
                 .Property(s => s.PricingValue)
                 .HasPrecision(18, 2);
+
+            // ── Cascade delete relationships ──
+            // ContentItem → SceneItem
+            modelBuilder.Entity<SceneItem>()
+                .HasOne<ContentItem>()
+                .WithMany()
+                .HasForeignKey(s => s.ContentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // SceneItem → SurfaceItem
+            modelBuilder.Entity<SurfaceItem>()
+                .HasOne<SceneItem>()
+                .WithMany()
+                .HasForeignKey(sf => sf.SceneId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // SurfaceItem → AdSlotItem
+            modelBuilder.Entity<AdSlotItem>()
+                .HasOne<SurfaceItem>()
+                .WithMany()
+                .HasForeignKey(a => a.SurfaceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // AdSlotItem → ApprovalItem
+            modelBuilder.Entity<ApprovalItem>()
+                .HasOne<AdSlotItem>()
+                .WithMany()
+                .HasForeignKey(a => a.AdSlotId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // ContentItem → RenderItem
+            modelBuilder.Entity<RenderItem>()
+                .HasOne<ContentItem>()
+                .WithMany()
+                .HasForeignKey(r => r.ContentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // SurfaceItem → RenderItem (additional FK — set to null on surface delete)
+            modelBuilder.Entity<RenderItem>()
+                .HasOne<SurfaceItem>()
+                .WithMany()
+                .HasForeignKey(r => r.SurfaceId)
+                .OnDelete(DeleteBehavior.SetNull);
         }
     }
 }

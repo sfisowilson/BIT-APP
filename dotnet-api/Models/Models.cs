@@ -73,7 +73,13 @@ namespace Afrobotics.Bit.Api.Models
         public string Duration { get; set; } = string.Empty; // Perfect HH:MM:SS format (MReq 1)
         
         [Required]
-        public string Resolution { get; set; } = string.Empty; // e.g. 1920x1080 (1080p)
+        public string Resolution { get; set; } = string.Empty; // e.g. "1440x2560" — actual dimensions from ffprobe
+        
+        [Required]
+        public int Width { get; set; }  // Actual video width in pixels
+        
+        [Required]
+        public int Height { get; set; } // Actual video height in pixels
         
         [Required]
         public int FrameRate { get; set; } // e.g. 50 or 60
@@ -102,6 +108,14 @@ namespace Afrobotics.Bit.Api.Models
         [MaxLength(500)]
         public string? LastErrorMessage { get; set; }
         public DateTime? LastErrorAt { get; set; }
+
+        // ── Background job tracking ──
+        public int DetectionProgress { get; set; } // 0-100, updated by Hangfire job
+        [MaxLength(100)]
+        public string? DetectionJobId { get; set; } // Hangfire job ID for status polling
+        public bool IsDetectionPaused { get; set; } = false;
+        [MaxLength(50)]
+        public string? JobState { get; set; } // Enqueued, Processing, Paused, Completed, Cancelled, Failed
     }
 
     public class SceneItem
@@ -132,6 +146,14 @@ namespace Afrobotics.Bit.Api.Models
         public string? AiStatus { get; set; }
         public string? AiOutputDescription { get; set; }
         public string? AiModelUsed { get; set; }
+
+        /// <summary>Relative path to scene thumbnail JPEG (e.g. "thumbnails/scene-abc123.jpg"). Served via /api/content/file/.</summary>
+        [MaxLength(500)]
+        public string? ThumbnailPath { get; set; }
+
+        /// <summary>Per-scene surface detection status: Pending | Detecting | Completed | Failed.</summary>
+        [MaxLength(20)]
+        public string SurfaceStatus { get; set; } = "Pending";
     }
 
     public class SurfaceItem
@@ -166,6 +188,20 @@ namespace Afrobotics.Bit.Api.Models
         public string? ExclusionReason { get; set; }
         
         public string? PlacementImageUrl { get; set; }
+
+        /// <summary>Frame number where this surface was detected (0-based). Used for video seek.</summary>
+        public int? DetectedAtFrame { get; set; }
+
+        /// <summary>
+        /// Per-frame tracking data: JSON array of [{frame, boundary: [{x,y},...], driftConfidence}, ...].
+        /// Populated by the surface tracking engine (SAM 3 video mode) after operator boundary adjustment.
+        /// </summary>
+        [MaxLength(100000)]
+        public string? TrackedBoundariesJson { get; set; }
+
+        /// <summary>Gemini-generated visual description optimized for SAM3 segmentation.</summary>
+        [MaxLength(500)]
+        public string? Sam3Prompt { get; set; }
     }
 
     public class CampaignItem

@@ -3,6 +3,8 @@ export interface ContentItem {
   title: string;
   duration: string;
   resolution: string;
+  width: number;   // actual video width from ffprobe
+  height: number;  // actual video height from ffprobe
   frameRate: number;
   sourceChannel: string;
   storageKey: string;
@@ -18,6 +20,11 @@ export interface ContentItem {
   // ── Error tracking ──
   lastErrorMessage?: string;
   lastErrorAt?: string;
+  // ── Background job tracking ──
+  detectionProgress: number;  // 0–100, updated by Hangfire during scene detection
+  detectionJobId?: string;    // Hangfire job ID for status polling
+  isDetectionPaused: boolean; // Whether the detection job is paused by an operator
+  jobState?: string;          // Hangfire job state: Enqueued, Processing, Paused, Succeeded, Failed, Cancelled
 }
 
 export interface SceneItem {
@@ -47,6 +54,7 @@ export interface SurfaceItemResponse {
   status: string;
   exclusionReason?: string;
   placementImageUrl?: string;
+  detectedAtFrame?: number;
 }
 
 /** Parsed surface with deserialized coordinates and orientation */
@@ -62,6 +70,15 @@ export interface SurfaceItem {
   status: "Candidate" | "Approved" | "Excluded" | "Pending";
   exclusionReason?: string;
   placementImageUrl?: string;
+  trackedBoundaries?: TrackedBoundary[];  // per-frame tracking data
+  detectedAtFrame?: number;              // frame where detected, for video seek
+}
+
+/** Per-frame boundary from surface tracking engine */
+export interface TrackedBoundary {
+  frame: number;
+  boundary: { x: number; y: number }[];
+  driftConfidence: number;  // 0.0–1.0
 }
 
 /** Parse a SurfaceItemResponse from the API into a SurfaceItem with proper types */
@@ -70,7 +87,12 @@ export function parseSurfaceItem(raw: SurfaceItemResponse): SurfaceItem {
   let orientation: { yaw: number; pitch: number; roll: number } = { yaw: 0, pitch: 0, roll: 0 };
   
   try {
-    coords = JSON.parse(raw.boundaryCoordinatesJson || '[]');
+    const rawCoords = JSON.parse(raw.boundaryCoordinatesJson || '[]');
+    coords = rawCoords.map((c: any) => {
+      // Handle both formats: {X,Y} (old) | {x,y} (new) | [x,y] (Gemini raw)
+      if (Array.isArray(c)) return { x: Number(c[0]) || 0, y: Number(c[1]) || 0 };
+      return { x: Number(c.x ?? c.X) || 0, y: Number(c.y ?? c.Y) || 0 };
+    });
   } catch { /* keep default */ }
   
   try {
@@ -89,6 +111,7 @@ export function parseSurfaceItem(raw: SurfaceItemResponse): SurfaceItem {
     status: raw.status as SurfaceItem['status'],
     exclusionReason: raw.exclusionReason,
     placementImageUrl: raw.placementImageUrl,
+    detectedAtFrame: raw.detectedAtFrame,
   };
 }
 
@@ -497,3 +520,25 @@ export const TIMELINE_DATA: DaySchedule[] = [
     milestone: true
   }
 ];
+
+// ─── Job Management Types ─────────────────────────────────────────────
+
+/** A detection job as returned by GET /api/jobs */
+export interface DetectionJob {
+  jobId: string | null;
+  contentId: string;
+  videoTitle: string;
+  state: string;           // Enqueued, Processing, Paused, Succeeded, Failed, Cancelled
+  isPaused: boolean;
+  progress: number;        // 0–100
+  ingestionStatus: string;
+  startedAt?: string;
+  completedAt?: string;
+  lastErrorMessage?: string;
+}
+
+/** Paginated response wrapper for jobs list */
+export interface JobsListResponse {
+  data: DetectionJob[];
+  count: number;
+}

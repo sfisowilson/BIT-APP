@@ -5,6 +5,8 @@
  * so relative URLs work in both dev and production.
  */
 
+import type { DetectionJob, JobsListResponse } from './types';
+
 const TOKEN_KEY = 'bit_token';
 const USER_KEY = 'bit_user';
 
@@ -247,14 +249,95 @@ export async function retranscode(
   return r.json();
 }
 
-/** Re-run scene detection for a content item. */
+/** Re-run scene detection for a content item. Returns jobId for polling. */
 export async function redetectScenes(
   contentId: string,
-): Promise<{ success: boolean; id: string; ingestionStatus: string; message: string }> {
+): Promise<{ jobId: string; id: string; ingestionStatus: string; message: string }> {
   const r = await fetchWithAuth(`/api/content/${contentId}/redetect-scenes`, { method: 'POST' });
   if (!r.ok) {
     const data = await r.json();
     throw new Error(data.error || 'Failed to restart scene detection.');
+  }
+  return r.json();
+}
+
+/** Queue scenes-only detection (FFmpeg cuts + thumbnails, no surface detection). */
+export async function detectScenesOnly(
+  contentId: string,
+  videoTitle: string,
+): Promise<{ jobId: string; contentId: string; message: string }> {
+  const r = await fetchWithAuth('/api/video/detect-scenes', {
+    method: 'POST',
+    body: JSON.stringify({ contentId, videoTitle }),
+  });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to enqueue scenes-only detection.');
+  }
+  return r.json();
+}
+
+/** Queue per-scene surface detection for a single scene. */
+export async function detectSurfacesForScene(
+  sceneId: string,
+): Promise<{ jobId: string; sceneId: string; message: string }> {
+  const r = await fetchWithAuth(`/api/scenes/${sceneId}/detect-surfaces`, { method: 'POST' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to enqueue surface detection.');
+  }
+  return r.json();
+}
+
+/** Fetch surfaces for multiple scenes in a single batched request. */
+export async function fetchSurfacesBatch(sceneIds: string[]): Promise<any[]> {
+  if (sceneIds.length === 0) return [];
+  const r = await fetchWithAuth(`/api/scenes/surfaces/batch?sceneIds=${encodeURIComponent(sceneIds.join(','))}`);
+  if (!r.ok) throw new Error('Failed to fetch surfaces batch');
+  return r.json();
+}
+
+/** AI-powered placement suggestions via Gemini. */
+export interface AiPlacementSuggestion {
+  placements: { surfaceId: string; assetId: string; reasoning: string }[];
+  explanation: string;
+  modelUsed: string;
+}
+
+export async function suggestPlacements(payload: {
+  prompt: string;
+  contentId: string;
+  sceneId: string;
+  surfaces: { id: string; surfaceType: string; confidenceScore: number }[];
+  assets: { id: string; name: string; brandCategory: string }[];
+}): Promise<AiPlacementSuggestion> {
+  const r = await fetchWithAuth('/api/placements/suggest', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to get placement suggestions.');
+  }
+  return r.json();
+}
+
+/** Poll for detection job progress. Returns 0-100 percentage and current status. */
+export async function getDetectionStatus(
+  contentId: string,
+): Promise<{
+  contentId: string;
+  progress: number;
+  ingestionStatus: string;
+  jobId: string | null;
+  errorMessage: string | null;
+  completed: boolean;
+  failed: boolean;
+}> {
+  const r = await fetchWithAuth(`/api/content/${contentId}/detection-status`, { method: 'GET' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to get detection status.');
   }
   return r.json();
 }
@@ -283,6 +366,60 @@ export async function resetPipeline(
   if (!r.ok) {
     const data = await r.json();
     throw new Error(data.error || 'Failed to reset pipeline.');
+  }
+  return r.json();
+}
+
+// ─── Job Management API ─────────────────────────────────────────────────
+
+/** Fetch all background detection jobs with their current state. */
+export async function getJobs(): Promise<JobsListResponse> {
+  const r = await fetchWithAuth('/api/jobs');
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to fetch jobs.');
+  }
+  return r.json();
+}
+
+/** Stop/Cancel a background detection job by jobId or contentId. */
+export async function stopJob(jobId: string): Promise<{ success: boolean; jobId: string; contentId: string; message: string }> {
+  const r = await fetchWithAuth(`/api/jobs/${jobId}/stop`, { method: 'POST' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to stop job.');
+  }
+  return r.json();
+}
+
+/** Pause a background detection job by jobId or contentId. */
+export async function pauseJob(jobId: string): Promise<{ success: boolean; jobId: string; contentId: string; message: string }> {
+  const r = await fetchWithAuth(`/api/jobs/${jobId}/pause`, { method: 'POST' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to pause job.');
+  }
+  return r.json();
+}
+
+/** Resume a paused background detection job by jobId or contentId. */
+export async function resumeJob(jobId: string): Promise<{ success: boolean; jobId: string; contentId: string; message: string }> {
+  const r = await fetchWithAuth(`/api/jobs/${jobId}/resume`, { method: 'POST' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to resume job.');
+  }
+  return r.json();
+}
+
+// ─── Surface Tracking API ────────────────────────────────────────────────
+
+/** Trigger per-frame surface tracking for an existing surface. Enqueues a Hangfire job. */
+export async function trackSurface(surfaceId: string): Promise<{ jobId: string; surfaceId: string; message: string }> {
+  const r = await fetchWithAuth(`/api/surfaces/${surfaceId}/track`, { method: 'POST' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to enqueue tracking job.');
   }
   return r.json();
 }

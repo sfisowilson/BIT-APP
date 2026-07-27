@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text;
 using Hangfire;
 using Hangfire.PostgreSql;
@@ -6,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Afrobotics.Bit.Api.Data;
+using Afrobotics.Bit.Api.Hubs;
 using Afrobotics.Bit.Api.Repositories;
 using Afrobotics.Bit.Api.Services;
 
@@ -46,7 +48,7 @@ builder.Services.AddCors(options =>
 
 // Configure JWT Authentication (MReq 8)
 var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "AFROBOTICS_BIT_SUPER_SECRET_SECURITY_KEY_2026_JWT";
-var key = Encoding.ASCII.GetBytes(jwtSecret);
+var key = Encoding.UTF8.GetBytes(jwtSecret);
 
 builder.Services.AddAuthentication(options =>
 {
@@ -57,13 +59,31 @@ builder.Services.AddAuthentication(options =>
 {
     options.RequireHttpsMetadata = false;
     options.SaveToken = true;
+    options.MapInboundClaims = false; // preserve our claim types exactly as issued
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuerSigningKey = true,
         IssuerSigningKey = new SymmetricSecurityKey(key),
         ValidateIssuer = false,
         ValidateAudience = false,
-        ClockSkew = TimeSpan.Zero
+        ClockSkew = TimeSpan.Zero,
+        RoleClaimType = ClaimTypes.Role,
+        NameClaimType = ClaimTypes.Email,
+    };
+
+    // Allow SignalR to send JWT via ?access_token= query string (WebSocket doesn't support custom headers)
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        },
     };
 });
 
@@ -88,51 +108,42 @@ builder.Services.AddScoped<IAlarmService, AlarmService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAssetService, AssetService>();
 builder.Services.AddScoped<ILogService, LogService>();
+builder.Services.AddScoped<IInvoiceService, InvoiceService>();
 
-// ── AI Engine Registration — admin-configurable via Platform Settings ──
-// Each engine reads its setting at startup. Admin changes take effect on next app restart.
-// Defaults to "basic" (no external API) if setting is missing.
+// ── Phase 1: Engine implementations & Factory ──
+builder.Services.AddScoped<GeminiDetectionService>();
+builder.Services.AddScoped<GeminiPlacementService>();
+builder.Services.AddScoped<FalAiSam2Service>();
+builder.Services.AddScoped<FalAiSam3Service>();
+builder.Services.AddScoped<ReplicateSurfaceDetectionService>();
+builder.Services.AddScoped<GoogleVisionDetectionService>();
+builder.Services.AddScoped<YoloSurfaceDetectionService>();
+builder.Services.AddScoped<GroundingDinoDetectionService>();
+builder.Services.AddScoped<BasicSurfaceDetectionService>();
+builder.Services.AddScoped<GoogleVisionBrandAnalysisService>();
+builder.Services.AddScoped<GeminiBrandAnalysisService>();
+builder.Services.AddScoped<BasicBrandAnalysisService>();
+builder.Services.AddScoped<OpenCvCompositingService>();
+builder.Services.AddScoped<BasicCompositingService>();
 
-// Surface detection engine
-builder.Services.AddScoped<ISurfaceDetectionService>(sp =>
-{
-    var settings = sp.GetRequiredService<IPlatformSettingsService>();
-    var engine = settings.GetAsync("engine_detection").Result;
-    return engine switch
-    {
-        "replicate" => ActivatorUtilities.CreateInstance<ReplicateSurfaceDetectionService>(sp),
-        "google"    => ActivatorUtilities.CreateInstance<GoogleVisionDetectionService>(sp),
-        _           => ActivatorUtilities.CreateInstance<BasicSurfaceDetectionService>(sp),
-    };
-});
+// ── Phase 3: Surface tracking engine ──
+builder.Services.AddScoped<Sam3TrackingService>();
+builder.Services.AddScoped<BasicTrackingService>();
 
-// Brand analysis engine
-builder.Services.AddScoped<IBrandAnalysisService>(sp =>
-{
-    var settings = sp.GetRequiredService<IPlatformSettingsService>();
-    var engine = settings.GetAsync("engine_brand_analysis").Result;
-    return engine switch
-    {
-        "google" => ActivatorUtilities.CreateInstance<GoogleVisionBrandAnalysisService>(sp),
-        "gemini" => ActivatorUtilities.CreateInstance<GeminiBrandAnalysisService>(sp),
-        _        => ActivatorUtilities.CreateInstance<BasicBrandAnalysisService>(sp),
-    };
-});
+builder.Services.AddScoped<IEngineFactory, EngineFactory>();
+builder.Services.AddScoped<SurfaceDetectionPipeline>();
 
-// Compositing engine
-builder.Services.AddScoped<ICompositingService>(sp =>
-{
-    var settings = sp.GetRequiredService<IPlatformSettingsService>();
-    var engine = settings.GetAsync("engine_compositing").Result;
-    return engine switch
-    {
-        "opencv" => ActivatorUtilities.CreateInstance<OpenCvCompositingService>(sp),
-        _        => ActivatorUtilities.CreateInstance<BasicCompositingService>(sp),
-    };
-});
+// AI Engine Resolvers — cached engine keys avoid per-request DB calls
+builder.Services.AddScoped<ISurfaceDetectionService>(sp => sp.GetRequiredService<IEngineFactory>().GetSurfaceDetectionEngine());
+builder.Services.AddScoped<IBrandAnalysisService>(sp => sp.GetRequiredService<IEngineFactory>().GetBrandAnalysisEngine());
+builder.Services.AddScoped<ICompositingService>(sp => sp.GetRequiredService<IEngineFactory>().GetCompositingEngine());
+builder.Services.AddScoped<ISurfaceTrackingService>(sp => sp.GetRequiredService<IEngineFactory>().GetTrackingEngine());
 
 // Brand-safety check pipeline (MReq 4)
 builder.Services.AddScoped<IBrandSafetyCheckService, BrandSafetyCheckService>();
+
+// AI placement assistant
+builder.Services.AddScoped<IAiPlacementService, GeminiPlacementService>();
 
 // Event logging (MReq 20) — emits events from pipeline stages automatically
 builder.Services.AddScoped<IEventLogService, EventLogService>();
@@ -148,6 +159,11 @@ builder.Services.AddScoped<IPlatformSettingsService, PlatformSettingsService>();
 
 // Hangfire job services
 builder.Services.AddScoped<RenderJobService>();
+builder.Services.AddScoped<SceneDetectionJobService>();
+builder.Services.AddScoped<SurfaceTrackingJobService>();
+
+// ── SignalR — real-time push for pipeline progress, eliminating polling ──
+builder.Services.AddSignalR();
 
 // ── Hangfire — background job processing with PostgreSQL storage ──
 var hangfireConnString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -158,7 +174,7 @@ builder.Services.AddHangfireServer();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// Show detailed errors in dev, friendly messages in production
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
@@ -178,6 +194,9 @@ app.UseMiddleware<Afrobotics.Bit.Api.Middleware.UsageTrackingMiddleware>();
 
 app.MapControllers();
 
+// ── SignalR hub — real-time pipeline progress push ──
+app.MapHub<BitHub>("/hubs/bit");
+
 // ── Hangfire dashboard (admin-only) ──
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
@@ -190,8 +209,6 @@ RecurringJob.AddOrUpdate<Afrobotics.Bit.Api.Controllers.ContentController>("clea
 
 RecurringJob.AddOrUpdate<Afrobotics.Bit.Api.Controllers.UsageController>("archive-usage-records",
     c => c.ArchiveUsageRecords(), Cron.Weekly);
-
-app.Run();
 
 // Apply EF Core migrations on startup & seed initial data if database is empty
 using (var scope = app.Services.CreateScope())
@@ -208,9 +225,8 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        // Tables may already exist from a previous EnsureCreated() call.
-        // Log a warning and continue — the seed step below will still run.
-        logger.LogWarning(ex, "Migration failed (tables may already exist). Continuing to seed step.");
+        // Columns or tables may already exist from previous runs.
+        logger.LogWarning(ex, "Migration warning (objects may already exist). Continuing.");
     }
 
     // Step 2: seed initial data (development only — skips in production)

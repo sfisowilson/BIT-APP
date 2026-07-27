@@ -3,12 +3,14 @@ namespace Afrobotics.Bit.Api.DTOs
     public class IngestVideoDto
     {
         public string Title { get; set; } = string.Empty;
-        public string Resolution { get; set; } = "1920x1080 (1080p)";
+        public string Resolution { get; set; } = "1920x1080";
+        public int Width { get; set; } = 1920;
+        public int Height { get; set; } = 1080;
         public int FrameRate { get; set; } = 50;
-        public string Duration { get; set; } = "00:05:00";  // MReq 1: HH:MM:SS
+        public string Duration { get; set; } = "00:05:00";
         public string SourceChannel { get; set; } = "Manual Upload";
         public string? StorageKey { get; set; }
-        public string? CampaignId { get; set; }  // MReq 10: associate with campaign
+        public string? CampaignId { get; set; }
     }
 
     /// <summary>DTO for transitioning content to a new pipeline stage.</summary>

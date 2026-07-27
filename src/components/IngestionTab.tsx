@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Video, Plus, Trash2, Sparkles, Loader2, Info, CheckCircle, Clock, Film, Play, Eye, Search, RefreshCw, AlertTriangle, RotateCcw } from 'lucide-react';
 import { ContentItem, SceneItem } from '../types';
 import { usePaginatedData } from '../hooks/usePaginatedData';
+import { getDetectionStatus } from '../apiClient';
 import { Pagination } from './Pagination';
 
 interface IngestionTabProps {
@@ -136,6 +137,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
 
   const [contentStatusFilter, setContentStatusFilter] = React.useState('');
   const [contentSearchFilter, setContentSearchFilter] = React.useState('');
+  const [reDetectConfirmId, setReDetectConfirmId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setContentFilters({
@@ -144,6 +146,38 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
       search: contentSearchFilter || undefined,
     });
   }, [selectedCampaignId, contentStatusFilter, contentSearchFilter]);
+
+  // ── Poll individual detection progress for items in SceneDetecting ──
+  const [detectionProgressMap, setDetectionProgressMap] = React.useState<Record<string, number>>({});
+  const detectingIds = contentData
+    .filter(c => c.ingestionStatus === 'SceneDetecting')
+    .map(c => c.id);
+
+  React.useEffect(() => {
+    if (detectingIds.length === 0) {
+      // Clear stale entries when nothing is detecting
+      if (Object.keys(detectionProgressMap).length > 0) setDetectionProgressMap({});
+      return;
+    }
+
+    const interval = setInterval(async () => {
+      let needsRefresh = false;
+      const updates: Record<string, number> = {};
+
+      await Promise.all(detectingIds.map(async (id) => {
+        try {
+          const status = await getDetectionStatus(id);
+          updates[id] = status.progress;
+          if (status.completed || status.failed) needsRefresh = true;
+        } catch { /* silent — will retry next interval */ }
+      }));
+
+      setDetectionProgressMap(prev => ({ ...prev, ...updates }));
+      if (needsRefresh) refreshContent();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [detectingIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedCampaignName = campaignList?.find(c => c.id === selectedCampaignId)?.name;
 
@@ -168,12 +202,15 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
       if (video.videoWidth && video.videoHeight) {
         const w = video.videoWidth;
         const h = video.videoHeight;
-        if (w >= 3840) setNewVideoRes('3840x2160 (4K)');
-        else if (w >= 1920) setNewVideoRes('1920x1080 (1080p)');
-        else if (w >= 1280) setNewVideoRes('1280x720');
+        const maxDim = Math.max(w, h);
+        if (maxDim >= 3840) setNewVideoRes(`${w}x${h} (4K)`);
+        else if (maxDim >= 1920) setNewVideoRes(`${w}x${h} (1080p)`);
+        else if (maxDim >= 1280) setNewVideoRes(`${w}x${h} (720p)`);
         else setNewVideoRes(`${w}x${h}`);
-      }      // FPS not available from browser API — defaults to 25; adjust manually for your source
-      setNewVideoFps(25);      setMetadataExtracted(true);
+      }
+      // FPS not available from browser API — defaults to 25; adjust manually for your source
+      setNewVideoFps(25);
+      setMetadataExtracted(true);
       URL.revokeObjectURL(url);
     };
     video.onerror = () => {
@@ -652,6 +689,27 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                     </span>
                   </div>
 
+                  {/* Detection progress bar (only while SceneDetecting) */}
+                  {video.ingestionStatus === 'SceneDetecting' && (
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[9px] font-mono font-bold text-fuchsia-600 flex items-center gap-1">
+                          <Sparkles className="h-3 w-3" />
+                          Detecting scenes...
+                        </span>
+                        <span className="text-[9px] font-mono font-bold text-fuchsia-600">
+                          {detectionProgressMap[video.id] ?? video.detectionProgress}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-fuchsia-500 h-full rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${detectionProgressMap[video.id] ?? video.detectionProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Actions bar */}
                   <div className="mt-3 pt-3 border-t border-slate-200/50 flex flex-wrap items-center gap-2">
                     {!isComplete && handleAiSplitAnalyze && (
@@ -681,17 +739,31 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                         disabled={isPipelineActionPending !== null}
                         onClick={async (e) => {
                           e.stopPropagation();
+                          if (reDetectConfirmId !== video.id) {
+                            // First click — show confirmation
+                            setReDetectConfirmId(video.id);
+                            return;
+                          }
+                          // Second click — confirmed
+                          setReDetectConfirmId(null);
                           await onRedetectScenes(video.id, video.title);
                         }}
+                        onBlur={() => setReDetectConfirmId(null)}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase transition-all border cursor-pointer ${
                           isPipelineActionPending === video.id
                             ? 'bg-amber-50 border-amber-200 text-amber-600'
+                            : reDetectConfirmId === video.id
+                            ? 'bg-red-500 hover:bg-red-400 border-red-600 text-white shadow-xs'
                             : 'bg-amber-500 hover:bg-amber-400 border-amber-600 text-white shadow-xs'
                         }`}
-                        title="Re-run scene detection to regenerate scene cuts and surfaces"
+                        title={reDetectConfirmId === video.id
+                          ? "Click again to confirm — this will destroy all existing scenes and surfaces"
+                          : "Re-run scene detection to regenerate scene cuts and surfaces"}
                       >
                         {isPipelineActionPending === video.id ? (
                           <><Loader2 className="h-3 w-3 animate-spin" /> Re-running...</>
+                        ) : reDetectConfirmId === video.id ? (
+                          <><AlertTriangle className="h-3 w-3" /> Click to confirm re-detect</>
                         ) : (
                           <><RefreshCw className="h-3 w-3" /> Re-detect Scenes</>
                         )}

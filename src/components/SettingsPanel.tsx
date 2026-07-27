@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Settings, Mail, Upload, Sliders, Save, Loader2, CheckCircle, AlertCircle, Cpu } from 'lucide-react';
+import { Settings, Mail, Upload, Sliders, Save, Loader2, CheckCircle, AlertCircle, Cpu, Key, Video, Radar } from 'lucide-react';
 import { fetchWithAuth } from '../apiClient';
 
 type SettingsMap = Record<string, string>;
@@ -253,60 +253,218 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
         )}
 
         {activeTab === 'engine' && (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800">
-              <strong>Engine Selection</strong> — choose which AI service powers each pipeline stage. Switching takes effect on the next content ingestion. API keys are stored encrypted at rest.
+              <strong>Engine Selection</strong> — choose which AI service powers each pipeline stage. Switching takes effect on the next content ingestion. Store API keys securely — they are encrypted at rest in the database.
             </div>
 
-            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-2">Detection Engine (MReq 2)</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Engine</label>
-                <select
-                  value={settings['engine_detection'] || 'basic'}
-                  onChange={e => updateField('engine_detection', e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                >
-                  <option value="basic">Basic — Random surfaces (dev)</option>
-                  <option value="replicate">Replicate — SAM 2 segmentation</option>
-                  <option value="google">Google — Cloud Vision</option>
-                </select>
+            {/* ── API Keys Section ── */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Key className="h-4 w-4 text-violet-500" />
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">API Keys</h4>
               </div>
-              {renderField('replicate_api_key', 'Replicate API Key', 'r8_...', 'password')}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {renderField('gemini_api_key', 'Gemini API Key', 'AIza...', 'password')}
+                {renderField('falai_api_key', 'Fal.ai API Key', 'key-...', 'password')}
+                {renderField('replicate_api_key', 'Replicate API Key', 'r8_...', 'password')}
+                {renderField('google_vision_api_key', 'Google Vision API Key', 'AIza...', 'password')}
+              </div>
             </div>
 
+            {/* ── Surface Detection Engine ── */}
             <div className="pt-3 border-t border-slate-100">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-2">Brand Analysis Engine (MReq 3)</h4>
+              <div className="flex items-center gap-2 mb-3">
+                <Cpu className="h-4 w-4 text-blue-500" />
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Surface Detection Engine</h4>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Engine</label>
                   <select
-                    value={settings['engine_brand_analysis'] || 'basic'}
-                    onChange={e => updateField('engine_brand_analysis', e.target.value)}
+                    value={settings['engine_detection'] || 'basic'}
+                    onChange={e => updateField('engine_detection', e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   >
-                    <option value="basic">Basic — No analysis (dev)</option>
-                    <option value="google">Google — Cloud Vision (logo + text)</option>
-                    <option value="gemini">Gemini — Vision (multimodal)</option>
+                    <option value="basic">Basic — throws (forces config)</option>
+                    <option value="yolo">YOLO — Real-time object detection (local)</option>
+                    <option value="grounding-dino">Grounding DINO v2 — Open-vocabulary (local)</option>
+                    <option value="gemini">Gemini 3 Flash — Multimodal (cloud)</option>
+                    <option value="google">Google — Cloud Vision</option>
+                    <option value="replicate">Replicate — SAM 3 (cloud)</option>
                   </select>
                 </div>
-                {renderField('google_vision_api_key', 'Google Vision API Key', 'AIza...', 'password')}
+                {renderField('gemini_model', 'Gemini Model', 'gemini-3-flash')}
+                {renderField('gemini_timeout_seconds', 'Request Timeout (seconds)', '90', 'number')}
+
+                {/* Gemini API quota status */}
+                {settings['gemini_quota_status'] && (() => {
+                  try {
+                    const q = JSON.parse(settings['gemini_quota_status']);
+                    const remaining = parseInt(q.remaining);
+                    const limit = parseInt(q.limit);
+                    const isValid = !isNaN(remaining) && !isNaN(limit) && limit > 0;
+                    const pct = isValid ? Math.round((remaining / limit) * 100) : 0;
+                    const color = !isValid ? 'text-slate-400' : remaining <= 0 ? 'text-red-500' : pct < 25 ? 'text-amber-500' : 'text-emerald-500';
+                    const label = !isValid ? 'Waiting for first API call...' : `${remaining}/${limit} remaining`;
+                    return (
+                      <div className="col-span-2 bg-slate-50 border border-slate-200 rounded-lg p-3 mt-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">Gemini API Quota</span>
+                          <span className={`text-[10px] font-bold font-mono ${color}`}>{label}</span>
+                        </div>
+                        {isValid && (
+                          <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${remaining <= 0 ? 'bg-red-500' : pct < 25 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                              style={{ width: `${Math.max(0, pct)}%` }} />
+                          </div>
+                        )}
+                        <div className="text-[9px] text-slate-400 font-mono mt-1">
+                          Last checked: {q.checkedAt || 'never'} | Retry after: {q.retryAfter || q.retryAfterSeconds || '?'}s
+                        </div>
+                      </div>
+                    );
+                  } catch { return null; }
+                })()}
               </div>
-              {renderField('gemini_api_key', 'Gemini API Key', 'AIza...', 'password')}
+
+              {/* YOLO-specific settings */}
+              {settings['engine_detection'] === 'yolo' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                {renderField('yolo_service_url', 'YOLO Service URL', 'http://localhost:8001')}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Model Size</label>
+                  <select
+                    value={settings['yolo_model_size'] || 'large'}
+                    onChange={e => updateField('yolo_model_size', e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  >
+                    <option value="nano">Nano — ~6 MB, fastest</option>
+                    <option value="small">Small — ~23 MB</option>
+                    <option value="medium">Medium — ~52 MB</option>
+                    <option value="large">Large — ~87 MB</option>
+                    <option value="xlarge">XLarge — ~116 MB, most accurate</option>
+                  </select>
+                </div>
+                {renderField('yolo_confidence', 'Confidence (0–1)', '0.35', 'number')}
+                {renderField('yolo_iou', 'IoU Threshold (0–1)', '0.45', 'number')}
+                {renderField('yolo_frame_skip', 'Frame Skip (1 = every frame)', '1', 'number')}
+              </div>
+              )}
+
+              {/* Grounding DINO v2 settings */}
+              {settings['engine_detection'] === 'grounding-dino' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Model Variant</label>
+                  <select
+                    value={settings['gd_model_variant'] || 'base'}
+                    onChange={e => updateField('gd_model_variant', e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  >
+                    <option value="base">Base — Full accuracy</option>
+                    <option value="tiny">Tiny — Faster, lower accuracy</option>
+                  </select>
+                </div>
+                {renderField('gd_box_threshold', 'Box Threshold (0–1)', '0.25', 'number')}
+                {renderField('gd_text_threshold', 'Text Threshold (0–1)', '0.20', 'number')}
+                {renderField('gd_detection_interval', 'Detection Interval (frames)', '10', 'number')}
+                {renderField('gd_flow_motion_threshold', 'Flow Motion Threshold', '2.5', 'number')}
+                {renderField('gd_track_min_frames', 'Min Track Frames', '3', 'number')}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Modules</label>
+                  <div className="space-y-1.5 mt-1">
+                    {[
+                      ['gd_enable_sam', 'SAM Segmentation'],
+                      ['gd_enable_depth', 'Depth Anything V2'],
+                      ['gd_enable_brand_safety', 'CLIP Brand Safety'],
+                      ['gd_enable_tracking', 'Multi-Frame Tracking'],
+                      ['gd_adaptive_frame_skip', 'Adaptive Frame Skip'],
+                    ].map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings[key] !== 'false'}
+                          onChange={e => updateField(key, e.target.checked ? 'true' : 'false')}
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              )}
+
+              {/* Replicate SAM 3 settings */}
+              {settings['engine_detection'] === 'replicate' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                {renderField('replicate_sam3_model', 'SAM 3 Model Slug', 'lucataco/sam3-image')}
+                {renderField('replicate_sam3_version', 'Version Hash (pin this)', 'abc123def...')}
+                {renderField('replicate_box_threshold', 'Box Threshold (0–1)', '0.25', 'number')}
+                {renderField('replicate_text_threshold', 'Text Threshold (0–1)', '0.20', 'number')}
+              </div>
+              )}
             </div>
 
+            {/* ── Brand Analysis Engine ── */}
             <div className="pt-3 border-t border-slate-100">
-              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-2">Compositing Engine (MReq 6)</h4>
+              <div className="flex items-center gap-2 mb-3">
+                <Radar className="h-4 w-4 text-emerald-500" />
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Brand Analysis Engine</h4>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Engine</label>
+                <select
+                  value={settings['engine_brand_analysis'] || 'basic'}
+                  onChange={e => updateField('engine_brand_analysis', e.target.value)}
+                  className="w-full max-w-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                >
+                  <option value="basic">Basic — No analysis (skip)</option>
+                  <option value="google">Google — Cloud Vision (logo + text)</option>
+                  <option value="gemini">Gemini 3 Flash — Multimodal analysis</option>
+                </select>
+              </div>
+            </div>
+
+            {/* ── Compositing Engine ── */}
+            <div className="pt-3 border-t border-slate-100">
+              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-2">Compositing Engine</h4>
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Engine</label>
                 <select
                   value={settings['engine_compositing'] || 'basic'}
                   onChange={e => updateField('engine_compositing', e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="w-full max-w-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 >
-                  <option value="basic">Basic — Placeholder compositing (dev)</option>
-                  <option value="opencv">OpenCV — Homography warp + blend</option>
+                  <option value="basic">Basic — Placeholder (returns asset only)</option>
+                  <option value="opencv">OpenCV — FFmpeg overlay + blend</option>
                 </select>
+              </div>
+            </div>
+
+            {/* ── Surface Tracking Engine (NEW) ── */}
+            <div className="pt-3 border-t border-slate-100">
+              <div className="flex items-center gap-2 mb-3">
+                <Video className="h-4 w-4 text-purple-500" />
+                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Surface Tracking Engine</h4>
+                <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[8px] font-bold uppercase">New</span>
+              </div>
+              <p className="text-[9px] text-slate-400 mb-3">Tracks operator-adjusted surface boundaries through every frame of a scene using SAM 3 video mode. Triggered automatically when a surface is approved with an adjusted boundary.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Engine</label>
+                  <select
+                    value={settings['engine_tracking'] || 'basic'}
+                    onChange={e => updateField('engine_tracking', e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  >
+                    <option value="basic">Basic — Throws (forces config)</option>
+                    <option value="sam3">SAM 3 — Fal.ai video tracking</option>
+                  </select>
+                </div>
+                {renderField('sam3_tracking_endpoint', 'SAM 3 Video Endpoint', 'https://fal.run/fal-ai/sam-3/video')}
+                {renderField('falai_sam3_endpoint', 'SAM 3 Image Endpoint', 'https://fal.run/fal-ai/sam-3/image')}
               </div>
             </div>
           </div>

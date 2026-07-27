@@ -12,12 +12,14 @@ namespace Afrobotics.Bit.Tests
     public class CampaignServiceTests
     {
         private readonly Mock<ICampaignRepository> _mockRepo;
+        private readonly Mock<IEmailService> _mockEmail;
         private readonly CampaignService _service;
 
         public CampaignServiceTests()
         {
             _mockRepo = new Mock<ICampaignRepository>();
-            _service = new CampaignService(_mockRepo.Object);
+            _mockEmail = new Mock<IEmailService>();
+            _service = new CampaignService(_mockRepo.Object, _mockEmail.Object, null!);
         }
 
         [Fact]

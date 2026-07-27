@@ -1,0 +1,34 @@
+Feature: Full Video Processing Pipeline
+  As a BIT Platform Operator
+  I want a complete end-to-end video processing pipeline
+  So that video content can be split, surfaces detected, brand-safety checked, assets associated, scenes approved, rendered, stitched into a final continuous video, invoiced, and downloaded.
+
+  Scenario: Scene Cut Detection and Video Splitting
+    Given a raw broadcast video content item in Staging state
+    When the detection pipeline is executed
+    Then the video is split into discrete SceneItems with valid start frame, end frame, duration, and keyframe thumbnail.
+
+  Scenario: AI Engine Selection and Brand Safety Exclusions
+    Given detected candidate surfaces in a scene
+    When brand-safety check is evaluated against permanent exclusion policies
+    Then surfaces with faces, emergency vehicles, or competitor brands are tagged as Excluded with an ExclusionReason
+    And candidate surfaces are marked as Unchecked.
+
+  Scenario: Asset Association and Approval Gate
+    Given an Unchecked candidate surface
+    When an operator approves the ad placement and associates a campaign creative asset
+    Then the surface status changes to Approved
+    And an ApprovalItem audit record is recorded
+    And unapproved surfaces block render dispatch.
+
+  Scenario: Video Rendering, Scene Rejoining, and Download
+    Given an approved surface with an associated creative asset
+    When a render job is dispatched
+    Then individual scene frames are composited via homography transformation
+    And all scenes are stitched together via FFmpeg concat filter into a single full-length video file
+    And the final continuous video file can be downloaded via the download endpoint.
+
+  Scenario: Campaign Invoice Calculation
+    Given an active campaign with approved placements and render jobs
+    When the campaign invoice summary is requested
+    Then an invoice is calculated based on placement exposure duration, surface viability scores, and render processing fees.

@@ -7,5 +7,12 @@ namespace Afrobotics.Bit.Api.DTOs
         public string? RejectionReason { get; set; }
         public string? CampaignId { get; set; }
         public string? UserId { get; set; }
+
+        /// <summary>
+        /// Optional operator-adjusted boundary polygon as JSON [{x,y},...].
+        /// When provided, the surface boundary is updated and a tracking
+        /// Hangfire job is enqueued to propagate it through all scene frames.
+        /// </summary>
+        public string? AdjustedBoundaryJson { get; set; }
     }
 }

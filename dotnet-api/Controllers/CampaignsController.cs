@@ -59,6 +59,28 @@ namespace Afrobotics.Bit.Api.Controllers
             }
         }
 
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateCampaign(string id, [FromBody] UpdateCampaignDto dto)
+        {
+            try
+            {
+                var campaign = await _campaignService.UpdateCampaignAsync(id, dto);
+                if (campaign == null)
+                {
+                    return NotFound(new { error = "Campaign not found" });
+                }
+                return Ok(campaign);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteCampaign(string id)
         {

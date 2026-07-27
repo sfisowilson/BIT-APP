@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Bell, AlertTriangle, UserPlus, MonitorSmartphone, Cpu, Film, ShieldAlert, ArrowRight } from 'lucide-react';
@@ -17,28 +17,24 @@ export const AttentionBell: React.FC = () => {
   const [counts, setCounts] = useState<AttentionCounts | null>(null);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const fetchingRef = useRef(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchCounts();
-    const interval = setInterval(fetchCounts, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const fetchCounts = async () => {
+  const fetchCounts = useCallback(async () => {
+    if (fetchingRef.current) return; // skip if already fetching
+    fetchingRef.current = true;
     try {
       const res = await fetchWithAuth('/api/notifications/attention');
       setCounts(await res.json());
     } catch { /* silent */ }
-  };
+    finally { fetchingRef.current = false; }
+  }, []);
+
+  useEffect(() => {
+    fetchCounts();
+    const interval = setInterval(fetchCounts, 60_000); // poll every 60s instead of 30s
+    return () => clearInterval(interval);
+  }, [fetchCounts]);
 
   const handleItemClick = (path: string | null) => {
     setOpen(false);

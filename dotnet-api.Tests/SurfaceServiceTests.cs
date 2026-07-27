@@ -13,12 +13,14 @@ namespace Afrobotics.Bit.Tests
     public class SurfaceServiceTests
     {
         private readonly Mock<ISurfaceRepository> _mockRepo;
+        private readonly Mock<IEmailService> _mockEmail;
         private readonly SurfaceService _service;
 
         public SurfaceServiceTests()
         {
             _mockRepo = new Mock<ISurfaceRepository>();
-            _service = new SurfaceService(_mockRepo.Object);
+            _mockEmail = new Mock<IEmailService>();
+            _service = new SurfaceService(_mockRepo.Object, _mockEmail.Object);
         }
 
         [Fact]

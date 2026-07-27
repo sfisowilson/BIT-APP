@@ -5,7 +5,9 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
+using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -28,12 +30,16 @@ namespace Afrobotics.Bit.Api.Controllers
     {
         private readonly PostgresDbContext _context;
         private readonly IContentService _contentService;
+        private readonly ISurfaceDetectionService _surfaceDetection;
+        private readonly IEventLogService _eventLog;
         private static readonly Regex DurationRegex = new(@"^(\d{2}):([0-5]\d):([0-5]\d)$", RegexOptions.Compiled);
 
-        public ScenesController(PostgresDbContext context, IContentService contentService)
+        public ScenesController(PostgresDbContext context, IContentService contentService, ISurfaceDetectionService surfaceDetection, IEventLogService eventLog)
         {
             _context = context;
             _contentService = contentService;
+            _surfaceDetection = surfaceDetection;
+            _eventLog = eventLog;
         }
 
         /// <summary>MReq 2: AI scene modification with contextual response based on actual scene data.</summary>
@@ -81,249 +87,134 @@ namespace Afrobotics.Bit.Api.Controllers
             return Ok(new { success = true, id = scene.Id });
         }
 
-        /// <summary>MReq 1: Calculate scene cuts using FFprobe. Requires uploaded video file + FFmpeg installed.</summary>
+        /// <summary>MReq 1: Queue scene-cut detection + surface detection as a Hangfire background job.</summary>
         [HttpPost("video/ai-split-analyze")]
-        public async Task<IActionResult> AiSplitAnalyze([FromBody] JsonElement body)
+        public IActionResult AiSplitAnalyze([FromBody] JsonElement body)
         {
             var contentId = body.TryGetProperty("contentId", out var cid) ? cid.GetString() : null;
-            var videoTitle = body.TryGetProperty("videoTitle", out var vt) ? vt.GetString() : "untitled";
+            string videoTitle = body.TryGetProperty("videoTitle", out var vt) && vt.ValueKind != JsonValueKind.Null
+                ? vt.GetString()!
+                : "untitled";
 
             if (string.IsNullOrEmpty(contentId))
                 return BadRequest(new { error = "contentId is required." });
 
-            var content = await _context.ContentItems.FindAsync(contentId);
+            var content = _context.ContentItems.Find(contentId);
             if (content == null)
                 return NotFound(new { error = "Content not found." });
 
-            // Transition to SceneDetecting if not already past that stage
-            if (content.IngestionStatus != PipelineStages.SceneDetecting &&
-                content.IngestionStatus != PipelineStages.Completed)
+            var storageKey = content.StorageKey;
+            if (string.IsNullOrEmpty(storageKey))
+                return BadRequest(new { error = "Scene detection requires a valid video storageKey." });
+
+            // Enqueue the full pipeline as a Hangfire background job
+            var jobId = BackgroundJob.Enqueue<SceneDetectionJobService>(
+                s => s.RunDetectionPipeline(contentId, videoTitle, CancellationToken.None));
+
+            content.DetectionJobId = jobId;
+            content.DetectionProgress = 0;
+            content.IngestionStatus = PipelineStages.SceneDetecting;
+            content.SceneDetectingStartedAt = DateTime.UtcNow;
+            _context.SaveChanges();
+
+            return Ok(new
             {
-                try
-                {
-                    // If we're still in Staging, skip through Transcoding to SceneDetecting
-                    if (content.IngestionStatus == PipelineStages.Staging)
-                    {
-                        await _contentService.TransitionStageAsync(contentId, PipelineStages.Transcoding);
-                    }
-                    await _contentService.TransitionStageAsync(contentId, PipelineStages.SceneDetecting);
-                }
-                catch (InvalidOperationException)
-                {
-                    // If transition not allowed directly, try force path
-                    // Already at a stage that doesn't allow forward transition — proceed anyway
-                }
-            }
+                jobId,
+                contentId,
+                message = "Scene detection queued. Poll GET /api/content/{id}/detection-status for progress."
+            });
+        }
+
+        /// <summary>
+        /// Scenes-only detection: FFmpeg scene cuts + thumbnails. No Gemini, no surfaces.
+        /// Much cheaper — user can then trigger per-scene surface detection.
+        /// </summary>
+        [HttpPost("video/detect-scenes")]
+        public IActionResult DetectScenesOnly([FromBody] JsonElement body)
+        {
+            var contentId = body.TryGetProperty("contentId", out var cid) ? cid.GetString() : null;
+            string videoTitle2 = body.TryGetProperty("videoTitle", out var vt2) && vt2.ValueKind != JsonValueKind.Null
+                ? vt2.GetString()!
+                : "untitled";
+
+            if (string.IsNullOrEmpty(contentId))
+                return BadRequest(new { error = "contentId is required." });
+
+            var content = _context.ContentItems.Find(contentId);
+            if (content == null)
+                return NotFound(new { error = "Content not found." });
 
             var storageKey = content.StorageKey;
-            if (string.IsNullOrEmpty(storageKey) || !storageKey.StartsWith("/api/content/file/"))
-                return BadRequest(new { error = "Scene detection requires a locally uploaded video file. Upload a video via the Ingestion tab first." });
+            if (string.IsNullOrEmpty(storageKey))
+                return BadRequest(new { error = "Scene detection requires a valid video storageKey." });
 
-            var fps = content.FrameRate > 0 ? content.FrameRate : 50;
-            var match = DurationRegex.Match(content.Duration);
-            if (!match.Success)
-                return BadRequest(new { error = "Invalid duration format on content record." });
+            var jobId = BackgroundJob.Enqueue<SceneDetectionJobService>(
+                s => s.RunScenesOnlyPipeline(contentId, videoTitle2, CancellationToken.None));
 
-            var h = int.Parse(match.Groups[1].Value);
-            var m = int.Parse(match.Groups[2].Value);
-            var s = int.Parse(match.Groups[3].Value);
-            var totalDurationSec = h * 3600 + m * 60 + s;
-            var totalFrames = (int)(totalDurationSec * fps);
+            content.DetectionJobId = jobId;
+            content.DetectionProgress = 0;
+            content.IngestionStatus = PipelineStages.SceneDetecting;
+            content.SceneDetectingStartedAt = DateTime.UtcNow;
+            _context.SaveChanges();
 
-            // ── Real scene detection via FFprobe with time-based fallback ──
-            List<object> scenes;
-            try
+            return Ok(new
             {
-                scenes = DetectScenesWithFfprobe(storageKey, fps, totalFrames);
-            }
-            catch (FileNotFoundException)
-            {
-                return BadRequest(new { error = "Video file not found on disk. Re-upload the video." });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return StatusCode(500, new { error = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { error = $"Scene detection failed: {ex.Message}" });
-            }
-
-            return Ok(new { data = new { scenes, videoTitle, totalFrames, fps, totalDurationSec } });
-        }
-        /// <summary>
-        /// Resolve the full path to ffprobe. Checks PATH first, then common install locations.
-        /// </summary>
-        private static string ResolveFfprobePath()
-        {
-            // Common Windows install locations
-            var candidates = new List<string>
-            {
-                "ffprobe",                                         // PATH
-                @"C:\ffmpeg\bin\ffprobe.exe",                      // manual extract
-                @"C:\ProgramData\chocolatey\bin\ffprobe.exe",      // Chocolatey
-                @"C:\Program Files\ffmpeg\bin\ffprobe.exe",        // MSI installer
-            };
-
-            // WinGet installs into versioned subfolders — search for them
-            var wingetDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                @"Microsoft\WinGet\Packages");
-            if (Directory.Exists(wingetDir))
-            {
-                try
-                {
-                    var found = Directory.GetFiles(wingetDir, "ffprobe.exe", SearchOption.AllDirectories);
-                    if (found.Length > 0)
-                        candidates.Add(found[0]);
-                }
-                catch { /* permission issues — skip */ }
-            }
-
-            foreach (var candidate in candidates)
-            {
-                try
-                {
-                    using var test = new Process
-                    {
-                        StartInfo = new ProcessStartInfo
-                        {
-                            FileName = candidate,
-                            Arguments = "-version",
-                            RedirectStandardOutput = true,
-                            RedirectStandardError = true,
-                            UseShellExecute = false,
-                            CreateNoWindow = true
-                        }
-                    };
-                    test.Start();
-                    test.WaitForExit(2000);
-                    if (test.ExitCode == 0)
-                        return candidate;
-                }
-                catch
-                {
-                    // Not found at this path, try next
-                }
-            }
-
-            throw new InvalidOperationException(
-                "FFprobe (part of FFmpeg) is not installed. Install it via:\n" +
-                "  winget install ffmpeg\n" +
-                "  or download from https://ffmpeg.org/download.html\n" +
-                "After installing, restart the API.");
+                jobId,
+                contentId,
+                message = "Scene-only detection queued (no surfaces). Poll GET /api/content/{id}/detection-status."
+            });
         }
 
         /// <summary>
-        /// Use FFprobe to detect scene changes based on visual content differences.
-        /// Falls back to time-based even splits if FFprobe finds fewer than 2 scene cuts.
+        /// Per-scene surface detection: runs Gemini + SAM2 on a single scene.
+        /// Much cheaper than running on the entire video.
         /// </summary>
-        private static List<object> DetectScenesWithFfprobe(string storageKey, int fps, int totalFrames)
+        [HttpPost("scenes/{sceneId}/detect-surfaces")]
+        public IActionResult DetectSurfacesForScene(string sceneId)
         {
-            var fileName = storageKey.Replace("/api/content/file/", "");
-            var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
-            var filePath = Path.Combine(uploadsDir, fileName);
+            var scene = _context.SceneItems.Find(sceneId);
+            if (scene == null)
+                return NotFound(new { error = "Scene not found." });
 
-            if (!System.IO.File.Exists(filePath))
-                throw new FileNotFoundException("Video file not found for scene detection.");
+            // Always allow re-triggering — Hangfire's [DisableConcurrentExecution]
+            // prevents true duplicates. If a previous job crashed and left status
+            // stuck at "Detecting", this resets it.
+            scene.SurfaceStatus = "Detecting";
+            _context.SaveChanges();
 
-            // Resolve ffprobe path — try PATH first, then common install locations
-            var ffprobePath = ResolveFfprobePath();
+            BackgroundJob.Enqueue<SceneDetectionJobService>(
+                s => s.RunSceneSurfaceDetection(sceneId, CancellationToken.None));
 
-            var sceneTimestamps = new List<double>();
-
-            using var process = new Process
+            return Ok(new
             {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = ffprobePath,
-                    Arguments = $"-show_frames -f lavfi \"movie={filePath},select='gt(scene\\,0.3)'\" -of csv=p=0 -show_entries frame=pkt_pts_time",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-            process.Start();
-            var output = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(5000);
-
-            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (double.TryParse(line.Trim(), out var timestamp) && timestamp > 0)
-                    sceneTimestamps.Add(timestamp);
-            }
-
-            // If FFprobe found enough scenes, build scene list from timestamps
-            if (sceneTimestamps.Count > 1)
-            {
-                return BuildScenesFromTimestamps(sceneTimestamps, fps, totalFrames);
-            }
-
-            // ── Fallback: generate even time-based splits ──
-            return GenerateFallbackScenes(fps, totalFrames);
+                sceneId,
+                message = $"Surface detection queued for scene #{scene.SceneIndex}."
+            });
         }
 
-        /// <summary>Build scene objects from FFprobe-detected timestamps.</summary>
-        private static List<object> BuildScenesFromTimestamps(List<double> timestamps, int fps, int totalFrames)
+        /// <summary>Poll for detection job progress. Returns 0-100 and current ingestion status.</summary>
+        [HttpGet("content/{contentId}/detection-status")]
+        public async Task<IActionResult> GetDetectionStatus(string contentId)
         {
-            var scenes = new List<object>();
-            for (int i = 0; i < timestamps.Count; i++)
+            var content = await _context.ContentItems.FindAsync(contentId);
+            if (content == null) return NotFound(new { error = "Content not found." });
+
+            return Ok(new
             {
-                var startTime = timestamps[i];
-                var endTime = (i < timestamps.Count - 1) ? timestamps[i + 1] : (double)totalFrames / fps;
-                var startFrame = (int)(startTime * fps);
-                var endFrame = (int)(endTime * fps);
-                var duration = endTime - startTime;
-
-                if (duration < 1.0) continue; // skip scenes shorter than 1 second
-
-                scenes.Add(new
-                {
-                    sceneIndex = i + 1,
-                    startFrame,
-                    endFrame,
-                    durationSeconds = Math.Round(duration, 1),
-                    qaStatus = "Unchecked"
-                });
-            }
-            return scenes;
-        }
-
-        /// <summary>
-        /// Generate fallback time-based scene splits when FFprobe fails to detect cuts.
-        /// Splits video into segments of approximately 30 seconds each (min 2, max 12 scenes).
-        /// </summary>
-        private static List<object> GenerateFallbackScenes(int fps, int totalFrames)
-        {
-            var totalDurationSec = (double)totalFrames / fps;
-            var targetSegmentSec = 30.0;
-            var sceneCount = Math.Max(2, Math.Min(12, (int)Math.Ceiling(totalDurationSec / targetSegmentSec)));
-            var segmentDuration = totalDurationSec / sceneCount;
-
-            var scenes = new List<object>();
-            for (int i = 0; i < sceneCount; i++)
-            {
-                var startSec = i * segmentDuration;
-                var endSec = (i == sceneCount - 1) ? totalDurationSec : (i + 1) * segmentDuration;
-                var startFrame = (int)(startSec * fps);
-                var endFrame = (int)(endSec * fps);
-
-                scenes.Add(new
-                {
-                    sceneIndex = i + 1,
-                    startFrame,
-                    endFrame,
-                    durationSeconds = Math.Round(endSec - startSec, 1),
-                    qaStatus = "Unchecked"
-                });
-            }
-            return scenes;
+                contentId,
+                progress = content.DetectionProgress,
+                ingestionStatus = content.IngestionStatus,
+                jobId = content.DetectionJobId,
+                errorMessage = content.LastErrorMessage,
+                completed = content.IngestionStatus == PipelineStages.Completed,
+                failed = content.IngestionStatus == PipelineStages.Failed,
+            });
         }
 
         /// <summary>
         /// MReq 1: Persist AI-generated scene cuts and update video ingestion status to Completed.
         /// Deletes any existing scenes + surfaces for this video before saving to prevent duplicates.
+        /// Note: scene + surface detection is now done by Hangfire. This endpoint just saves pre-detected scenes.
         /// </summary>
         [HttpPost("video/ai-split-save")]
         public async Task<IActionResult> AiSplitSave([FromBody] JsonElement body)
@@ -374,7 +265,7 @@ namespace Afrobotics.Bit.Api.Controllers
 
                 // Create scene records + candidate surfaces from AI-generated splits
                 var surfaceTypes = new[] { "Billboard", "Wall Banner", "Digital Screen", "Field Board", "Table Surface", "Window Signage" };
-                var rng = new Random();
+                var rng = new Random(); // fallback only if detection service returns nothing
 
                 if (body.TryGetProperty("scenes", out var scenesElement) && scenesElement.ValueKind == JsonValueKind.Array)
                 {
@@ -392,36 +283,67 @@ namespace Afrobotics.Bit.Api.Controllers
                         };
                         await _context.SceneItems.AddAsync(sceneItem);
 
-                        // Generate 2-4 candidate surfaces per scene
-                        var surfaceCount = rng.Next(2, 5);
-                        for (int s = 0; s < surfaceCount; s++)
+                        // ── Use the configured AI detection engine (basic / yolo / replicate / google) ──
+                        List<SurfaceDetectionResult> detections;
+                        try
                         {
-                            var st = surfaceTypes[rng.Next(surfaceTypes.Length)];
-                            var w = 1280; var h = 720;
-                            var sx = rng.Next(100, w - 400);
-                            var sy = rng.Next(80, h - 200);
-                            var sw = rng.Next(200, 500);
-                            var sh = rng.Next(100, 300);
+                            detections = await _surfaceDetection.DetectAsync(
+                                contentId,
+                                sceneItem.SceneIndex,
+                                sceneItem.StartFrame,
+                                sceneItem.EndFrame);
+                        }
+                        catch (Exception ex)
+                        {
+                            // Detection engine failed — fall back to random surfaces so the pipeline doesn't break
+                            System.Diagnostics.Debug.WriteLine($"[SurfaceDetection] Engine failed for content {contentId} scene {sceneItem.SceneIndex}: {ex.Message}");
+                            detections = new List<SurfaceDetectionResult>();
+                        }
 
-                            var coords = new[]
+                        // If detection returned nothing (or failed), generate 2–4 fallback random surfaces
+                        if (detections.Count == 0)
+                        {
+                            var fallbackCount = rng.Next(2, 5);
+                            for (int s = 0; s < fallbackCount; s++)
                             {
-                                new { x = sx, y = sy },
-                                new { x = sx + sw, y = sy },
-                                new { x = sx + sw, y = sy + sh },
-                                new { x = sx, y = sy + sh }
-                            };
+                                var st = surfaceTypes[rng.Next(surfaceTypes.Length)];
+                                var w = 1280; var h = 720;
+                                var sx = rng.Next(100, w - 400);
+                                var sy = rng.Next(80, h - 200);
+                                var sw = rng.Next(200, 500);
+                                var sh = rng.Next(100, 300);
+                                detections.Add(new SurfaceDetectionResult
+                                {
+                                    SurfaceType = st,
+                                    BoundaryCoordinatesJson = System.Text.Json.JsonSerializer.Serialize(new[]
+                                    {
+                                        new { x = sx, y = sy }, new { x = sx + sw, y = sy },
+                                        new { x = sx + sw, y = sy + sh }, new { x = sx, y = sy + sh }
+                                    }),
+                                    EstimatedDepth = Math.Round(1.5 + rng.NextDouble() * 8.5, 1),
+                                    OrientationVectorJson = System.Text.Json.JsonSerializer.Serialize(
+                                        new { yaw = rng.Next(-15, 15), pitch = rng.Next(-5, 5), roll = rng.Next(-3, 3) }),
+                                    ConfidenceScore = Math.Round(0.65 + rng.NextDouble() * 0.30, 2),
+                                    ViabilityScore = Math.Round(0.55 + rng.NextDouble() * 0.40, 2),
+                                });
+                            }
+                        }
 
+                        foreach (var d in detections)
+                        {
                             var sf = new SurfaceItem
                             {
                                 Id = "sf-" + Guid.NewGuid().ToString().Substring(0, 4),
                                 SceneId = sceneItem.Id,
-                                SurfaceType = st,
-                                BoundaryCoordinatesJson = System.Text.Json.JsonSerializer.Serialize(coords),
-                                EstimatedDepth = Math.Round(1.5 + rng.NextDouble() * 8.5, 1),
-                                OrientationVectorJson = System.Text.Json.JsonSerializer.Serialize(new { yaw = rng.Next(-15, 15), pitch = rng.Next(-5, 5), roll = rng.Next(-3, 3) }),
-                                ConfidenceScore = Math.Round(0.65 + rng.NextDouble() * 0.30, 2),
-                                ViabilityScore = Math.Round(0.55 + rng.NextDouble() * 0.40, 2),
-                                Status = "Candidate"
+                                SurfaceType = d.SurfaceType,
+                                BoundaryCoordinatesJson = d.BoundaryCoordinatesJson,
+                                EstimatedDepth = d.EstimatedDepth,
+                                OrientationVectorJson = d.OrientationVectorJson,
+                                ConfidenceScore = d.ConfidenceScore,
+                                ViabilityScore = d.ViabilityScore,
+                                Status = "Candidate",
+                                ExclusionReason = d.ExclusionReason,
+                                Sam3Prompt = d.Sam3Prompt,
                             };
                             await _context.SurfaceItems.AddAsync(sf);
                         }
@@ -481,6 +403,111 @@ namespace Afrobotics.Bit.Api.Controllers
             .ToList();
 
             return Ok(new { suggestions = scored });
+        }
+
+        /// <summary>Delete a single scene and all its child surfaces, ad slots, and approvals.</summary>
+        [HttpDelete("scenes/{id}")]
+        public async Task<IActionResult> DeleteScene(string id)
+        {
+            var scene = await _context.SceneItems.FindAsync(id);
+            if (scene == null)
+                return NotFound(new { error = "Scene not found." });
+
+            // Guard: block if any surfaces are approved (single query)
+            var hasApproved = await _context.SurfaceItems
+                .AnyAsync(sf => sf.SceneId == id && sf.Status == "Approved");
+            if (hasApproved)
+            {
+                return BadRequest(new
+                {
+                    error = "Cannot delete scene: approved surface(s) exist. " +
+                            "Exclude or reject approved surfaces before deleting the scene."
+                });
+            }
+
+            // EF Core cascade handles: SurfaceItems → AdSlots → Approvals, and RenderItem.SurfaceId → null
+            _context.SceneItems.Remove(scene);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { success = true, id, message = "Scene and all child entities deleted." });
+        }
+
+        /// <summary>
+        /// Export a single scene as a standalone H.264 MP4 video clip.
+        /// Extracts the scene's frame range from the source video using FFmpeg.
+        /// </summary>
+        [HttpGet("scenes/{id}/clip")]
+        public async Task<IActionResult> GetSceneClip(string id)
+        {
+            var scene = await _context.SceneItems.FindAsync(id);
+            if (scene == null)
+                return NotFound(new { error = "Scene not found." });
+
+            var content = await _context.ContentItems.FindAsync(scene.ContentId);
+            if (content == null)
+                return NotFound(new { error = "Source content not found." });
+
+            var storageKey = content.StorageKey;
+            if (string.IsNullOrEmpty(storageKey) || !storageKey.StartsWith("/api/content/file/"))
+                return BadRequest(new { error = "Scene clip export requires a locally uploaded video file." });
+
+            var fileName = storageKey.Replace("/api/content/file/", "");
+            var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
+            var sourcePath = Path.Combine(uploadsDir, fileName);
+            var fullSourcePath = Path.GetFullPath(sourcePath);
+
+            // Directory traversal guard
+            if (!fullSourcePath.StartsWith(Path.GetFullPath(uploadsDir)))
+                return BadRequest(new { error = "Invalid file path." });
+
+            if (!System.IO.File.Exists(fullSourcePath))
+                return NotFound(new { error = "Source video file not found." });
+
+            // Calculate frame range and duration
+            var fps = content.FrameRate > 0 && content.FrameRate <= 240 ? content.FrameRate : 50;
+            var startTime = (double)scene.StartFrame / fps;
+            var duration = (double)(scene.EndFrame - scene.StartFrame) / fps;
+
+            var tempDir = Path.Combine(uploadsDir, "clips");
+            Directory.CreateDirectory(tempDir);
+            var outputFileName = $"scene_{id}_{DateTime.UtcNow:yyyyMMddHHmmss}.mp4";
+            var outputPath = Path.Combine(tempDir, outputFileName);
+
+            try
+            {
+                using var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "ffmpeg",
+                        Arguments = $"-hide_banner -loglevel error -ss {startTime:F3} -i \"{fullSourcePath}\" " +
+                                    $"-t {duration:F3} -c:v libx264 -preset fast -crf 23 " +
+                                    $"-c:a aac -b:a 128k -pix_fmt yuv420p -movflags +faststart " +
+                                    $"\"{outputPath}\" -y",
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+
+                process.Start();
+                var stderr = await process.StandardError.ReadToEndAsync();
+                await process.WaitForExitAsync();
+
+                if (process.ExitCode != 0)
+                {
+                    Debug.WriteLine($"[SceneClip] FFmpeg failed for scene {id}: {stderr}");
+                    return StatusCode(500, new { error = "Failed to generate scene clip. FFmpeg encoding error." });
+                }
+
+                var fileStream = new FileStream(outputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                return File(fileStream, "video/mp4", $"scene_{scene.SceneIndex}_{content.Title}.mp4");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[SceneClip] Error for scene {id}: {ex.Message}");
+                return StatusCode(500, new { error = "Failed to generate scene clip." });
+            }
         }
     }
 }

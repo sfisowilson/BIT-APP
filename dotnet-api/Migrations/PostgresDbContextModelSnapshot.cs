@@ -55,6 +55,8 @@ namespace Afrobotics.Bit.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("SurfaceId");
+
                     b.ToTable("AdSlots");
                 });
 
@@ -118,6 +120,8 @@ namespace Afrobotics.Bit.Api.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AdSlotId");
 
                     b.ToTable("Approvals");
                 });
@@ -186,6 +190,8 @@ namespace Afrobotics.Bit.Api.Migrations
 
                     b.HasIndex("NamingStructureCode");
 
+                    b.HasIndex("Status");
+
                     b.ToTable("Campaigns");
                 });
 
@@ -200,6 +206,13 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DetectionJobId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("DetectionProgress")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Duration")
                         .IsRequired()
                         .HasColumnType("text");
@@ -207,9 +220,19 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.Property<int>("FrameRate")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Height")
+                        .HasColumnType("integer");
+
                     b.Property<string>("IngestionStatus")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("IsDetectionPaused")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("JobState")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<DateTime?>("LastErrorAt")
                         .HasColumnType("timestamp with time zone");
@@ -250,7 +273,16 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.Property<DateTime?>("TranscodingStartedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("Width")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("CampaignId");
+
+                    b.HasIndex("DetectionJobId");
+
+                    b.HasIndex("IngestionStatus");
 
                     b.HasIndex("StorageKey");
 
@@ -468,6 +500,12 @@ namespace Afrobotics.Bit.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CampaignId");
+
+                    b.HasIndex("ContentId");
+
+                    b.HasIndex("SurfaceId");
+
                     b.ToTable("Renders");
                 });
 
@@ -545,7 +583,18 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.Property<int>("StartFrame")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SurfaceStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("ThumbnailPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("ContentId");
 
                     b.ToTable("SceneItems");
                 });
@@ -562,6 +611,9 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.Property<double>("ConfidenceScore")
                         .HasColumnType("double precision");
 
+                    b.Property<int?>("DetectedAtFrame")
+                        .HasColumnType("integer");
+
                     b.Property<double>("EstimatedDepth")
                         .HasColumnType("double precision");
 
@@ -575,6 +627,10 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.Property<string>("PlacementImageUrl")
                         .HasColumnType("text");
 
+                    b.Property<string>("Sam3Prompt")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<string>("SceneId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -587,10 +643,18 @@ namespace Afrobotics.Bit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("TrackedBoundariesJson")
+                        .HasMaxLength(100000)
+                        .HasColumnType("character varying(100000)");
+
                     b.Property<double>("ViabilityScore")
                         .HasColumnType("double precision");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("SceneId");
+
+                    b.HasIndex("Status");
 
                     b.ToTable("SurfaceItems");
                 });
@@ -682,6 +746,24 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("Afrobotics.Bit.Api.Models.AdSlotItem", b =>
+                {
+                    b.HasOne("Afrobotics.Bit.Api.Models.SurfaceItem", null)
+                        .WithMany()
+                        .HasForeignKey("SurfaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Afrobotics.Bit.Api.Models.ApprovalItem", b =>
+                {
+                    b.HasOne("Afrobotics.Bit.Api.Models.AdSlotItem", null)
+                        .WithMany()
+                        .HasForeignKey("AdSlotId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Afrobotics.Bit.Api.Models.CreativeAsset", b =>
                 {
                     b.HasOne("Afrobotics.Bit.Api.Models.CampaignItem", "Campaign")
@@ -689,6 +771,39 @@ namespace Afrobotics.Bit.Api.Migrations
                         .HasForeignKey("CampaignId");
 
                     b.Navigation("Campaign");
+                });
+
+            modelBuilder.Entity("Afrobotics.Bit.Api.Models.RenderItem", b =>
+                {
+                    b.HasOne("Afrobotics.Bit.Api.Models.ContentItem", null)
+                        .WithMany()
+                        .HasForeignKey("ContentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Afrobotics.Bit.Api.Models.SurfaceItem", null)
+                        .WithMany()
+                        .HasForeignKey("SurfaceId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Afrobotics.Bit.Api.Models.SceneItem", b =>
+                {
+                    b.HasOne("Afrobotics.Bit.Api.Models.ContentItem", null)
+                        .WithMany()
+                        .HasForeignKey("ContentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Afrobotics.Bit.Api.Models.SurfaceItem", b =>
+                {
+                    b.HasOne("Afrobotics.Bit.Api.Models.SceneItem", null)
+                        .WithMany()
+                        .HasForeignKey("SceneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

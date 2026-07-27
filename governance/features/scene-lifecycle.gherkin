@@ -1,0 +1,111 @@
+Feature: Scene & Surface Lifecycle Management
+  As a platform operator
+  I want scene detection, deletion, and export to respect data integrity
+  So that approved surfaces aren't silently destroyed, orphans don't pollute the database,
+  and individual scenes can be exported for external tools
+
+  Background:
+    Given the BIT platform ingests video content and detects scenes with AI
+    And scenes contain surfaces that can be approved for ad placement
+    And approved surfaces have associated AdSlots and ApprovalItems
+    And RenderItems reference both ContentId and SurfaceId
+
+  # ── Re-detect Safety ──
+
+  Scenario: Re-detect is blocked when approved surfaces exist
+    Given a content item "v-01" has scene "s-01"
+    And scene "s-01" has surface "sf-01" with Status "Approved"
+    When I trigger re-detect scenes for "v-01"
+    Then the Hangfire job fails with an InvalidOperationException
+    And the error message states "Cannot re-detect: 1 approved surface(s) exist. Exclude or reject them first."
+    And no scenes or surfaces are deleted
+    And the content status is set to "Failed" with the error message
+
+  Scenario: Re-detect succeeds when no approved surfaces exist
+    Given a content item "v-01" has scenes with only Candidate/Excluded surfaces
+    When I trigger re-detect scenes for "v-01"
+    Then existing scenes and surfaces are deleted
+    And new scenes and surfaces are created from the fresh detection
+    And the pipeline completes successfully
+
+  # ── Content Deletion Cascade ──
+
+  Scenario: Deleting a video cleans up all child entities
+    Given a content item "v-01" with scenes, surfaces, ad slots, approvals, and renders
+    When I call DELETE /api/content/v-01
+    Then the ContentItem is removed
+    And all SceneItems with ContentId "v-01" are removed
+    And all SurfaceItems belonging to those scenes are removed
+    And all AdSlotItems referencing those surfaces are removed
+    And all ApprovalItems referencing those ad slots are removed
+    And all RenderItems with ContentId "v-01" or those SurfaceIds are removed
+
+  Scenario: Deleting a video with no scenes succeeds cleanly
+    Given a content item "v-01" in Staging with no scenes
+    When I call DELETE /api/content/v-01
+    Then the ContentItem is removed with no errors
+    And no orphaned rows remain
+
+  # ── Single Scene Deletion ──
+
+  Scenario: Delete a single scene that has no approved surfaces
+    Given scene "s-01" has surfaces all with Status "Candidate" or "Excluded"
+    When I call DELETE /api/scenes/s-01
+    Then the scene is removed
+    And all its surfaces, ad slots, and approvals are removed
+    And the response is 200 OK
+
+  Scenario: Delete a single scene blocked by approved surface
+    Given scene "s-01" has a surface with Status "Approved"
+    When I call DELETE /api/scenes/s-01
+    Then the response is 400 Bad Request
+    And the error message identifies the approved surface
+    And no data is modified
+
+  Scenario: Delete a non-existent scene returns 404
+    When I call DELETE /api/scenes/nonexistent
+    Then the response is 404 Not Found
+
+  # ── Bulk Scene Deletion ──
+
+  Scenario: Bulk delete all scenes for a video
+    Given content "v-01" has 50 scenes, none with approved surfaces
+    When I call DELETE /api/content/v-01/scenes
+    Then all 50 scenes and their child entities are removed
+    And the response is 200 OK with count of deleted scenes
+
+  Scenario: Bulk delete blocked by any approved surface
+    Given content "v-01" has 50 scenes, and scene "s-25" has an approved surface
+    When I call DELETE /api/content/v-01/scenes
+    Then the response is 400 Bad Request
+    And the error message identifies which scene has the approved surface
+    And no data is modified
+
+  # ── Scene Clip Export ──
+
+  Scenario: Export a scene as a standalone video clip
+    Given scene "s-01" has StartFrame 1500 and EndFrame 4500
+    And the source video exists at the content's StorageKey path
+    When I call GET /api/scenes/s-01/clip
+    Then the response is a video/mp4 file
+    And the clip contains only frames 1500 through 4500
+    And the HTTP response includes Content-Disposition: attachment
+
+  Scenario: Export clip fails when source video is missing
+    Given scene "s-01" references a content item whose video file does not exist on disk
+    When I call GET /api/scenes/s-01/clip
+    Then the response is 404 with error "Source video file not found"
+
+  Scenario: Export clip fails when scene not found
+    When I call GET /api/scenes/nonexistent/clip
+    Then the response is 404 Not Found
+
+  # ── Frontend Confirmation ──
+
+  Scenario: Re-detect shows confirmation dialog
+    Given the user is viewing a completed content item in the IngestionTab
+    When the user clicks "Re-detect Scenes"
+    Then a confirmation modal appears
+    And the modal warns that existing scenes and surfaces will be destroyed
+    And the user must click a second time to confirm
+    And clicking cancel dismisses the modal without action

@@ -1,0 +1,45 @@
+Feature: Compositing Preview — Asset Superimposed on Video Scene
+  As an editor reviewing placements
+  I want to preview how a brand asset looks composited onto a detected surface in the video
+  So that I can verify the placement looks realistic before approving it for rendering
+
+  Background:
+    Given the BIT platform has detected surfaces in video content
+    And brand assets have been placed on surfaces
+    And the compositing engine is configured via Platform Settings
+
+  Scenario: Preview places asset at the correct surface location
+    Given a surface with valid boundary coordinates has a placed asset
+    When I click "🎬 Composite Preview"
+    Then the asset image is superimposed onto the video frame at the surface location
+    And the resulting image shows the video scene with the asset overlaid
+    And the asset fills the surface bounding box
+
+  Scenario: Preview works with any image asset format
+    Given a surface has a placed asset of type PNG, JPG, or GIF
+    When I request a composite preview
+    Then the asset is correctly overlaid on the video frame
+    And the result is returned as a base64-encoded PNG image
+
+  Scenario: Preview fails gracefully when asset file is missing
+    Given a surface has a placed asset whose file does not exist on disk
+    When I request a composite preview
+    Then an error is returned with a clear message
+    And the error does not crash the API
+
+  Scenario: Preview fails gracefully when video file is missing
+    Given a content item whose video file does not exist on disk
+    When I request a composite preview for a surface on that content
+    Then an error is returned indicating the video file is missing
+
+  Scenario: Preview uses the configured compositing engine
+    Given the platform setting "engine_compositing" is set to "opencv"
+    When a composite preview is requested
+    Then FFmpeg is used to extract the video frame and overlay the asset
+    And the result engine reports "OpenCvCompositor"
+
+  Scenario: Basic engine falls back to raw asset only
+    Given the platform setting "engine_compositing" is set to "basic"
+    When a composite preview is requested
+    Then the raw asset image is returned without scene compositing
+    And the result engine reports "BasicCompositor"

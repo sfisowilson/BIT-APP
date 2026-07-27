@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Afrobotics.Bit.Api.Data;
 using Afrobotics.Bit.Api.DTOs;
 using Afrobotics.Bit.Api.Models;
@@ -19,12 +20,14 @@ namespace Afrobotics.Bit.Api.Controllers
         private readonly IAuthService _authService;
         private readonly PostgresDbContext _context;
         private readonly IEmailService _email;
+        private readonly IConfiguration _configuration;
 
-        public AuthController(IAuthService authService, PostgresDbContext context, IEmailService email)
+        public AuthController(IAuthService authService, PostgresDbContext context, IEmailService email, IConfiguration configuration)
         {
             _authService = authService;
             _context = context;
             _email = email;
+            _configuration = configuration;
         }
 
         [HttpPost("login")]
@@ -63,6 +66,39 @@ namespace Afrobotics.Bit.Api.Controllers
             catch (System.Exception ex)
             {
                 return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>Validates a stored JWT token on app mount to confirm session is still valid.</summary>
+        [HttpPost("validate")]
+        public IActionResult Validate([FromBody] TokenRefreshDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto?.Token))
+                return BadRequest(new { error = "Token is required." });
+
+            try
+            {
+                var secret = _configuration["Jwt:Secret"]
+                    ?? "AFROBOTICS_BIT_SUPER_SECRET_SECURITY_KEY_2026_JWT";
+                var key = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(
+                    System.Text.Encoding.UTF8.GetBytes(secret));
+
+                var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+                handler.ValidateToken(dto.Token, new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = key,
+                    ValidateIssuer = false,
+                    ValidateAudience = false,
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.FromMinutes(1),
+                }, out _);
+
+                return Ok(new { valid = true });
+            }
+            catch
+            {
+                return Unauthorized(new { error = "Token is invalid or expired." });
             }
         }
 
