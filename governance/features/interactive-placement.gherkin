@@ -1,0 +1,209 @@
+Feature: Interactive Placement — Click-to-Select & Draw-to-Place with SAM3 + pikaswaps
+  As an editor placing brand assets into video
+  I want to click on objects in the video or draw a region on blank surfaces
+  So that SAM3 video-rle segments/tracks my selection with per-frame RLE masks, pikaswaps swaps in the asset via text prompts, and planar warp places signage pixel-perfect
+
+  Background:
+    Given the BIT platform has ingested video content
+    And brand assets are uploaded to a campaign
+    And SAM3 video-rle (fal-ai/sam-3/video-rle) and pikaswaps API keys are configured in Platform Settings
+    And SAM3 video-rle returns per-frame SAM3VideoObjectFrame with SAM3ObjectMask (RLE + track_id)
+
+  # ── Click-to-Segment (Generative Path — 3D Products via pikaswaps) ──
+
+  Scenario: Click on an existing billboard segments it via SAM3 video-rle
+    Given I am in the Placement Editor with "Insert Product" mode active
+    When I click on a billboard in the video player
+    Then a call is made to SAM3 video-rle with the clicked (x, y) point_prompt at that frame
+    And SAM3 returns a SAM3VideoObjectFrame with the RLE mask for the clicked object
+    And the RLE mask is decoded to a polygon via RleDecoder
+    And the polygon is rendered as a colored SVG overlay on the video
+    And the AssetType is set to "Generative"
+
+  Scenario: Click on background returns no usable mask
+    Given I click on an empty sky region with no distinct object
+    When SAM3 video-rle processes the point prompt
+    Then no object with confidence > 0.5 is returned
+    And the UI shows "No distinct surface found — try 'Place Signage' mode instead"
+
+  Scenario: SAM3 video-rle returns stable track_id for the clicked object
+    Given SAM3 video-rle returns a mask for the clicked object
+    When the response includes SAM3ObjectMask with a track_id
+    Then the track_id is stable across all frames where that object appears
+    And the track_id is stored on the SurfaceItem for drift-check comparison
+    And the mask polygon is stored in BoundaryCoordinatesJson
+
+  Scenario: Mask overlay updates when user changes frame
+    Given a mask overlay is visible for the current frame
+    When the user scrubs to a different frame
+    Then the overlay is hidden (preview mask is frame-specific)
+    And a "Re-detect at this frame" button appears
+
+  # ── Draw-to-Place (Planar Path — Signage / Flat Assets) ──
+
+  Scenario: Place a logo on a wall via 4-corner quad
+    Given I am in the Placement Editor with "Place Signage" mode active
+    When I click 4 corners of the wall region where the logo should go
+    Then a quadrilateral overlay is displayed with draggable corner handles
+    And numbered corner badges (1-4) are shown during placement
+    And the UI shows a live perspective preview of the logo warped into that quad
+    And the AssetType is set to "Planar"
+
+  Scenario: Fine-tune quad by dragging corners
+    Given a 4-corner quad overlay is visible
+    When I drag any corner handle
+    Then the quad updates to reflect the new corner position
+    And the perspective preview refreshes in real time
+    And the polygon coordinates update in real time
+
+  Scenario: SAM3 video-rle refines quad to match wall perspective
+    Given a 4-corner quad overlay is confirmed
+    When the user clicks "Refine with AI"
+    Then SAM3 video-rle receives the quad as box_prompts
+    And SAM3 returns a refined polygon that follows wall edges and texture
+    And the overlay updates to show the refined quad
+
+  Scenario: Cancel quad placement
+    Given a quad overlay is visible
+    When the user clicks "Cancel" or presses Escape
+    Then the overlay is removed
+    And no data is persisted
+
+  # ── Approval & Render Dispatch ──
+
+  Scenario: Approve generative placement triggers pikaswaps render
+    Given a mask overlay is displayed and the user has selected an asset
+    When the user clicks "Approve & Render"
+    Then a SurfaceItem is created with AssetType="Generative" and Source="Manual"
+    And the SAM3 mask polygon and track_id are stored on the SurfaceItem
+    And Gemini generates modify_region (describes region to replace) and prompt (describes desired result) from the surface type and asset
+    And a Hangfire job is enqueued for pikaswaps compositing (video + image + modify_region + prompt)
+    And the UI shows render progress via SignalR
+
+  Scenario: Approve planar placement triggers homography render
+    Given a quad overlay is displayed and the user has selected a flat asset
+    When the user clicks "Approve & Render"
+    Then a SurfaceItem is created with AssetType="Planar" and Source="Manual"
+    And a Hangfire job is enqueued for point tracking → planar warp compositing
+    And the UI shows render progress via SignalR
+
+  # ── Generative Path: pikaswaps Compositing (text-driven, no mask input) ──
+
+  Scenario: pikaswaps swaps asset using text description of region
+    Given a generative render job is processing
+    When the Hangfire job reaches compositing
+    Then pikaswaps is called with: video_url, image_url (brand asset), modify_region (text describing object to replace), and prompt (text describing desired result)
+    And pikaswaps uses its own internal AI to locate the region from the modify_region text
+    And no SAM3 mask video is sent to pikaswaps — the API has no mask_url or mask parameter
+    And SAM3 data is only used for: (1) UI preview overlay, (2) drift-check comparison after render
+
+  Scenario: Gemini generates modify_region and prompt for pikaswaps
+    Given a surface has SurfaceType "Stadium Perimeter LED Board" and a brand asset is selected
+    When the render job prepares the pikaswaps payload
+    Then Gemini generates modify_region describing the object to replace (e.g. "the LED perimeter board on the field")
+    And Gemini generates prompt describing how the asset should look (e.g. "replace with a Coca-Cola advertisement, photorealistic, matching stadium lighting")
+    And both strings are included in the pikaswaps API call
+
+  Scenario: pikaswaps 5-second limit requires chunking
+    Given a generative placement scene is 12 seconds long
+    When the render job reaches compositing
+    Then the source video is split into 3 chunks of ≤5 seconds with 0.25s overlap
+    And each chunk is processed through pikaswaps independently with the same image_url, modify_region, and prompt
+    And the chunks are spliced back into a single video via ffmpeg concat
+
+  Scenario: Chunk failure is retried independently
+    Given chunk 2 of 3 failed during pikaswaps processing
+    When the render job retries
+    Then only chunk 2 is re-processed
+    And chunks 1 and 3 are not re-processed
+
+  Scenario: All chunks fail falls back to ffmpeg luma-mask
+    Given all pikaswaps chunks failed after retries
+    Then SAM3 video is generated from the stored mask polygon (lazy fallback tracking via sam-3/video endpoint)
+    And ffmpeg luma-mask compositing is used
+    And the RenderItem shows CompositingEngine="ffmpeg-luma" and QualityTier="Standard"
+    Given all pikaswaps chunks failed
+    When retries are exhausted
+    Then the render falls back to ffmpeg luma-mask compositing
+    And the RenderItem shows CompositingEngine="ffmpeg-luma" and QualityTier="Standard"
+
+  # ── Generative Path: Post-Render Drift Check (uses SAM3 video-rle RLE data) ──
+
+  Scenario: pikaswaps output passes drift consistency check
+    Given a pikaswaps render has completed
+    When the post-render drift check runs SAM3 video-rle on the output video
+    And per-frame RLE masks for the same track_id are compared to the original preview mask
+    And per-frame mask IoU is ≥ 0.85 for all frames
+    Then the render is marked "Finished" with QualityTier "AI"
+
+  Scenario: pikaswaps output fails drift check
+    Given a pikaswaps render has completed
+    When the post-render drift check runs SAM3 video-rle on the output
+    And any frame has mask IoU < 0.85 against the original track_id mask
+    Then the render is marked "NeedsReview"
+    And an ⚠️ badge is shown in the Renders list
+    And the Admin can approve or regenerate the render
+
+  # ── Planar Path: Point Tracking & Warp ──
+
+  Scenario: Quad corners are tracked across frames
+    Given a planar placement has been approved
+    When the render job begins
+    Then the 4 corner points are tracked across all scene frames via point tracking
+    And per-frame quad coordinates are stored (not masks)
+    And tracking lock-loss on any corner is flagged
+
+  Scenario: Signage asset is perspective-warped per frame
+    Given per-frame quad coordinates are available for all frames
+    When the planar compositing engine processes the render
+    Then the signage PNG is perspective-warped to match each frame's quad
+    And the warped image preserves exact pixel content (no AI regeneration)
+    And the output matches the original logo pixel-for-pixel
+
+  Scenario: Signage lighting matches wall via classical relighting
+    Given a warped signage frame
+    When the relighting pass runs
+    Then a luminance histogram transfer is applied from the surrounding wall region
+    And the signage appears naturally lit without modifying logo content
+
+  Scenario: Person occludes signage — SAM3 video-rle provides foreground mask
+    Given a person crosses in front of the wall signage during the scene
+    When the compositing engine processes those frames
+    Then SAM3 video-rle is called to return per-frame RLE masks for any foreground objects
+    And the warped signage is subtracted where foreground masks overlap
+
+  Scenario: Quad tracking loses lock
+    Given the surface corner moves out of frame or is fully occluded
+    When point tracking loses lock on one or more corners
+    Then the render is marked "Failed" with error "Quad tracking lost lock at frame N"
+    And the specific corner and frame are logged
+
+  Scenario: Planar path has no duration limit
+    Given a 60-second scene with a wall signage placement
+    When the planar compositing engine processes the render
+    Then the full 60 seconds are processed in a single pass
+    And no chunking or splicing is needed
+
+  # ── Engine Tagging & Quality Visibility ──
+
+  Scenario: Render record tracks which compositing engine was used
+    Given a render has completed
+    When I view the render details
+    Then the CompositingEngine field shows the actual engine used
+    And the QualityTier field shows "AI", "Exact", or "Standard"
+
+  Scenario: UI surfaces quality tier to user
+    Given the Renders list shows completed renders
+    Then pikaswaps renders show 🟣 "AI Enhanced" badge
+    And planar warp renders show 🟢 "Pixel Perfect" badge
+    And ffmpeg fallback renders show ⚪ "Standard" badge
+    And hovering ⚪ shows tooltip explaining AI enhancement was unavailable
+
+  # ── Mode Switching ──
+
+  Scenario: Toggle between Insert Product and Place Signage modes
+    Given I am in the Placement Editor
+    When I toggle the interaction mode
+    Then "Insert Product" mode shows a crosshair cursor for object selection
+    And "Place Signage" mode shows corner-placement cursor with "Click 4 corners" instruction
+    And switching modes clears any active overlay
