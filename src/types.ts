@@ -543,3 +543,76 @@ export interface JobsListResponse {
   data: DetectionJob[];
   count: number;
 }
+
+// ─── Interactive Placement Types ─────────────────────────────────────
+
+/** Request to preview-segment a clicked point on a video frame via SAM3 video-rle */
+export interface SegmentPreviewRequest {
+  contentId: string;
+  frameIndex: number;
+  x: number;
+  y: number;
+}
+
+/** Response from SAM3 video-rle preview segmentation */
+export interface SegmentPreviewResponse {
+  maskPolygonJson: string;       // JSON [{x,y},...] polygon for SVG overlay
+  confidence: number;
+  trackId: number;
+  surfaceType: string;
+  frameIndex: number;
+  boundsXMin: number;
+  boundsYMin: number;
+  boundsXMax: number;
+  boundsYMax: number;
+}
+
+/** Request to dispatch an interactive placement render */
+export interface InteractiveRenderRequest {
+  contentId: string;
+  surfaceId: string;
+  campaignId: string;
+  assetId: string;
+  assetType: 'Generative' | 'Planar';
+  exportPreset?: string;
+}
+
+/** Asset type classification — drives compositing engine selection */
+export type AssetType = 'Generative' | 'Planar';
+
+/** Quality classification for completed renders */
+export type QualityTier = 'AI' | 'Exact' | 'Standard';
+
+/** Compositing engine that produced a render */
+export type CompositingEngine = 'pikaswaps' | 'PlanarWarp' | 'ffmpeg-luma' | 'ffmpeg-perspective';
+
+/** Parsed polygon from maskPolygonJson */
+export interface MaskPolygon {
+  points: { x: number; y: number }[];
+  bounds: { xMin: number; yMin: number; xMax: number; yMax: number };
+  confidence: number;
+  trackId: number;
+}
+
+/** Parse a SegmentPreviewResponse's maskPolygonJson into a MaskPolygon */
+export function parseMaskPolygon(response: SegmentPreviewResponse): MaskPolygon {
+  let points: { x: number; y: number }[] = [];
+  try {
+    const raw = JSON.parse(response.maskPolygonJson || '[]');
+    points = raw.map((c: any) => ({
+      x: Number(c.x ?? c.X ?? 0),
+      y: Number(c.y ?? c.Y ?? 0),
+    }));
+  } catch { /* empty */ }
+  return {
+    points,
+    bounds: {
+      xMin: response.boundsXMin,
+      yMin: response.boundsYMin,
+      xMax: response.boundsXMax,
+      yMax: response.boundsYMax,
+    },
+    confidence: response.confidence,
+    trackId: response.trackId,
+  };
+}

@@ -454,3 +454,45 @@ export async function fetchStatsSummary(): Promise<StatsSummary> {
   const r = await fetchWithAuth('/api/stats/summary');
   return r.json();
 }
+
+// ─── Interactive Placement API ─────────────────────────────────────────
+
+import type {
+  SegmentPreviewRequest,
+  SegmentPreviewResponse,
+  InteractiveRenderRequest,
+} from './types';
+
+export type { SegmentPreviewRequest, SegmentPreviewResponse, InteractiveRenderRequest };
+
+/**
+ * Preview-segment a clicked point on a video frame using SAM3 video-rle.
+ * Returns a mask polygon for SVG overlay in the placement editor.
+ */
+export async function previewSegment(dto: SegmentPreviewRequest): Promise<SegmentPreviewResponse> {
+  const r = await fetchWithAuth('/api/surfaces/preview-segment', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Preview segmentation failed.' }));
+    throw new Error(err.error || 'Preview segmentation failed.');
+  }
+  return r.json();
+}
+
+/**
+ * Dispatch an interactive placement render.
+ * Routes to generative (pikaswaps) or planar (homography warp) based on assetType.
+ */
+export async function confirmInteractivePlacement(dto: InteractiveRenderRequest): Promise<{ renderId: string }> {
+  const r = await fetchWithAuth('/api/renders/interactive', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to dispatch render.' }));
+    throw new Error(err.error || 'Failed to dispatch render.');
+  }
+  return r.json();
+}

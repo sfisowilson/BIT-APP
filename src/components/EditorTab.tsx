@@ -6,6 +6,9 @@ import {
   MapPin, ChevronRight, X, Upload, RefreshCw, Download, Clock
 } from 'lucide-react';
 import { ContentItem, SceneItem, SurfaceItem, CreativeAsset, CampaignItem, SurfaceAssetPair, RenderItem } from '../types';
+import { SurfaceClickOverlay } from './SurfaceClickOverlay';
+import { confirmInteractivePlacement } from '../apiClient';
+import type { MaskPolygon } from '../types';
 
 interface EditorTabProps {
   // Core video/scene/surface selection
@@ -130,6 +133,13 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   const [submitConfirming, setSubmitConfirming] = React.useState<string>('');
   const [redetectConfirmOpen, setRedetectConfirmOpen] = React.useState(false);
   const [retryingId, setRetryingId] = React.useState<string | null>(null);
+
+  // ── Interactive placement state ──
+  const [interactionMode, setInteractionMode] = React.useState<'product' | 'signage'>('product');
+  const [interactiveMask, setInteractiveMask] = React.useState<import('../types').MaskPolygon | null>(null);
+  const [interactiveQuad, setInteractiveQuad] = React.useState<[import('../components/SurfaceClickOverlay').QuadPoint, import('../components/SurfaceClickOverlay').QuadPoint, import('../components/SurfaceClickOverlay').QuadPoint, import('../components/SurfaceClickOverlay').QuadPoint] | null>(null);
+  const [interactiveAssetId, setInteractiveAssetId] = React.useState<string>('');
+  const [interactivePlacing, setInteractivePlacing] = React.useState(false);
 
   // ── Derived data ──────────────────────────────────────────────────
   const currentScene = scenesForVideo.find(s => s.id === selectedSceneId);
@@ -461,6 +471,71 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Interactive mode toggle */}
+                  <div className="flex items-center rounded-lg border border-indigo-200 overflow-hidden">
+                    <button
+                      onClick={() => setInteractionMode('product')}
+                      className={`px-2.5 py-1 text-[10px] font-bold cursor-pointer transition-colors ${
+                        interactionMode === 'product'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-white text-slate-600 hover:bg-indigo-50'
+                      }`}
+                    >
+                      🎯 Insert Product
+                    </button>
+                    <button
+                      onClick={() => setInteractionMode('signage')}
+                      className={`px-2.5 py-1 text-[10px] font-bold cursor-pointer transition-colors ${
+                        interactionMode === 'signage'
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-white text-slate-600 hover:bg-emerald-50'
+                      }`}
+                    >
+                      📐 Place Signage
+                    </button>
+                  </div>
+                  {/* Approve interactive placement */}
+                  {(interactiveMask || interactiveQuad) && selectedCampaignId && (
+                    <button
+                      onClick={async () => {
+                        if (!interactiveAssetId) return;
+                        setInteractivePlacing(true);
+                        try {
+                          const assetType = interactionMode === 'signage' ? 'Planar' : 'Generative';
+                          await confirmInteractivePlacement({
+                            contentId: selectedVideo,
+                            surfaceId: '', // Will be created server-side
+                            campaignId: selectedCampaignId,
+                            assetId: interactiveAssetId,
+                            assetType,
+                          });
+                          setInteractiveMask(null);
+                          setInteractiveQuad(null);
+                        } catch (err: any) {
+                          console.error('Interactive placement failed:', err);
+                        } finally {
+                          setInteractivePlacing(false);
+                        }
+                      }}
+                      disabled={interactivePlacing || !interactiveAssetId}
+                      className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white cursor-pointer transition-all shadow-sm whitespace-nowrap"
+                    >
+                      {interactivePlacing ? 'Dispatching…' : '✅ Approve & Render'}
+                    </button>
+                  )}
+                  {/* Asset selector for interactive placement */}
+                  {(interactiveMask || interactiveQuad) && (
+                    <select
+                      value={interactiveAssetId}
+                      onChange={(e) => setInteractiveAssetId(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] text-slate-800 focus:outline-none"
+                    >
+                      <option value="">Select asset…</option>
+                      {assetList.map(a => (
+                        <option key={a.id} value={a.id}>{a.name}</option>
+                      ))}
+                    </select>
+                  )}
                   <div className="flex items-center gap-1 bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 text-slate-600 font-mono text-[10px]">
                     <Eye className="h-3 w-3 text-fuchsia-600 animate-pulse" />
                     <span className="font-bold text-slate-700">Preview:</span>
@@ -579,6 +654,28 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                       <p className="text-white/30 text-xs font-mono">No video file — upload in Content tab</p>
                     </div>
                   </div>
+                )}
+
+                {/* Interactive placement overlay — click-to-segment + draw-to-place */}
+                {isLocalVideo && activeVideo && (
+                  <SurfaceClickOverlay
+                    videoRef={videoRef}
+                    contentId={selectedVideo}
+                    currentFrame={currentVideoFrame}
+                    frameRate={activeVideo.frameRate || 30}
+                    mode={interactionMode}
+                    assetUrl={
+                      interactiveAssetId
+                        ? assetList.find(a => a.id === interactiveAssetId)?.storageKey
+                        : undefined
+                    }
+                    onMaskReceived={(polygon) => setInteractiveMask(polygon)}
+                    onQuadConfirmed={(corners) => setInteractiveQuad(corners)}
+                    onCancel={() => {
+                      setInteractiveMask(null);
+                      setInteractiveQuad(null);
+                    }}
+                  />
                 )}
 
                 {currentScene?.aiStatus === 'completed' && (
