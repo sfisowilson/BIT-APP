@@ -80,7 +80,7 @@ public class Sam3TrackingService : ISurfaceTrackingService
             var ys = seedPoints.Select(p => p[1]).ToList();
             var pf = promptFrame >= 0 ? promptFrame : startFrame;
 
-            // Use box_prompts only — SAM3 rejects mixed point+box on same frame
+            // Use box_prompts — single bounding box from polygon vertices
             var boxPrompts = new[]
             {
                 new
@@ -101,12 +101,12 @@ public class Sam3TrackingService : ISurfaceTrackingService
             var payload = new
             {
                 video_url = videoUrl,
-                prompt = sam3Prompt,        // Gemini-generated description (null → excluded)
+                prompt = sam3Prompt,              // Gemini-generated description
                 point_prompts = Array.Empty<object>(),  // Empty — not compatible with box_prompts on same frame
-                box_prompts = boxPrompts,    // Bounding box — stronger spatial hint than points
-                apply_mask = true,           // Use masked video as luma mask for compositing
+                box_prompts = boxPrompts,         // Bounding box from polygon coordinates
+                apply_mask = true,                // Use masked video as luma mask for compositing
                 video_output_type = "X264 (.mp4)",
-                detection_threshold = 0.3,   // Lowered for flat surfaces
+                detection_threshold = 0.3,        // Lowered for flat surfaces
             };
 
             var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions

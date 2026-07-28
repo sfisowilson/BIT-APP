@@ -97,6 +97,13 @@ BRAND SAFETY — PERMANENTLY EXCLUDE these (set unsafe=true):
 - Gore, blood, violence, or explicit content
 - Any surface that would cause public offense or brand damage
 
+OBJECT SEPARATION — CRITICAL:
+If there are multiple similar adjacent objects (e.g. 5 photo frames on a wall, 3 windows
+side by side, a grid of tiles), detect EACH ONE as a SEPARATE surface with its own unique
+boundary coordinates. Do NOT merge adjacent objects into a single large surface. Each
+individual item gets its own entry in the surfaces array with its own tight boundary.
+This is essential for precise ad placement targeting.
+
 Return at most 20 surfaces, sorted by viability descending.
 If no surfaces found, return { ""surfaces"": [] }.
 ";

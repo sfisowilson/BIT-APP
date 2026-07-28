@@ -55,6 +55,32 @@ namespace Afrobotics.Bit.Api.Controllers
             }
         }
 
+        /// <summary>Retry a failed render — resets to Queued and re-enqueues the compositing job.</summary>
+        [HttpPost("{id}/retry")]
+        public async Task<IActionResult> RetryRender(string id)
+        {
+            try
+            {
+                var render = await _renderService.RetryRenderAsync(id);
+                return Ok(render);
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                await _eventLog.LogEventAsync("Render", "RENDER_RETRY_INVALID", "Warning", ex.Message);
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Render", "RENDER_RETRY_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
         [HttpGet("{id}/status")]
         public async Task<IActionResult> GetStatus(string id)
         {

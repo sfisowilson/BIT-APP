@@ -3,9 +3,9 @@ import { motion } from 'motion/react';
 import {
   Tv, Play, Shield, CheckCircle, AlertTriangle, Sparkles, Wand2,
   Loader2, Eye, Layout, Image, Package, ArrowRight, Search, Cpu,
-  MapPin, ChevronRight, X, Upload, RefreshCw
+  MapPin, ChevronRight, X, Upload, RefreshCw, Download, Clock
 } from 'lucide-react';
-import { ContentItem, SceneItem, SurfaceItem, CreativeAsset, CampaignItem, SurfaceAssetPair } from '../types';
+import { ContentItem, SceneItem, SurfaceItem, CreativeAsset, CampaignItem, SurfaceAssetPair, RenderItem } from '../types';
 
 interface EditorTabProps {
   // Core video/scene/surface selection
@@ -62,6 +62,11 @@ interface EditorTabProps {
   hasSurfacesDetected?: boolean;
   hasPlacedAssets?: boolean;
   hasRenders?: boolean;
+
+  // Render tracking — show render status inline on the placement screen
+  renderList?: RenderItem[];
+  onRetryRender?: (renderId: string) => Promise<void>;
+  userRole?: 'Admin' | 'Editor' | 'Advertiser';
 }
 
 export const EditorTab: React.FC<EditorTabProps> = ({
@@ -108,6 +113,10 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   hasSurfacesDetected = false,
   hasPlacedAssets = false,
   hasRenders = false,
+  // Render tracking
+  renderList = [],
+  onRetryRender,
+  userRole,
 }) => {
   const [previewMode, setPreviewMode] = React.useState(false);
   const [aiPromptText, setAiPromptText] = React.useState('');
@@ -119,6 +128,8 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   const [showingPlacementPanel, setShowingPlacementPanel] = React.useState<boolean>(true);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const [submitConfirming, setSubmitConfirming] = React.useState<string>('');
+  const [redetectConfirmOpen, setRedetectConfirmOpen] = React.useState(false);
+  const [retryingId, setRetryingId] = React.useState<string | null>(null);
 
   // ── Derived data ──────────────────────────────────────────────────
   const currentScene = scenesForVideo.find(s => s.id === selectedSceneId);
@@ -749,9 +760,19 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     {onDetectSurfacesForScene && activeVideo && selectedSceneId && (() => {
                       const currentScene = scenesForVideo.find(s => s.id === selectedSceneId);
                       const isDetecting = currentScene?.surfaceStatus === 'Detecting';
+                      const approvedCount = surfacesForScene.filter(sf => sf.status === 'Approved').length;
+
+                      const handleRedetectClick = () => {
+                        if (approvedCount > 0) {
+                          setRedetectConfirmOpen(true);
+                        } else {
+                          onDetectSurfacesForScene(selectedSceneId, selectedVideo);
+                        }
+                      };
+
                       return (
                         <button
-                          onClick={() => onDetectSurfacesForScene(selectedSceneId, selectedVideo)}
+                          onClick={handleRedetectClick}
                           className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-white font-semibold text-[10px] rounded-lg transition-all cursor-pointer shadow-sm ${
                             isDetecting ? 'bg-amber-500 hover:bg-amber-400' : 'bg-blue-600 hover:bg-blue-500'
                           }`}
@@ -865,31 +886,99 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                   {surfacesForScene.filter(sf => surfaceAssetPairs[sf.id]).map(sf => {
                     const asset = getPlacedAsset(sf.id);
                     if (!asset) return null;
+                    const renderForSurface = renderList.find(r => r.surfaceId === sf.id);
+                    const isRenderProcessing = renderForSurface && (renderForSurface.renderStatus === 'Queued' || renderForSurface.renderStatus === 'Processing');
+                    const isRenderFinished = renderForSurface?.renderStatus === 'Finished';
+                    const isRenderFailed = renderForSurface?.renderStatus === 'Failed';
                     return (
-                      <div key={sf.id} className="flex items-center justify-between bg-emerald-50/50 border border-emerald-200/60 rounded-lg px-3 py-2">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-lg bg-emerald-100 flex items-center justify-center overflow-hidden border border-emerald-200">
-                            {asset.thumbnailUrl ? (
-                              <img src={asset.thumbnailUrl} alt={asset.name} className="h-full w-full object-cover" />
-                            ) : (
-                              <Image className="h-4 w-4 text-emerald-600" />
+                      <div key={sf.id} className={`border rounded-lg px-3 py-2 ${
+                        isRenderFinished ? 'bg-emerald-50/50 border-emerald-200/60' :
+                        isRenderFailed ? 'bg-red-50/50 border-red-200/60' :
+                        isRenderProcessing ? 'bg-amber-50/50 border-amber-200/60' :
+                        'bg-emerald-50/50 border-emerald-200/60'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-8 w-8 rounded-lg flex items-center justify-center overflow-hidden border ${
+                              isRenderFinished ? 'bg-emerald-100 border-emerald-200' :
+                              isRenderFailed ? 'bg-red-100 border-red-200' :
+                              isRenderProcessing ? 'bg-amber-100 border-amber-200' :
+                              'bg-emerald-100 border-emerald-200'
+                            }`}>
+                              {asset.thumbnailUrl ? (
+                                <img src={asset.thumbnailUrl} alt={asset.name} className="h-full w-full object-cover" />
+                              ) : (
+                                <Image className={`h-4 w-4 ${isRenderFailed ? 'text-red-600' : isRenderProcessing ? 'text-amber-600' : 'text-emerald-600'}`} />
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold text-slate-800">{sf.surfaceType} ← {asset.name}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">{asset.type} · {asset.brandCategory} · {Math.round(sf.confidenceScore * 100)}% conf.</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {!renderForSurface && (
+                              <>
+                                <button onClick={() => onRemoveAsset(sf.id)} className="text-[10px] text-red-500 hover:text-red-700 font-medium cursor-pointer">Remove</button>
+                                <button
+                                  onClick={() => { setSubmitConfirming(sf.id); onSubmitPlacement(sf.id, asset.id, selectedCampaignId || ''); setTimeout(() => setSubmitConfirming(''), 2000); }}
+                                  disabled={submitConfirming === sf.id}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-300 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all"
+                                >
+                                  {submitConfirming === sf.id ? <><Loader2 className="h-3 w-3 animate-spin" />Submitting...</> : <><Cpu className="h-3 w-3" />Submit for Render</>}
+                                </button>
+                              </>
+                            )}
+                            {isRenderProcessing && (
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 font-semibold text-[10px] rounded-lg border border-amber-200">
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                  {renderForSurface.renderStatus} {renderForSurface.progress > 0 ? `${renderForSurface.progress}%` : ''}
+                                </span>
+                                <button onClick={() => onNavigateToRenders?.()} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium cursor-pointer">View in Renders</button>
+                              </div>
+                            )}
+                            {isRenderFinished && (
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-700 font-semibold text-[10px] rounded-lg border border-emerald-200">
+                                  <CheckCircle className="h-3 w-3" /> Finished
+                                </span>
+                                {renderForSurface.storageKey && (
+                                  <a href={renderForSurface.storageKey} download className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all">
+                                    <Download className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </div>
+                            )}
+                            {isRenderFailed && (
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 font-semibold text-[10px] rounded-lg border border-red-200">
+                                  <X className="h-3 w-3" /> Failed
+                                </span>
+                                {onRetryRender && (
+                                  <button
+                                    onClick={async () => {
+                                      setRetryingId(renderForSurface!.id);
+                                      try { await onRetryRender(renderForSurface!.id); }
+                                      finally { setRetryingId(null); }
+                                    }}
+                                    disabled={retryingId === renderForSurface.id}
+                                    className="inline-flex items-center gap-1 px-2 py-1 bg-red-600 hover:bg-red-500 disabled:bg-red-300 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all"
+                                  >
+                                    {retryingId === renderForSurface.id ? <><Loader2 className="h-3 w-3 animate-spin" />Retrying...</> : <><RefreshCw className="h-3 w-3" />Retry</>}
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </div>
-                          <div>
-                            <div className="text-xs font-bold text-slate-800">{sf.surfaceType} ← {asset.name}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">{asset.type} · {asset.brandCategory} · {Math.round(sf.confidenceScore * 100)}% conf.</div>
+                        </div>
+                        {/* Admin-only failure reason */}
+                        {isRenderFailed && renderForSurface.lastErrorMessage && userRole === 'Admin' && (
+                          <div className="mt-2 p-2 bg-red-100 border border-red-200 rounded-lg">
+                            <div className="text-[9px] font-mono font-bold text-red-600 uppercase mb-0.5">Failure Reason (admin)</div>
+                            <div className="text-[10px] text-red-700 font-mono leading-relaxed break-all">{renderForSurface.lastErrorMessage}</div>
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button onClick={() => onRemoveAsset(sf.id)} className="text-[10px] text-red-500 hover:text-red-700 font-medium cursor-pointer">Remove</button>
-                          <button
-                            onClick={() => { setSubmitConfirming(sf.id); onSubmitPlacement(sf.id, asset.id, selectedCampaignId || ''); setTimeout(() => setSubmitConfirming(''), 2000); }}
-                            disabled={submitConfirming === sf.id}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-300 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all"
-                          >
-                            {submitConfirming === sf.id ? <><Loader2 className="h-3 w-3 animate-spin" />Submitting...</> : <><Cpu className="h-3 w-3" />Submit for Render</>}
-                          </button>
-                        </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1142,21 +1231,88 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     )}
 
                     {/* Submit for render — only after scene is approved */}
-                    {getPlacedAsset(currentSurface.id) && currentScene && (
-                      currentScene.qaStatus === 'Approved' ? (
-                        <button
-                          onClick={async () => { const asset = getPlacedAsset(currentSurface.id)!; setSubmitConfirming(currentSurface.id); const ok = await onSubmitPlacement(currentSurface.id, asset.id, selectedCampaignId || ''); setTimeout(() => setSubmitConfirming(''), 2000); if (ok) onNavigateToRenders?.(); }}
-                          disabled={submitConfirming === currentSurface.id}
-                          className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-300 text-white font-bold text-xs rounded-lg cursor-pointer transition-all shadow-sm"
-                        >
-                          {submitConfirming === currentSurface.id ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Submitting to Render Queue...</> : <><Cpu className="h-3.5 w-3.5" />Submit & View Renders</>}
-                        </button>
-                      ) : (
-                        <div className="text-[10px] text-amber-600 bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-center">
-                          ⚠️ Approve this scene before rendering. Use "✓ Approve Scene" above the video player.
+                    {getPlacedAsset(currentSurface.id) && currentScene && (() => {
+                      const asset = getPlacedAsset(currentSurface.id)!;
+                      const currentRender = renderList.find(r => r.surfaceId === currentSurface.id);
+                      const isRenderProcessing = currentRender && (currentRender.renderStatus === 'Queued' || currentRender.renderStatus === 'Processing');
+                      const isRenderFinished = currentRender?.renderStatus === 'Finished';
+                      const isRenderFailed = currentRender?.renderStatus === 'Failed';
+
+                      if (!currentRender) {
+                        return currentScene.qaStatus === 'Approved' ? (
+                          <button
+                            onClick={async () => { setSubmitConfirming(currentSurface.id); const ok = await onSubmitPlacement(currentSurface.id, asset.id, selectedCampaignId || ''); setTimeout(() => setSubmitConfirming(''), 2000); if (ok) onNavigateToRenders?.(); }}
+                            disabled={submitConfirming === currentSurface.id}
+                            className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-300 text-white font-bold text-xs rounded-lg cursor-pointer transition-all shadow-sm"
+                          >
+                            {submitConfirming === currentSurface.id ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Submitting to Render Queue...</> : <><Cpu className="h-3.5 w-3.5" />Submit & View Renders</>}
+                          </button>
+                        ) : (
+                          <div className="text-[10px] text-amber-600 bg-amber-50 p-2.5 rounded-lg border border-amber-200 text-center">
+                            ⚠️ Approve this scene before rendering. Use "✓ Approve Scene" above the video player.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-2">
+                          {/* Render status card */}
+                          <div className={`p-3 rounded-lg border ${
+                            isRenderFinished ? 'bg-emerald-50 border-emerald-200' :
+                            isRenderFailed ? 'bg-red-50 border-red-200' :
+                            'bg-amber-50 border-amber-200'
+                          }`}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-bold text-slate-800">Render Status</span>
+                              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                                isRenderFinished ? 'bg-emerald-100 text-emerald-700' :
+                                isRenderFailed ? 'bg-red-100 text-red-700' :
+                                'bg-amber-100 text-amber-700'
+                              }`}>
+                                {isRenderProcessing && <Loader2 className="h-3 w-3 inline animate-spin mr-1" />}
+                                {currentRender.renderStatus}
+                              </span>
+                            </div>
+                            {isRenderProcessing && currentRender.progress > 0 && (
+                              <div className="w-full bg-slate-200 rounded-full h-1.5 mt-1.5 overflow-hidden">
+                                <div className="bg-amber-500 h-full rounded-full transition-all duration-500" style={{ width: `${currentRender.progress}%` }} />
+                              </div>
+                            )}
+                            {/* Actions */}
+                            <div className="flex items-center gap-2 mt-2">
+                              {isRenderFinished && currentRender.storageKey && (
+                                <a href={currentRender.storageKey} download className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all shadow-sm">
+                                  <Download className="h-3 w-3" /> Download
+                                </a>
+                              )}
+                              {isRenderFailed && onRetryRender && (
+                                <button
+                                  onClick={async () => {
+                                    setRetryingId(currentRender.id);
+                                    try { await onRetryRender(currentRender.id); }
+                                    finally { setRetryingId(null); }
+                                  }}
+                                  disabled={retryingId === currentRender.id}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-red-300 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all shadow-sm"
+                                >
+                                  {retryingId === currentRender.id ? <><Loader2 className="h-3 w-3 animate-spin" />Retrying...</> : <><RefreshCw className="h-3 w-3" />Retry Render</>}
+                                </button>
+                              )}
+                              <button onClick={() => onNavigateToRenders?.()} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium cursor-pointer ml-auto">
+                                View all renders →
+                              </button>
+                            </div>
+                          </div>
+                          {/* Admin-only failure reason */}
+                          {isRenderFailed && currentRender.lastErrorMessage && userRole === 'Admin' && (
+                            <div className="p-2.5 bg-red-100 border border-red-200 rounded-lg">
+                              <div className="text-[9px] font-mono font-bold text-red-600 uppercase mb-0.5">Failure Reason (admin)</div>
+                              <div className="text-[10px] text-red-700 font-mono leading-relaxed break-all">{currentRender.lastErrorMessage}</div>
+                            </div>
+                          )}
                         </div>
-                      )
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -1170,6 +1326,54 @@ export const EditorTab: React.FC<EditorTabProps> = ({
             )}
           </div>
         </div>
+
+        {/* ── Re-run Detection Confirmation Modal ── */}
+        {redetectConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full mx-4 p-6"
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="h-10 w-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-bold text-slate-800 font-display">Delete All Surfaces?</h3>
+                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                    This will delete <strong>ALL</strong> existing surfaces for this scene, including{' '}
+                    <strong className="text-red-600">{surfacesForScene.filter(sf => sf.status === 'Approved').length} approved placement(s)</strong>.
+                    Ad slots and approval records will be permanently lost. This cannot be undone.
+                  </p>
+                  <p className="text-xs text-slate-400 mt-2">
+                    New surfaces will be detected from scratch after deletion.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  onClick={() => setRedetectConfirmOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setRedetectConfirmOpen(false);
+                    if (onDetectSurfacesForScene && activeVideo && selectedSceneId) {
+                      onDetectSurfacesForScene(selectedSceneId, selectedVideo);
+                    }
+                  }}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg cursor-pointer transition-colors shadow-sm"
+                >
+                  Delete &amp; Re-detect
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
     </motion.div>
   );
 };

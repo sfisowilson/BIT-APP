@@ -186,6 +186,7 @@ export interface RenderItem {
   renderStatus: "Queued" | "Processing" | "Finished" | "Failed";
   progress: number;
   processingDurationMs: number;
+  lastErrorMessage?: string;
   createdAt: string;
 }
 

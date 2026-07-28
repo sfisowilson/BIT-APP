@@ -128,7 +128,7 @@ public class RenderJobService
                 var overlayArgs = $"-y -hide_banner -loglevel error " +
                     $"-i \"{safeOrig}\" -i \"{safeSam3}\" -i \"{safePng}\" " +
                     $"-filter_complex \"" +
-                    $"[1:v]format=gray,geq=r='if(gt(lum(X\\,Y),10),255,0)' [mask];" +
+                    $"[1:v]format=gray,geq=r='if(gt(lum(X\\,Y)\\,10)\\,255\\,0)' [mask];" +
                     $"[2:v]scale=W:H,format=rgba [asset_rgba];" +
                     $"[asset_rgba][mask]alphamerge [asset_masked];" +
                     $"[0:v][asset_masked]overlay=0:0,format=yuv420p [out]" +
@@ -243,6 +243,7 @@ public class RenderJobService
         {
             _logger.LogError(ex, "[RenderJob] Render {RenderId} FAILED", renderId);
             render.RenderStatus = "Failed";
+            render.LastErrorMessage = ex.Message;
             await db.SaveChangesAsync();
             await eventLog.LogEventAsync("RenderEngine", "RENDER_FAILED", "Warning", $"Render '{render.Id}' failed: {ex.Message}");
             throw;

@@ -17,6 +17,7 @@ namespace Afrobotics.Bit.Api.Services
     {
         Task<PaginatedResult<RenderItem>> GetRendersAsync(RenderFilterParams filter);
         Task<RenderItem> DispatchRenderAsync(CreateRenderDto dto);
+        Task<RenderItem> RetryRenderAsync(string renderId);
     }
 
     public class RenderService : IRenderService
@@ -93,6 +94,41 @@ namespace Afrobotics.Bit.Api.Services
             await _renderRepository.SaveChangesAsync();
 
             // Enqueue render processing as a Hangfire background job (survives restarts, retries on failure)
+            BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessRenderJob(render.Id, default));
+
+            return render;
+        }
+
+        public async Task<RenderItem> RetryRenderAsync(string renderId)
+        {
+            var render = await _renderRepository.GetByIdAsync(renderId);
+            if (render == null)
+                throw new ArgumentException($"Render '{renderId}' not found.");
+
+            if (render.RenderStatus != "Failed")
+                throw new InvalidOperationException(
+                    $"Only Failed renders can be retried. Render '{renderId}' is currently '{render.RenderStatus}'.");
+
+            // Re-validate the surface is still approved
+            var surface = await _context.SurfaceItems.FindAsync(render.SurfaceId);
+            if (surface == null)
+                throw new InvalidOperationException(
+                    "The surface for this render no longer exists. Please re-submit from the Editor tab.");
+            if (surface.Status != "Approved")
+                throw new InvalidOperationException(
+                    $"Surface '{surface.SurfaceType}' is no longer Approved (current status: '{surface.Status}'). " +
+                    "Please re-approve the surface before retrying.");
+
+            await _eventLog.LogEventAsync("RenderEngine", "RENDER_RETRY_QUEUED", "Info",
+                $"Render '{render.Id}' retry queued (surface '{surface.SurfaceType}', campaign {render.CampaignId}).");
+
+            // Reset render state and re-enqueue
+            render.RenderStatus = "Queued";
+            render.Progress = 0;
+            render.ProcessingDurationMs = 0;
+            render.LastErrorMessage = null;
+            await _renderRepository.SaveChangesAsync();
+
             BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessRenderJob(render.Id, default));
 
             return render;

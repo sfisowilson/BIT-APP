@@ -1,17 +1,20 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Cpu, Download, Film, Loader2, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Cpu, Download, Film, Loader2, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react';
 import type { RenderItem } from '../types';
 
 interface RendersTabProps {
   renderList: RenderItem[];
   campaignName?: string;
+  onRetryRender?: (renderId: string) => Promise<void>;
+  userRole?: 'Admin' | 'Editor' | 'Advertiser';
 }
 
-export const RendersTab: React.FC<RendersTabProps> = ({ renderList, campaignName }) => {
+export const RendersTab: React.FC<RendersTabProps> = ({ renderList, campaignName, onRetryRender, userRole }) => {
   const pending = renderList.filter(r => r.renderStatus === 'Processing' || r.renderStatus === 'Queued');
   const finished = renderList.filter(r => r.renderStatus === 'Finished');
   const failed = renderList.filter(r => r.renderStatus === 'Failed');
+  const [retryingId, setRetryingId] = React.useState<string | null>(null);
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6" key="renders_tab">
@@ -96,7 +99,35 @@ export const RendersTab: React.FC<RendersTabProps> = ({ renderList, campaignName
                       </a>
                     )}
                     {isFailed && (
-                      <span className="text-[10px] text-red-500 font-medium">Render failed. Try re-submitting from the Editor tab.</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-red-500 font-medium">Render failed.</span>
+                        {onRetryRender && (
+                          <button
+                            onClick={async () => {
+                              setRetryingId(r.id);
+                              try {
+                                await onRetryRender(r.id);
+                              } finally {
+                                setRetryingId(null);
+                              }
+                            }}
+                            disabled={retryingId === r.id}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-red-300 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all shadow-sm"
+                          >
+                            {retryingId === r.id ? (
+                              <><Loader2 className="h-3 w-3 animate-spin" /> Retrying...</>
+                            ) : (
+                              <><RefreshCw className="h-3 w-3" /> Retry Render</>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {isFailed && r.lastErrorMessage && userRole === 'Admin' && (
+                      <div className="mt-2 p-2.5 bg-red-100 border border-red-200 rounded-lg">
+                        <div className="text-[9px] font-mono font-bold text-red-600 uppercase mb-0.5">Failure Reason (admin)</div>
+                        <div className="text-[10px] text-red-700 font-mono leading-relaxed break-all">{r.lastErrorMessage}</div>
+                      </div>
                     )}
                   </div>
                 </div>

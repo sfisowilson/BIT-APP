@@ -43,7 +43,7 @@ import {
   TIMELINE_DATA 
 } from './types';
 import { DOCUMENT_CONTENT } from './document';
-import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession, retranscode, redetectScenes, detectScenesOnly, detectSurfacesForScene, resetPipeline, refreshToken, fetchStatsSummary, fetchSurfacesBatch, type StatsSummary } from './apiClient';
+import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession, retranscode, redetectScenes, detectScenesOnly, detectSurfacesForScene, resetPipeline, refreshToken, fetchStatsSummary, fetchSurfacesBatch, retryRender, type StatsSummary } from './apiClient';
 import { useChunkedUpload } from './hooks/useChunkedUpload';
 import { useSignalR, type DetectionProgressEvent, type RenderProgressEvent, type ContentStatusEvent, type AlarmEvent, type NotificationEvent } from './hooks/useSignalR';
 
@@ -1024,6 +1024,17 @@ export default function App() {
     }
   };
 
+  // Handle render retry from RendersTab
+  const handleRetryRender = async (renderId: string) => {
+    try {
+      await retryRender(renderId);
+      await fetchAllData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to retry render. Check the console for details.');
+      console.error('Failed to retry render:', err);
+    }
+  };
+
   // Handle compositing preview (MReq 6: generate composite frame for QA)
   const [compositePreview, setCompositePreview] = useState<string | null>(null);
   const [compositingPreview, setCompositingPreview] = useState(false);
@@ -1985,6 +1996,10 @@ export default function App() {
                     hasSurfacesDetected={scenesForVideo.length > 0 && surfacesForScene.length > 0}
                     hasPlacedAssets={Object.keys(surfaceAssetPairs).length > 0}
                     hasRenders={renderList.filter(r => selectedCampaignId && r.campaignId === selectedCampaignId).length > 0}
+                    // Render tracking
+                    renderList={renderList}
+                    onRetryRender={handleRetryRender}
+                    userRole={user?.role}
                   />
                 )}
 
@@ -1992,6 +2007,8 @@ export default function App() {
                   <RendersTab
                     renderList={renderList.filter(r => selectedCampaignId && r.campaignId === selectedCampaignId)}
                     campaignName={campaignList.find(c => c.id === selectedCampaignId)?.name}
+                    onRetryRender={handleRetryRender}
+                    userRole={user?.role}
                   />
                 )}
 

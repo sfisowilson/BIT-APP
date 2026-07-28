@@ -355,7 +355,11 @@ namespace Afrobotics.Bit.Api.Models
         
         [Required]
         public int ProcessingDurationMs { get; set; } = 0;
-        
+
+        /// <summary>Error details when render fails. Visible to Admin users for diagnostics.</summary>
+        [MaxLength(2000)]
+        public string? LastErrorMessage { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 

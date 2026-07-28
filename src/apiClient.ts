@@ -322,6 +322,18 @@ export async function suggestPlacements(payload: {
   return r.json();
 }
 
+/** Retry a failed render — resets to Queued and re-enqueues the compositing job. */
+export async function retryRender(
+  renderId: string,
+): Promise<{ id: string; renderStatus: string; message?: string }> {
+  const r = await fetchWithAuth(`/api/renders/${renderId}/retry`, { method: 'POST' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to retry render.');
+  }
+  return r.json();
+}
+
 /** Poll for detection job progress. Returns 0-100 percentage and current status. */
 export async function getDetectionStatus(
   contentId: string,
