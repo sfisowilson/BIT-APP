@@ -20,4 +20,11 @@ public class BasicTrackingService : ISurfaceTrackingService
             "Set Platform Setting 'engine_tracking' to 'sam3' to enable per-frame surface tracking. " +
             "Ensure the Fal.ai API key is configured ('falai_api_key' setting).");
     }
+
+    /// <summary>Preview segmentation is not supported without a real tracking engine.</summary>
+    public Task<SegmentPreviewResult?> PreviewSegmentAsync(
+        string contentId, string videoPath, int frameIndex, int x, int y, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<SegmentPreviewResult?>(null);
+    }
 }

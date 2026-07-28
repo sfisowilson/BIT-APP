@@ -297,6 +297,199 @@ public class Sam3TrackingService : ISurfaceTrackingService
 
     // ── Seed boundary parsing ──
 
+    /// <summary>
+    /// Preview-segment a clicked point on a single video frame using SAM3 video-rle.
+    /// Calls fal-ai/sam-3/video-rle with a single point_prompt, decodes the RLE mask,
+    /// and returns a polygon for SVG overlay rendering.
+    /// </summary>
+    public async Task<SegmentPreviewResult?> PreviewSegmentAsync(
+        string contentId, string videoPath, int frameIndex, int x, int y, CancellationToken cancellationToken = default)
+    {
+        var apiKey = await _settings.GetAsync("falai_api_key");
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            await _eventLog.LogEventAsync("SAM3", "NO_API_KEY", "Error", "falai_api_key not configured.");
+            return null;
+        }
+
+        var videoBaseUrl = await _settings.GetAsync("sam3_video_base_url", "http://localhost:57220");
+        var videoFileName = System.IO.Path.GetFileName(videoPath);
+        var videoUrl = $"{videoBaseUrl}/api/content/file/{videoFileName}";
+
+        var rleEndpoint = "https://queue.fal.run/fal-ai/sam-3/video-rle";
+
+        try
+        {
+            await _eventLog.LogEventAsync("SAM3", "PREVIEW_START", "Info",
+                $"Preview segment: content={contentId}, frame={frameIndex}, point=({x},{y})");
+
+            var payload = new
+            {
+                video_url = videoUrl,
+                point_prompts = new[]
+                {
+                    new { frame_index = frameIndex, x, y, label = 1 }
+                },
+                box_prompts = Array.Empty<object>(),
+                apply_mask = false,           // We want raw RLE data, not a rendered video
+                detection_threshold = 0.5,     // Tighter threshold for point-click precision
+            };
+
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            });
+            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+            _http.DefaultRequestHeaders.Clear();
+            _http.DefaultRequestHeaders.Add("Authorization", $"Key {apiKey}");
+
+            // ── Submit ──
+            var submitResponse = await _http.PostAsync(rleEndpoint, content, cancellationToken);
+            var submitJson = await submitResponse.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!submitResponse.IsSuccessStatusCode)
+            {
+                await _eventLog.LogEventAsync("SAM3", "PREVIEW_SUBMIT_ERROR", "Error",
+                    $"HTTP {(int)submitResponse.StatusCode}: {Truncate(submitJson, 300)}");
+                return null;
+            }
+
+            // ── Extract request_id ──
+            string? requestId = null;
+            using (var submitDoc = JsonDocument.Parse(submitJson))
+            {
+                if (submitDoc.RootElement.TryGetProperty("request_id", out var rid))
+                    requestId = rid.GetString();
+            }
+
+            if (string.IsNullOrEmpty(requestId))
+            {
+                await _eventLog.LogEventAsync("SAM3", "PREVIEW_NO_REQUEST_ID", "Error", "No request_id in response.");
+                return null;
+            }
+
+            // ── Poll for result ──
+            var rleQueueBase = "https://queue.fal.run/fal-ai/sam-3/video-rle/requests";
+            var rleVideoFile = await PollForRleResultAsync(rleQueueBase, requestId, cancellationToken);
+
+            if (rleVideoFile == null)
+            {
+                await _eventLog.LogEventAsync("SAM3", "PREVIEW_NO_FRAMES", "Warning",
+                    $"SAM3 video-rle returned no frame data for request {requestId}.");
+                return null;
+            }
+
+            // ── Parse SAM3VideoObjectFrame from the result ──
+            var frames = await FetchRleFramesAsync(rleQueueBase, requestId, cancellationToken);
+            if (frames == null || frames.Count == 0) return null;
+
+            // Find the best mask in the prompt frame (frame_index matching the prompt frame)
+            var promptFrameData = frames.FirstOrDefault(f => f.FrameIndex == frameIndex);
+            if (promptFrameData == null)
+            {
+                // Fall back to the first frame with objects
+                promptFrameData = frames.FirstOrDefault(f => f.Objects?.Count > 0);
+            }
+
+            if (promptFrameData?.Objects == null || promptFrameData.Objects.Count == 0)
+                return null;
+
+            // Pick the object with the highest confidence (if multiple)
+            var bestMask = promptFrameData.Objects
+                .OrderByDescending(o => o.Confidence)
+                .First();
+
+            // Decode RLE → polygon
+            var decoded = RleDecoder.Decode(bestMask.Rle ?? "", rleVideoFile.Width, rleVideoFile.Height);
+            var polygon = RleDecoder.MaskToPolygon(decoded);
+            var bounds = RleDecoder.PolygonBounds(polygon);
+
+            await _eventLog.LogEventAsync("SAM3", "PREVIEW_COMPLETE", "Info",
+                $"Preview result: trackId={bestMask.TrackId}, confidence={bestMask.Confidence:F2}, " +
+                $"polygonPoints={polygon.Count}, bounds=({bounds.xMin},{bounds.yMin})-({bounds.xMax},{bounds.yMax})");
+
+            return new SegmentPreviewResult
+            {
+                MaskPolygon = polygon,
+                Confidence = bestMask.Confidence,
+                TrackId = bestMask.TrackId,
+                SurfaceType = string.Empty, // SAM3 doesn't provide type — could be inferred by Gemini later
+                FrameIndex = promptFrameData.FrameIndex,
+                Bounds = bounds
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            await _eventLog.LogEventAsync("SAM3", "PREVIEW_CANCELLED", "Warning", "Preview cancelled.");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            await _eventLog.LogEventAsync("SAM3", "PREVIEW_EXCEPTION", "Error",
+                $"Preview failed: {ex.GetType().Name} — {ex.Message}");
+            return null;
+        }
+    }
+
+    private async Task<Sam3RleVideoFile?> PollForRleResultAsync(string queueBase, string requestId, CancellationToken ct)
+    {
+        var statusUrl = $"{queueBase}/{requestId}/status";
+        var resultUrl = $"{queueBase}/{requestId}";
+        var deadline = DateTime.UtcNow.Add(TimeSpan.FromMinutes(5)); // Shorter timeout for preview
+
+        while (DateTime.UtcNow < deadline)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var statusResp = await _http.GetAsync(statusUrl, ct);
+                var statusJson = await statusResp.Content.ReadAsStringAsync(ct);
+                using var doc = JsonDocument.Parse(statusJson);
+                var status = "UNKNOWN";
+                if (doc.RootElement.TryGetProperty("status", out var s))
+                    status = s.GetString() ?? "UNKNOWN";
+
+                if (status == "COMPLETED") break;
+                if (status == "FAILED") return null;
+            }
+            catch { }
+            await Task.Delay(TimeSpan.FromSeconds(5), ct);
+        }
+
+        var resultResp = await _http.GetAsync(resultUrl, ct);
+        var resultJson = await resultResp.Content.ReadAsStringAsync(ct);
+        if (!resultResp.IsSuccessStatusCode) return null;
+
+        try
+        {
+            var result = JsonSerializer.Deserialize<Sam3RleResultResponse>(resultJson, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+            });
+            return result?.Video;
+        }
+        catch { return null; }
+    }
+
+    private async Task<List<Sam3RleFrameData>?> FetchRleFramesAsync(string queueBase, string requestId, CancellationToken ct)
+    {
+        var resultUrl = $"{queueBase}/{requestId}";
+        var resultResp = await _http.GetAsync(resultUrl, ct);
+        var resultJson = await resultResp.Content.ReadAsStringAsync(ct);
+        if (!resultResp.IsSuccessStatusCode) return null;
+
+        try
+        {
+            var result = JsonSerializer.Deserialize<Sam3RleResultResponse>(resultJson, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+            });
+            return result?.Frames;
+        }
+        catch { return null; }
+    }
+
     private static List<List<double>>? ParseSeedBoundary(string json)
     {
         try
@@ -351,5 +544,49 @@ public class Sam3TrackingService : ISurfaceTrackingService
 
         [JsonPropertyName("file_size")]
         public long FileSize { get; set; }
+    }
+
+    // ── SAM3 video-rle JSON models ──
+
+    private class Sam3RleResultResponse
+    {
+        [JsonPropertyName("video")]
+        public Sam3RleVideoFile? Video { get; set; }
+
+        [JsonPropertyName("frames")]
+        public List<Sam3RleFrameData>? Frames { get; set; }
+    }
+
+    private class Sam3RleVideoFile
+    {
+        [JsonPropertyName("url")]
+        public string? Url { get; set; }
+
+        [JsonPropertyName("width")]
+        public int Width { get; set; }
+
+        [JsonPropertyName("height")]
+        public int Height { get; set; }
+    }
+
+    private class Sam3RleFrameData
+    {
+        [JsonPropertyName("frame_index")]
+        public int FrameIndex { get; set; }
+
+        [JsonPropertyName("objects")]
+        public List<Sam3RleObjectMask>? Objects { get; set; }
+    }
+
+    private class Sam3RleObjectMask
+    {
+        [JsonPropertyName("track_id")]
+        public int TrackId { get; set; }
+
+        [JsonPropertyName("rle")]
+        public string? Rle { get; set; }
+
+        [JsonPropertyName("confidence")]
+        public double Confidence { get; set; }
     }
 }

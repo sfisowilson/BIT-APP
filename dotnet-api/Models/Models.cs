@@ -202,6 +202,24 @@ namespace Afrobotics.Bit.Api.Models
         /// <summary>Gemini-generated visual description optimized for SAM3 segmentation.</summary>
         [MaxLength(500)]
         public string? Sam3Prompt { get; set; }
+
+        /// <summary>Asset category: "Generative" (3D product, uses pikaswaps) or "Planar" (flat signage, uses homography warp).</summary>
+        [Required]
+        [MaxLength(50)]
+        public string AssetType { get; set; } = "Generative";
+
+        /// <summary>How this surface was created: "AI" (auto-detected) or "Manual" (user click/draw).</summary>
+        [Required]
+        [MaxLength(50)]
+        public string Source { get; set; } = "AI";
+
+        /// <summary>
+        /// Per-frame data specific to the AssetType.
+        /// Generative: RLE mask JSON [{frame, rle, track_id, confidence}, ...].
+        /// Planar: quad coordinates [{frame, corners: [{x,y},{x,y},{x,y},{x,y}]}, ...].
+        /// </summary>
+        [MaxLength(100000)]
+        public string? TrackingDataJson { get; set; }
     }
 
     public class CampaignItem
@@ -359,6 +377,14 @@ namespace Afrobotics.Bit.Api.Models
         /// <summary>Error details when render fails. Visible to Admin users for diagnostics.</summary>
         [MaxLength(2000)]
         public string? LastErrorMessage { get; set; }
+
+        /// <summary>Exact compositing engine that produced this render: "pikaswaps", "PlanarWarp", "ffmpeg-luma", or "ffmpeg-perspective".</summary>
+        [MaxLength(50)]
+        public string CompositingEngine { get; set; } = string.Empty;
+
+        /// <summary>Quality classification: "AI" (pikaswaps), "Exact" (planar warp), or "Standard" (ffmpeg fallback).</summary>
+        [MaxLength(20)]
+        public string QualityTier { get; set; } = string.Empty;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }

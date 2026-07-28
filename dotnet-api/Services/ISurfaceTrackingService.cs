@@ -36,6 +36,42 @@ public interface ISurfaceTrackingService
         int promptFrame = -1,
         string? sam3Prompt = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Preview segment a clicked point on a single video frame using SAM3 video-rle.
+    /// Returns the decoded polygon for UI overlay. Null if unsupported or no mask found.
+    /// </summary>
+    Task<SegmentPreviewResult?> PreviewSegmentAsync(
+        string contentId,
+        string videoPath,
+        int frameIndex,
+        int x,
+        int y,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Result from SAM3 video-rle preview segmentation of a single clicked point.
+/// </summary>
+public class SegmentPreviewResult
+{
+    /// <summary>Decoded polygon points in pixel coordinates.</summary>
+    public List<(int x, int y)> MaskPolygon { get; set; } = new();
+
+    /// <summary>Confidence score from SAM3 (0.0-1.0).</summary>
+    public double Confidence { get; set; }
+
+    /// <summary>Stable track ID from SAM3 for drift-check comparison.</summary>
+    public int TrackId { get; set; }
+
+    /// <summary>Detected surface type if known.</summary>
+    public string SurfaceType { get; set; } = string.Empty;
+
+    /// <summary>Frame index the mask corresponds to.</summary>
+    public int FrameIndex { get; set; }
+
+    /// <summary>Bounding box of the mask.</summary>
+    public (int xMin, int yMin, int xMax, int yMax) Bounds { get; set; }
 }
 
 /// <summary>

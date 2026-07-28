@@ -638,4 +638,97 @@ If no surfaces found, return { ""surfaces"": [] }.
         }
         catch { /* non-critical */ }
     }
+
+    /// <summary>
+    /// Generate the modify_region and prompt strings for pikaswaps compositing.
+    /// Called during render dispatch to prepare the pikaswaps API payload.
+    /// </summary>
+    /// <param name="surfaceType">The detected surface type (e.g. "Stadium Perimeter LED Board").</param>
+    /// <param name="assetName">The brand asset name (e.g. "Coca-Cola Logo").</param>
+    /// <returns>Tuple of (modify_region, prompt). Both null if generation fails.</returns>
+    public async Task<(string? modifyRegion, string? prompt)> GeneratePikaswapsPromptAsync(
+        string surfaceType, string assetName)
+    {
+        try
+        {
+            var apiKey = await _settings.GetAsync("gemini_api_key");
+            if (string.IsNullOrEmpty(apiKey)) return (null, null);
+
+            var model = await _settings.GetAsync("gemini_model", DefaultModel);
+            var url = $"{GeminiBaseUrl}/models/{model}:generateContent?key={apiKey}";
+
+            var promptText = $@"You are a video compositing assistant. Generate two short text strings for the pikaswaps AI video editing API.
+
+The user wants to replace ""{surfaceType}"" with a ""{assetName}"" advertisement in a video.
+
+Return ONLY valid JSON — no markdown, no code fences:
+{{
+  ""modify_region"": ""<10 words describing the object/region to replace in the video>"",
+  ""prompt"": ""<10 words describing the desired result — how the new asset should look, with lighting and perspective>""
+}}
+
+Rules:
+- modify_region: describe the EXISTING object to be replaced (e.g. ""the LED perimeter board on the soccer field"")
+- prompt: describe the DESIRED result (e.g. ""replace with a Coca-Cola logo, photorealistic, matching stadium lighting"")
+- Both strings should be short (under 15 words), precise, and optimized for pikaswaps' text-driven region detection";
+
+            var payload = new
+            {
+                contents = new[]
+                {
+                    new
+                    {
+                        parts = new[]
+                        {
+                            new { text = promptText }
+                        }
+                    }
+                },
+                generationConfig = new
+                {
+                    temperature = 0.2,
+                    maxOutputTokens = 100,
+                }
+            };
+
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            });
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await _http.PostAsync(url, content);
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode) return (null, null);
+
+            using var doc = JsonDocument.Parse(responseBody);
+            var text = doc.RootElement
+                .GetProperty("candidates")[0]
+                .GetProperty("content")
+                .GetProperty("parts")[0]
+                .GetProperty("text")
+                .GetString();
+
+            if (string.IsNullOrWhiteSpace(text)) return (null, null);
+
+            // Parse the JSON response from Gemini
+            using var resultDoc = JsonDocument.Parse(text.Trim());
+            var root = resultDoc.RootElement;
+            var modifyRegion = root.TryGetProperty("modify_region", out var mr) ? mr.GetString() : null;
+            var prompt = root.TryGetProperty("prompt", out var p) ? p.GetString() : null;
+
+            _logger.LogInformation(
+                "[Gemini] Generated pikaswaps prompt: modify_region='{ModifyRegion}', prompt='{Prompt}'",
+                modifyRegion, prompt);
+
+            return (modifyRegion, prompt);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Gemini] Failed to generate pikaswaps prompt for {SurfaceType} + {AssetName}",
+                surfaceType, assetName);
+            return (null, null);
+        }
+    }
 }

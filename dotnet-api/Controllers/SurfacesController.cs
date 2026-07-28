@@ -24,12 +24,14 @@ namespace Afrobotics.Bit.Api.Controllers
         private readonly ISurfaceService _surfaceService;
         private readonly PostgresDbContext _context;
     private readonly IEventLogService _eventLog;
+    private readonly ISurfaceTrackingService _trackingService;
 
-    public SurfacesController(ISurfaceService surfaceService, PostgresDbContext context, IEventLogService eventLog)
+    public SurfacesController(ISurfaceService surfaceService, PostgresDbContext context, IEventLogService eventLog, ISurfaceTrackingService trackingService)
     {
         _surfaceService = surfaceService;
         _context = context;
         _eventLog = eventLog;
+        _trackingService = trackingService;
     }
 
         [HttpGet("scenes/{sceneId}/surfaces")]
@@ -54,6 +56,79 @@ namespace Afrobotics.Bit.Api.Controllers
                 .ToListAsync();
 
             return Ok(surfaces);
+        }
+
+        /// <summary>
+        /// Preview-segment a clicked point on a video frame using SAM3 video-rle.
+        /// Returns a decoded polygon for SVG overlay rendering in the placement editor.
+        /// </summary>
+        [HttpPost("surfaces/preview-segment")]
+        public async Task<IActionResult> PreviewSegment([FromBody] SegmentPreviewRequest request)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(request.ContentId))
+                    return BadRequest(new { error = "ContentId is required." });
+                if (request.FrameIndex < 0)
+                    return BadRequest(new { error = "FrameIndex must be >= 0." });
+                if (request.X < 0 || request.Y < 0)
+                    return BadRequest(new { error = "Coordinates must be non-negative." });
+
+                var content = await _context.ContentItems.FindAsync(request.ContentId);
+                if (content == null)
+                    return NotFound(new { error = "Content not found." });
+
+                var videoPath = ResolveVideoPath(content.StorageKey);
+                if (string.IsNullOrEmpty(videoPath) || !System.IO.File.Exists(videoPath))
+                    return BadRequest(new { error = "Source video file not accessible." });
+
+                var result = await _trackingService.PreviewSegmentAsync(
+                    request.ContentId, videoPath, request.FrameIndex, request.X, request.Y);
+
+                if (result == null || result.MaskPolygon.Count == 0)
+                    return Ok(new SegmentPreviewResponse
+                    {
+                        MaskPolygonJson = "[]",
+                        Confidence = 0,
+                        SurfaceType = "No distinct surface found — try 'Place Signage' mode instead."
+                    });
+
+                var response = new SegmentPreviewResponse
+                {
+                    MaskPolygonJson = RleDecoder.PolygonToJson(result.MaskPolygon),
+                    Confidence = result.Confidence,
+                    TrackId = result.TrackId,
+                    SurfaceType = result.SurfaceType,
+                    FrameIndex = result.FrameIndex,
+                    BoundsXMin = result.Bounds.xMin,
+                    BoundsYMin = result.Bounds.yMin,
+                    BoundsXMax = result.Bounds.xMax,
+                    BoundsYMax = result.Bounds.yMax
+                };
+
+                await _eventLog.LogEventAsync("SAM3", "PREVIEW_COMPLETE", "Info",
+                    $"Preview segment: content={request.ContentId}, frame={request.FrameIndex}, " +
+                    $"point=({request.X},{request.Y}), points={result.MaskPolygon.Count}, " +
+                    $"confidence={result.Confidence:F2}, trackId={result.TrackId}");
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("SAM3", "PREVIEW_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        private string? ResolveVideoPath(string storageKey)
+        {
+            if (string.IsNullOrEmpty(storageKey)) return null;
+            var fileName = storageKey.StartsWith("/api/content/file/")
+                ? storageKey["/api/content/file/".Length..]
+                : storageKey;
+            var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
+            return Path.Combine(uploadsDir, fileName);
         }
 
         /// <summary>
