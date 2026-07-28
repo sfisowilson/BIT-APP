@@ -371,3 +371,26 @@ function useIdleTimer(timeoutMs: number, onTimeout: () => void): {
   isIdle: boolean;
 }
 ```
+
+### `SurfaceClickOverlay`
+**File:** `src/components/SurfaceClickOverlay.tsx`
+```typescript
+interface SurfaceClickOverlayProps {
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  contentId: string;
+  currentFrame: number;
+  frameRate: number;
+  mode: 'product' | 'signage';
+  assetUrl?: string;
+  onMaskReceived?: (polygon: MaskPolygon) => void;
+  onQuadConfirmed?: (corners: [QuadPoint, QuadPoint, QuadPoint, QuadPoint]) => void;
+  onCancel?: () => void;
+}
+
+type InteractionMode = 'product' | 'signage';
+
+interface QuadPoint {
+  x: number;  // native video pixel coordinates
+  y: number;
+}
+```
