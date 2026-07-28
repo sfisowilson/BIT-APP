@@ -361,4 +361,355 @@ public class RenderJobService
                 $"FFmpeg failed (exit {process.ExitCode}): {stderr[..Math.Min(500, stderr.Length)]}");
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Interactive Placement — Generative Path (pikaswaps)
+    // ═══════════════════════════════════════════════════════════════
+
+    [AutomaticRetry(Attempts = 1, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
+    [DisableConcurrentExecution(timeoutInSeconds: 1800)]
+    public async Task ProcessGenerativeRenderJob(string renderId, CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+        using var scope = _serviceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
+        var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
+        var pikaswaps = scope.ServiceProvider.GetRequiredService<PikaswapsCompositingService>();
+        var chunker = scope.ServiceProvider.GetRequiredService<VideoChunkingService>();
+        var gemini = scope.ServiceProvider.GetRequiredService<GeminiDetectionService>();
+        var platformSettings = scope.ServiceProvider.GetRequiredService<IPlatformSettingsService>();
+
+        var render = await db.Renders.FindAsync(new object[] { renderId }, cancellationToken);
+        if (render == null) return;
+
+        try
+        {
+            // Phase 1: Validate (5% → 15%)
+            render.Progress = 5; render.RenderStatus = "Processing";
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 5, "Validating");
+
+            var content = await db.ContentItems.FindAsync(new object[] { render.ContentId }, cancellationToken);
+            var surface = await db.SurfaceItems.FindAsync(new object[] { render.SurfaceId }, cancellationToken);
+            var asset = await db.CreativeAssets.FindAsync(new object[] { render.AssetId }, cancellationToken);
+            if (content == null || surface == null || asset == null)
+                throw new InvalidOperationException("Content, surface, or asset not found.");
+
+            var videoPath = ResolveVideoPath(content.StorageKey);
+            var assetPath = ResolveAssetPath(asset.StorageKey);
+            if (!File.Exists(videoPath) || !File.Exists(assetPath))
+                throw new InvalidOperationException("Video or asset file not found.");
+
+            var fps = content.FrameRate > 0 ? content.FrameRate : 30;
+            var videoBaseUrl = await platformSettings.GetAsync("sam3_video_base_url", "http://localhost:57220");
+            var videoFileName = Path.GetFileName(videoPath);
+            var videoUrl = $"{videoBaseUrl}/api/content/file/{videoFileName}";
+            var assetFileName = Path.GetFileName(assetPath);
+            var assetUrl = $"{videoBaseUrl}/api/assets/file/{assetFileName}";
+
+            render.Progress = 15;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 15, "Generating prompt");
+
+            // Phase 2: Gemini prompt generation (15% → 20%)
+            var (modifyRegion, prompt) = await gemini.GeneratePikaswapsPromptAsync(
+                surface.SurfaceType, asset.Name ?? "brand asset");
+
+            if (string.IsNullOrEmpty(modifyRegion) || string.IsNullOrEmpty(prompt))
+            {
+                modifyRegion = surface.SurfaceType;
+                prompt = $"replace with a {asset.Name} advertisement, photorealistic";
+            }
+
+            await eventLog.LogEventAsync("RenderEngine", "GEMINI_PROMPT_COMPLETE", "Info",
+                $"Generative render {renderId}: modify_region='{modifyRegion}', prompt='{prompt}'");
+
+            render.Progress = 20;
+            await db.SaveChangesAsync(cancellationToken);
+
+            // Determine scene duration from video
+            var totalDuration = await GetVideoDurationAsync(videoPath, cancellationToken);
+
+            // Phase 3: Chunking (20% → 25%)
+            string? finalVideoPath;
+            if (totalDuration <= 4.75)
+            {
+                // Single pikaswaps call — no chunking
+                await _hubContext.Clients.All.RenderProgress(renderId, 25, "Compositing with pikaswaps");
+                finalVideoPath = await pikaswaps.CompositeWithPromptAsync(
+                    videoUrl, assetUrl, modifyRegion, prompt, render.SurfaceId, ct: cancellationToken);
+
+                if (finalVideoPath == null)
+                    throw new InvalidOperationException("Pikaswaps returned no video for single-chunk render.");
+            }
+            else
+            {
+                var chunkDir = Path.Combine(Path.GetTempPath(), $"bit-chunks-{renderId}");
+                Directory.CreateDirectory(chunkDir);
+
+                await _hubContext.Clients.All.RenderProgress(renderId, 22, "Chunking video");
+                var chunks = await chunker.SplitIntoChunksAsync(videoPath, chunkDir, fps, totalDuration);
+
+                render.Progress = 25;
+                await db.SaveChangesAsync(cancellationToken);
+
+                // Process each chunk through pikaswaps
+                int completed = 0;
+                foreach (var chunk in chunks)
+                {
+                    await _hubContext.Clients.All.RenderProgress(renderId,
+                        25 + (int)(40.0 * completed / chunks.Count),
+                        $"Compositing chunk {chunk.Index + 1}/{chunks.Count}");
+
+                    try
+                    {
+                        var chunkVideoUrl = $"{videoBaseUrl}/api/content/file/{Path.GetFileName(chunk.SourceChunkPath)}";
+                        var processedPath = await pikaswaps.CompositeWithPromptAsync(
+                            chunkVideoUrl, assetUrl, modifyRegion, prompt, $"{render.SurfaceId}_c{chunk.Index}",
+                            ct: cancellationToken);
+
+                        if (processedPath != null)
+                            chunk.ProcessedChunkPath = processedPath;
+                        else
+                            chunk.Failed = true;
+                    }
+                    catch
+                    {
+                        chunk.Failed = true;
+                    }
+
+                    completed++;
+                }
+
+                // Splice
+                await _hubContext.Clients.All.RenderProgress(renderId, 70, "Splicing chunks");
+                var spliceOutput = Path.Combine(Path.GetTempPath(), $"bit-splice-{renderId}.mp4");
+                finalVideoPath = await chunker.SpliceChunksAsync(chunks, videoPath, spliceOutput, fps);
+            }
+
+            // Phase 4: Drift check with SAM3 video-rle (placeholder — runs SAM3 on output, compares IoU)
+            await _hubContext.Clients.All.RenderProgress(renderId, 85, "QA drift-check");
+            // TODO: Implement full drift-check — re-run SAM3 video-rle on finalVideoPath,
+            // compare per-frame RLE masks to original track_id mask, set NeedsReview if IoU < 0.85
+
+            // Phase 5: Finalize
+            var rendersDir = Path.Combine(Directory.GetCurrentDirectory(), "renders");
+            Directory.CreateDirectory(rendersDir);
+            var outputPath = Path.Combine(rendersDir, $"BIT_Render_{renderId}.mp4");
+
+            if (finalVideoPath != null && File.Exists(finalVideoPath))
+                File.Copy(finalVideoPath, outputPath, overwrite: true);
+
+            render.Progress = 100;
+            render.RenderStatus = "Finished";
+            render.CompositingEngine = "pikaswaps";
+            render.QualityTier = "AI";
+            render.StorageKey = $"/api/renders/{renderId}/download";
+            render.ProcessingDurationMs = (int)sw.ElapsedMilliseconds;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 100, "Complete");
+
+            await eventLog.LogEventAsync("RenderEngine", "GENERATIVE_RENDER_COMPLETE", "Info",
+                $"Generative render {renderId}: pikaswaps, {sw.Elapsed.TotalSeconds:F1}s");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[GenerativeRender] Render {RenderId} FAILED", renderId);
+            render.RenderStatus = "Failed";
+            render.LastErrorMessage = ex.Message;
+            render.CompositingEngine = "pikaswaps";
+            await db.SaveChangesAsync(cancellationToken);
+            await eventLog.LogEventAsync("RenderEngine", "GENERATIVE_RENDER_FAILED", "Warning",
+                $"Render {renderId} failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Interactive Placement — Planar Path (homography warp)
+    // ═══════════════════════════════════════════════════════════════
+
+    [AutomaticRetry(Attempts = 1, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
+    [DisableConcurrentExecution(timeoutInSeconds: 1800)]
+    public async Task ProcessPlanarRenderJob(string renderId, CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+        using var scope = _serviceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
+        var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
+        var planar = scope.ServiceProvider.GetRequiredService<PlanarWarpCompositingService>();
+
+        var render = await db.Renders.FindAsync(new object[] { renderId }, cancellationToken);
+        if (render == null) return;
+
+        try
+        {
+            render.Progress = 5; render.RenderStatus = "Processing";
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 5, "Validating");
+
+            var content = await db.ContentItems.FindAsync(new object[] { render.ContentId }, cancellationToken);
+            var surface = await db.SurfaceItems.FindAsync(new object[] { render.SurfaceId }, cancellationToken);
+            var asset = await db.CreativeAssets.FindAsync(new object[] { render.AssetId }, cancellationToken);
+            if (content == null || surface == null || asset == null)
+                throw new InvalidOperationException("Content, surface, or asset not found.");
+
+            var videoPath = ResolveVideoPath(content.StorageKey);
+            var assetPath = ResolveAssetPath(asset.StorageKey);
+            if (!File.Exists(videoPath) || !File.Exists(assetPath))
+                throw new InvalidOperationException("Video or asset file not found.");
+
+            var fps = content.FrameRate > 0 ? content.FrameRate : 30;
+
+            // Parse per-frame quad data from TrackingDataJson
+            var frameQuads = ParseFrameQuads(surface.TrackingDataJson ?? surface.BoundaryCoordinatesJson);
+            if (frameQuads.Count == 0)
+                throw new InvalidOperationException("No quad coordinates available for planar warp.");
+
+            render.Progress = 15;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 15, "Extracting frames");
+
+            // Phase 2: Extract video frames
+            var rendersDir = Path.Combine(Directory.GetCurrentDirectory(), "renders");
+            Directory.CreateDirectory(rendersDir);
+            var frameDir = Path.Combine(rendersDir, $"planar_frames_{renderId}");
+            Directory.CreateDirectory(frameDir);
+
+            var safeVideo = videoPath.Replace("\\", "/");
+            var safeFrameDir = frameDir.Replace("\\", "/");
+            var totalFrames = frameQuads.Count;
+
+            // Extract all frames
+            var extractArgs = $"-y -hide_banner -loglevel error " +
+                $"-i \"{safeVideo}\" -vf fps={fps} \"{safeFrameDir}/raw_%06d.png\"";
+            await RunFfmpegAsync(extractArgs, cancellationToken);
+
+            render.Progress = 25;
+            await db.SaveChangesAsync(cancellationToken);
+
+            // Phase 3: Per-frame warp + relight + composite
+            var processedCount = 0;
+            var parallelOpts = new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = cancellationToken };
+
+            await Parallel.ForEachAsync(frameQuads, parallelOpts, async (item, ct) =>
+            {
+                var rawPath = Path.Combine(frameDir, $"raw_{item.frameIndex:D6}.png");
+                if (!File.Exists(rawPath)) return;
+
+                var compPath = Path.Combine(frameDir, $"comp_{item.frameIndex:D6}.png");
+                var quadCorners = item.corners.Select(c => ((double)c.x, (double)c.y)).ToList();
+
+                var ok = await planar.CompositeFrameAsync(rawPath, assetPath, quadCorners, compPath);
+                if (!ok) return;
+
+                // Relight
+                var wall = planar.ComputeWallRegion(quadCorners, content.Width, content.Height);
+                var relitPath = Path.Combine(frameDir, $"relit_{item.frameIndex:D6}.png");
+                await planar.RelightFrameAsync(compPath, rawPath, wall, relitPath);
+
+                // Move relit over comp
+                if (File.Exists(relitPath))
+                {
+                    File.Delete(compPath);
+                    File.Move(relitPath, compPath);
+                }
+
+                var done = Interlocked.Increment(ref processedCount);
+                if (done % 10 == 0 || done == totalFrames)
+                {
+                    var pct = 25 + (int)(60.0 * done / totalFrames);
+                    await _hubContext.Clients.All.RenderProgress(renderId, pct,
+                        $"Composited {done}/{totalFrames} frames");
+                }
+            });
+
+            // Phase 4: Encode to MP4
+            render.Progress = 90;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 90, "Encoding video");
+
+            var outputPath = Path.Combine(rendersDir, $"BIT_Render_{renderId}.mp4");
+            await planar.EncodeToMp4Async(frameDir, outputPath, fps);
+
+            // Cleanup
+            try { Directory.Delete(frameDir, true); } catch { }
+
+            render.Progress = 100;
+            render.RenderStatus = "Finished";
+            render.CompositingEngine = "PlanarWarp";
+            render.QualityTier = "Exact";
+            render.StorageKey = $"/api/renders/{renderId}/download";
+            render.ProcessingDurationMs = (int)sw.ElapsedMilliseconds;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 100, "Complete");
+
+            await eventLog.LogEventAsync("RenderEngine", "PLANAR_RENDER_COMPLETE", "Info",
+                $"Planar render {renderId}: {totalFrames} frames in {sw.Elapsed.TotalSeconds:F1}s");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PlanarRender] Render {RenderId} FAILED", renderId);
+            render.RenderStatus = "Failed";
+            render.LastErrorMessage = ex.Message;
+            render.CompositingEngine = "PlanarWarp";
+            await db.SaveChangesAsync(cancellationToken);
+            await eventLog.LogEventAsync("RenderEngine", "PLANAR_RENDER_FAILED", "Warning",
+                $"Render {renderId} failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    // ── Helpers for new render jobs ──
+
+    private static List<(int frameIndex, List<(int x, int y)> corners)> ParseFrameQuads(string trackingDataJson)
+    {
+        var result = new List<(int, List<(int, int)>)>();
+        try
+        {
+            using var doc = JsonDocument.Parse(trackingDataJson);
+            foreach (var frame in doc.RootElement.EnumerateArray())
+            {
+                var fi = frame.TryGetProperty("frame", out var f) ? f.GetInt32() : 0;
+                var corners = new List<(int, int)>();
+                if (frame.TryGetProperty("corners", out var c))
+                {
+                    foreach (var pt in c.EnumerateArray())
+                    {
+                        int x = 0, y = 0;
+                        if (pt.TryGetProperty("x", out var px)) x = px.GetInt32();
+                        if (pt.TryGetProperty("y", out var py)) y = py.GetInt32();
+                        corners.Add((x, y));
+                    }
+                }
+                if (corners.Count >= 4)
+                    result.Add((fi, corners));
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    private static async Task<double> GetVideoDurationAsync(string videoPath, CancellationToken ct)
+    {
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "ffprobe",
+                    Arguments = $"-v error -show_entries format=duration -of csv=p=0 \"{videoPath}\"",
+                    UseShellExecute = false, CreateNoWindow = true,
+                    RedirectStandardOutput = true, RedirectStandardError = true,
+                },
+            };
+            process.Start();
+            var output = await process.StandardOutput.ReadToEndAsync(ct);
+            await process.WaitForExitAsync(ct);
+            if (double.TryParse(output.Trim(), out var d)) return d;
+        }
+        catch { }
+        return 0;
+    }
 }

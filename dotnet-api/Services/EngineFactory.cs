@@ -84,6 +84,7 @@ public class EngineFactory : IEngineFactory
         {
             "opencv" => _serviceProvider.GetRequiredService<OpenCvCompositingService>(),
             "pikaswaps" => _serviceProvider.GetRequiredService<PikaswapsCompositingService>(),
+            "planar-warp" => _serviceProvider.GetRequiredService<PlanarWarpCompositingService>(),
             _        => _serviceProvider.GetRequiredService<BasicCompositingService>(),
         };
     }
@@ -148,6 +149,7 @@ public class EngineFactory : IEngineFactory
         {
             "opencv" => scope.ServiceProvider.GetRequiredService<OpenCvCompositingService>(),
             "pikaswaps" => scope.ServiceProvider.GetRequiredService<PikaswapsCompositingService>(),
+            "planar-warp" => scope.ServiceProvider.GetRequiredService<PlanarWarpCompositingService>(),
             _        => scope.ServiceProvider.GetRequiredService<BasicCompositingService>(),
         };
     }

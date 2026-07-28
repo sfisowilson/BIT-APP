@@ -55,7 +55,31 @@ namespace Afrobotics.Bit.Api.Controllers
             }
         }
 
-        /// <summary>Retry a failed render — resets to Queued and re-enqueues the compositing job.</summary>
+        /// <summary>
+        /// Dispatch an interactive placement render — routes to generative (pikaswaps) or planar (warp) path.
+        /// </summary>
+        [HttpPost("interactive")]
+        public async Task<IActionResult> DispatchInteractiveRender([FromBody] CreateInteractiveRenderDto dto)
+        {
+            try
+            {
+                var render = await _renderService.DispatchInteractiveRenderAsync(dto);
+                return Accepted(render);
+            }
+            catch (ArgumentException ex)
+            {
+                await _eventLog.LogEventAsync("Render", "INTERACTIVE_DISPATCH_INVALID", "Warning", ex.Message);
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Render", "INTERACTIVE_DISPATCH_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>Retry a failed render.</summary>
         [HttpPost("{id}/retry")]
         public async Task<IActionResult> RetryRender(string id)
         {

@@ -16,4 +16,18 @@ namespace Afrobotics.Bit.Api.DTOs
         public string EngineUsed { get; set; } = "BasicCompositor";
         public long ProcessingMs { get; set; }
     }
+
+    /// <summary>
+    /// Request to dispatch an interactive placement render.
+    /// Routes to generative (pikaswaps) or planar (homography warp) based on AssetType.
+    /// </summary>
+    public class CreateInteractiveRenderDto
+    {
+        public string ContentId { get; set; } = string.Empty;
+        public string SurfaceId { get; set; } = string.Empty;
+        public string CampaignId { get; set; } = string.Empty;
+        public string AssetId { get; set; } = string.Empty;
+        public string AssetType { get; set; } = "Generative"; // "Generative" or "Planar"
+        public string ExportPreset { get; set; } = "Web-Ready MP4";
+    }
 }

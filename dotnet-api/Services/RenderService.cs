@@ -17,6 +17,7 @@ namespace Afrobotics.Bit.Api.Services
     {
         Task<PaginatedResult<RenderItem>> GetRendersAsync(RenderFilterParams filter);
         Task<RenderItem> DispatchRenderAsync(CreateRenderDto dto);
+        Task<RenderItem> DispatchInteractiveRenderAsync(CreateInteractiveRenderDto dto);
         Task<RenderItem> RetryRenderAsync(string renderId);
     }
 
@@ -95,6 +96,47 @@ namespace Afrobotics.Bit.Api.Services
 
             // Enqueue render processing as a Hangfire background job (survives restarts, retries on failure)
             BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessRenderJob(render.Id, default));
+
+            return render;
+        }
+
+        public async Task<RenderItem> DispatchInteractiveRenderAsync(CreateInteractiveRenderDto dto)
+        {
+            if (string.IsNullOrEmpty(dto.ContentId) || string.IsNullOrEmpty(dto.SurfaceId) ||
+                string.IsNullOrEmpty(dto.CampaignId) || string.IsNullOrEmpty(dto.AssetId))
+                throw new ArgumentException("Missing mandatory parameters.");
+
+            var surface = await _context.SurfaceItems.FindAsync(dto.SurfaceId);
+            if (surface == null) throw new ArgumentException("Surface not found.");
+
+            var renderId = "r-" + Guid.NewGuid().ToString()[..4];
+            var render = new RenderItem
+            {
+                Id = renderId,
+                ContentId = dto.ContentId,
+                SurfaceId = dto.SurfaceId,
+                CampaignId = dto.CampaignId,
+                AssetId = dto.AssetId,
+                ExportPreset = dto.ExportPreset ?? "Web-Ready MP4",
+                StorageKey = $"s3://afrobotics-finished-renders/render_job_{renderId}.mp4",
+                RenderStatus = "Queued",
+                Progress = 0,
+                ProcessingDurationMs = 0,
+                CompositingEngine = dto.AssetType == "Planar" ? "PlanarWarp" : "pikaswaps",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _renderRepository.AddAsync(render);
+            await _renderRepository.SaveChangesAsync();
+
+            // Route to correct Hangfire job based on AssetType
+            if (dto.AssetType == "Planar")
+                BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessPlanarRenderJob(render.Id, default));
+            else
+                BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessGenerativeRenderJob(render.Id, default));
+
+            await _eventLog.LogEventAsync("RenderEngine", "INTERACTIVE_RENDER_QUEUED", "Info",
+                $"Interactive render {renderId}: assetType={dto.AssetType}, surface={surface.SurfaceType}");
 
             return render;
         }

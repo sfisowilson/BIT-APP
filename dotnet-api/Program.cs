@@ -126,6 +126,7 @@ builder.Services.AddScoped<BasicBrandAnalysisService>();
 builder.Services.AddScoped<OpenCvCompositingService>();
 builder.Services.AddScoped<BasicCompositingService>();
 builder.Services.AddScoped<PikaswapsCompositingService>();
+builder.Services.AddScoped<PlanarWarpCompositingService>();
 builder.Services.AddScoped<VideoChunkingService>();
 
 // ── Phase 3: Surface tracking engine ──
