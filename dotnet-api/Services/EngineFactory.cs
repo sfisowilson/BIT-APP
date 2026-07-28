@@ -83,6 +83,7 @@ public class EngineFactory : IEngineFactory
         return key.ToLowerInvariant() switch
         {
             "opencv" => _serviceProvider.GetRequiredService<OpenCvCompositingService>(),
+            "pikaswaps" => _serviceProvider.GetRequiredService<PikaswapsCompositingService>(),
             _        => _serviceProvider.GetRequiredService<BasicCompositingService>(),
         };
     }
@@ -146,6 +147,7 @@ public class EngineFactory : IEngineFactory
         return engineKey.ToLowerInvariant() switch
         {
             "opencv" => scope.ServiceProvider.GetRequiredService<OpenCvCompositingService>(),
+            "pikaswaps" => scope.ServiceProvider.GetRequiredService<PikaswapsCompositingService>(),
             _        => scope.ServiceProvider.GetRequiredService<BasicCompositingService>(),
         };
     }
