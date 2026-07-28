@@ -15,3 +15,9 @@ obj/
 
 # Uploaded media
 Uploads/
+
+# Large binaries — don't commit
+detection-service/*.pt
+detection-service/*.onnx
+dotnet-api/renders/
+publish/
