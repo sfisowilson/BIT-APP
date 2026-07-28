@@ -128,6 +128,7 @@ builder.Services.AddScoped<BasicCompositingService>();
 builder.Services.AddScoped<PikaswapsCompositingService>();
 builder.Services.AddScoped<PlanarWarpCompositingService>();
 builder.Services.AddScoped<VideoChunkingService>();
+builder.Services.AddScoped<PointTrackingService>();
 
 // ── Phase 3: Surface tracking engine ──
 builder.Services.AddScoped<Sam3TrackingService>();
