@@ -977,7 +977,11 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               <div className="mt-2 bg-slate-900/90 border border-slate-700 rounded-lg px-4 py-2 flex items-center justify-between text-[11px] font-mono text-slate-400">
                 <div className="flex items-center gap-2">
                   <Eye className="h-3 w-3 text-blue-400" />
-                  <span>Scene #{currentScene?.sceneIndex || '—'} · {surfacesForScene.length} surface{surfacesForScene.length !== 1 ? 's' : ''} · {placedSurfaceCount} placed</span>
+                  <span>
+                    Scene #{currentScene?.sceneIndex ?? '—'}
+                    {currentScene && ` · ${currentScene.durationSeconds.toFixed(1)}s`}
+                    {' · '}{surfacesForScene.length} surface{surfacesForScene.length !== 1 ? 's' : ''} · {placedSurfaceCount} placed
+                  </span>
                 </div>
                 <div><span>{activeVideo?.resolution || '—'} · {activeVideo?.frameRate || '—'} FPS</span></div>
               </div>
