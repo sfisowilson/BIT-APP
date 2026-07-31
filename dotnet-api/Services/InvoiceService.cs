@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Afrobotics.Bit.Api.Data;
 using Afrobotics.Bit.Api.DTOs;
+using Afrobotics.Bit.Api.Models;
 
 namespace Afrobotics.Bit.Api.Services;
 
@@ -39,9 +40,23 @@ public class InvoiceService : IInvoiceService
         int itemIdx = 1;
         foreach (var render in renders)
         {
-            var surface = await _context.SurfaceItems.FindAsync(render.SurfaceId);
-            var scene = surface != null ? await _context.SceneItems.FindAsync(surface.SceneId) : null;
-            
+            // Interactive renders (RenderMode null/"Interactive") carry their scene via SurfaceId → SurfaceItem.SceneId.
+            // PromptEdit renders never have a SurfaceId — they target a SceneId directly (see RenderItem.SceneId doc comment).
+            SurfaceItem? surface = null;
+            SceneItem? scene = null;
+            if (!string.IsNullOrEmpty(render.SurfaceId))
+            {
+                surface = await _context.SurfaceItems.FindAsync(render.SurfaceId);
+                if (surface != null)
+                {
+                    scene = await _context.SceneItems.FindAsync(surface.SceneId);
+                }
+            }
+            else if (!string.IsNullOrEmpty(render.SceneId))
+            {
+                scene = await _context.SceneItems.FindAsync(render.SceneId);
+            }
+
             double duration = scene?.DurationSeconds ?? 5.0;
             double viability = surface?.ViabilityScore ?? 0.85;
             decimal baseRatePerSec = 150.00m; // ZAR 150 per second base placement rate
@@ -50,8 +65,8 @@ public class InvoiceService : IInvoiceService
             var lineItem = new InvoiceLineItemDto
             {
                 Id = $"inv-item-{itemIdx++}",
-                Description = $"Virtual Insertion: {surface?.SurfaceType ?? "Surface"} (Scene #{scene?.SceneIndex ?? 1})",
-                SurfaceType = surface?.SurfaceType ?? "Surface Placement",
+                Description = $"Virtual Insertion: {surface?.SurfaceType ?? "AI-Generated Placement"} (Scene #{scene?.SceneIndex ?? 1})",
+                SurfaceType = surface?.SurfaceType ?? "AI-Generated Placement",
                 DurationSeconds = Math.Round(duration, 2),
                 ViabilityScore = Math.Round(viability, 2),
                 UnitRate = baseRatePerSec,

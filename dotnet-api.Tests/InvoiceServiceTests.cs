@@ -132,4 +132,56 @@ public class InvoiceServiceTests
         Assert.Equal(2, result.LineItems.Count);
         Assert.Equal(500.00m, result.RenderProcessingFees); // ZAR 250 × 2 Finished renders only
     }
+
+    [Fact]
+    public async Task GenerateCampaignInvoiceAsync_PromptEditRender_UsesRenderSceneId_NotDefaults()
+    {
+        // Arrange — PromptEdit-mode renders ("Generate New" AI placement) never have a SurfaceId;
+        // they target a SceneId directly on the RenderItem (see RenderItem.SceneId doc comment).
+        // The invoice must resolve the real scene from render.SceneId in that case, not fall back
+        // to the Scene #1 / 5.0s / 0.85 placeholder defaults.
+        using var context = GetInMemoryDbContext();
+        var campaignId = "c-test-04";
+
+        context.Campaigns.Add(new CampaignItem
+        {
+            Id = campaignId,
+            Name = "Prompt Edit Campaign",
+            TargetRegion = "SADC",
+            NamingStructureCode = "UZ01EP12_PROMPT",
+            Status = "Active"
+        });
+        context.SceneItems.Add(new SceneItem
+        {
+            Id = "sc-real",
+            ContentId = "v-01",
+            StartFrame = 900,
+            EndFrame = 1125,
+            SceneIndex = 4,
+            DurationSeconds = 9.0
+        });
+        context.Renders.Add(new RenderItem
+        {
+            Id = "r-prompt-1",
+            CampaignId = campaignId,
+            ContentId = "v-01",
+            SurfaceId = null,
+            SceneId = "sc-real",
+            RenderMode = "PromptEdit",
+            RenderStatus = "Finished",
+            ExportPreset = "Web-Ready MP4"
+        });
+        await context.SaveChangesAsync();
+
+        var invoiceService = new InvoiceService(context);
+
+        // Act
+        var result = await invoiceService.GenerateCampaignInvoiceAsync(campaignId);
+
+        // Assert
+        var item = Assert.Single(result.LineItems);
+        Assert.Equal(9.0, item.DurationSeconds);
+        Assert.Contains("Scene #4", item.Description);
+        Assert.DoesNotContain("Scene #1", item.Description);
+    }
 }
