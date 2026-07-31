@@ -67,7 +67,6 @@ public class PlanarWarpCompositingService : ICompositingService
             var (aW, aH) = await GetImageSizeAsync(assetPath);
             if (aW <= 0 || aH <= 0) return false;
 
-            // Build perspective transform: asset corners (0,0)→(aW,0)→(aW,aH)→(0,aH) → quadCorners
             var (tlx, tly) = quadCorners[0];
             var (trx, try_) = quadCorners[1];
             var (brx, bry) = quadCorners[2];
@@ -78,13 +77,19 @@ public class PlanarWarpCompositingService : ICompositingService
             var safeOut = outputPath.Replace("\\", "/");
 
             string filterComplex;
+            // ffmpeg's perspective filter takes exactly 8 numbers — the *destination* coordinates
+            // for the input rectangle's top-left, top-right, bottom-left, bottom-right corners (in
+            // that order; note bottom-left comes before bottom-right, unlike a clockwise quad walk).
+            // No leading "identity rect" prefix — confirmed via a real failure: ffmpeg rejected the
+            // 16-number string this used to build with "No option name near ...sense=destination",
+            // silently failing every single frame composite (CompositeFrameAsync swallows the
+            // exception and returns false) and passing the unmodified source frame through instead.
             if (!string.IsNullOrEmpty(occlusionMaskPath) && File.Exists(occlusionMaskPath))
             {
                 var safeOcclusion = occlusionMaskPath.Replace("\\", "/");
                 // Warp asset → apply occlusion mask as alpha → overlay on source
                 filterComplex =
-                    $"[1:v]perspective=0:0:0:{aH}:{aW}:{aH}:{aW}:0:" +
-                    $"{tlx:F1}:{tly:F1}:{trx:F1}:{try_:F1}:{brx:F1}:{bry:F1}:{blx:F1}:{bly:F1}:sense=destination,format=rgba [warped];" +
+                    $"[1:v]perspective={tlx:F1}:{tly:F1}:{trx:F1}:{try_:F1}:{blx:F1}:{bly:F1}:{brx:F1}:{bry:F1}:sense=destination,format=rgba [warped];" +
                     $"[2:v]format=gray,negate [occlusion_alpha];" +
                     $"[warped][occlusion_alpha]alphamerge [asset_masked];" +
                     $"[0:v][asset_masked]overlay=0:0";
@@ -93,8 +98,7 @@ public class PlanarWarpCompositingService : ICompositingService
             {
                 // Warp asset → overlay on source (no occlusion)
                 filterComplex =
-                    $"[1:v]perspective=0:0:0:{aH}:{aW}:{aH}:{aW}:0:" +
-                    $"{tlx:F1}:{tly:F1}:{trx:F1}:{try_:F1}:{brx:F1}:{bry:F1}:{blx:F1}:{bly:F1}:sense=destination [warped];" +
+                    $"[1:v]perspective={tlx:F1}:{tly:F1}:{trx:F1}:{try_:F1}:{blx:F1}:{bly:F1}:{brx:F1}:{bry:F1}:sense=destination [warped];" +
                     $"[0:v][warped]overlay=0:0";
             }
 
@@ -217,7 +221,10 @@ public class PlanarWarpCompositingService : ICompositingService
             if (parts.Length >= 2 && int.TryParse(parts[0], out var w) && int.TryParse(parts[1], out var h))
                 return (w, h);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[PlanarWarp] ffprobe dimensions probe failed");
+        }
         return (0, 0);
     }
 

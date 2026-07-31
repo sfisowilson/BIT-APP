@@ -51,7 +51,7 @@
 - **DTOs at every API boundary** — never expose EF entities
 - **Every service has an interface** — `IService` → `Service`
 - **Controllers are thin** — business logic in services
-- **`server.ts` is LEGACY** — never extend it
+- **No "basic"/no-op fallback engines** — misconfiguration throws, never silently degrades
 - **No mock code — ever** — `governance/rules/no-mock-code.md`
 
 ### Pipeline States (exact strings)
@@ -66,10 +66,12 @@ Valid from Completed: `SceneDetecting` (re-detect only)
 
 ### AI Engine Setting Keys
 ```
-engine_detection      → "yolo" | "replicate" | "google" | "basic"
-engine_brand_analysis → "gemini" | "google" | "basic"
-engine_compositing    → "opencv" | "basic"
+engine_detection      → "yolo" | "replicate" | "google" | "gemini" | "grounding-dino"
+engine_brand_analysis → "gemini" | "google"
+engine_compositing    → "opencv" | "pikaswaps" | "planar-warp"
+engine_tracking       → "sam3"
 ```
+No "basic" fallback exists — an unset or unrecognized value makes `EngineFactory` throw.
 
 ### URL Patterns (React Router)
 ```
@@ -92,7 +94,6 @@ dotnet-api/           → .NET 8 backend API (C#)
 detection-service/    → Python FastAPI YOLO service
 governance/           → ⛔ Living rules & references
 docs/                 → Legacy design docs
-server.ts             → LEGACY Express proxy (DO NOT EXTEND)
 ```
 
 ---

@@ -140,7 +140,7 @@ export const BrandSafetyPanel: React.FC = () => {
               {rules.map(r => (
                 <tr key={r.id} className={`hover:bg-slate-50/30 ${!r.isActive ? 'opacity-50' : ''}`}>
                   <td className="p-4 pl-6 font-semibold text-slate-900">{r.category}</td>
-                  <td className="p-4 text-slate-500 max-w-[250px] truncate">{r.description || '—'}</td>
+                  <td className="p-4 text-slate-500 max-w-[250px] truncate" title={r.description || undefined}>{r.description || '—'}</td>
                   <td className="p-4">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${r.isActive ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-500'}`}>
                       {r.isActive ? 'Active' : 'Inactive'}

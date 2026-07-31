@@ -40,10 +40,9 @@ import {
   EventLog, 
   AlarmItem, 
   SurfaceAssetPair,
-  TIMELINE_DATA 
+  CreatePromptRenderRequest,
 } from './types';
-import { DOCUMENT_CONTENT } from './document';
-import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession, retranscode, redetectScenes, detectScenesOnly, detectSurfacesForScene, resetPipeline, refreshToken, fetchStatsSummary, fetchSurfacesBatch, retryRender, type StatsSummary } from './apiClient';
+import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, fetchPublic, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession, retranscode, redetectScenes, aiSplitAnalyze, detectSurfacesForScene, deleteScene, deleteAllScenes, deleteSurface, deleteAllSurfaces, resetPipeline, refreshToken, fetchStatsSummary, fetchSurfacesBatch, retryRender, confirmInteractivePlacement, submitPromptPlacement, approvePromptSplice, rejectPromptPlacement, fetchCampaignSummary, type StatsSummary } from './apiClient';
 import { useChunkedUpload } from './hooks/useChunkedUpload';
 import { useSignalR, type DetectionProgressEvent, type RenderProgressEvent, type ContentStatusEvent, type AlarmEvent, type NotificationEvent } from './hooks/useSignalR';
 
@@ -57,6 +56,7 @@ import { AdminConsoleTab } from './components/AdminConsoleTab';
 import { CampaignSelector } from './components/CampaignSelector';
 import { CampaignSidebar, type SidebarView } from './components/CampaignSidebar';
 import { CampaignDashboard } from './components/CampaignDashboard';
+import { InvoicePanel } from './components/InvoicePanel';
 import { AnalyticsTab } from './components/AnalyticsTab';
 import { JobsTab } from './components/JobsTab';
 import { BitLogo } from './components/BitLogo';
@@ -104,9 +104,6 @@ export default function App() {
     }
   }, [navigate]);
 
-  const [selectedDay, setSelectedDay] = useState<number>(1);
-  const [downloading, setDownloading] = useState<boolean>(false);
-
   // Theme state (MReq: Dark / Light Mode Switcher)
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return (localStorage.getItem('bit_theme') as 'light' | 'dark') || 'light';
@@ -134,6 +131,7 @@ export default function App() {
   const [aiAnalyzingVideoId, setAiAnalyzingVideoId] = useState<string | null>(null);
   const [isPipelineActionPending, setIsPipelineActionPending] = useState<string | null>(null);
   const [sceneRefreshKey, setSceneRefreshKey] = useState(0); // incremented to force scene refresh on detection complete
+  const [detectionPhaseLabel, setDetectionPhaseLabel] = useState<Record<string, string>>({}); // live-only, keyed by contentId
   const [statsSummary, setStatsSummary] = useState<StatsSummary | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [showRoleRequest, setShowRoleRequest] = useState(false);
@@ -151,6 +149,8 @@ export default function App() {
   const [campaignList, setCampaignList] = useState<CampaignItem[]>([]);
   const [assetList, setAssetList] = useState<CreativeAsset[]>([]);
   const [renderList, setRenderList] = useState<RenderItem[]>([]);
+  const [hasApprovedPlacements, setHasApprovedPlacements] = useState(false);
+  const [activePromptRenderId, setActivePromptRenderId] = useState<string | null>(null);
   const [logList, setLogList] = useState<EventLog[]>([]);
   const [alarmList, setAlarmList] = useState<AlarmItem[]>([]);
 
@@ -193,11 +193,6 @@ export default function App() {
   const [uploadProgress, setUploadProgress] = useState<number>(0); // 0-100
   const [chunkProgress, setChunkProgress] = useState<string>(''); // e.g. "12/48 chunks"
   const chunkedUpload = useChunkedUpload({ chunkSizeMB: 25, maxConcurrent: 3 });
-
-  // Dispatch Composite Renders
-  const [composerCampaignId, setComposerCampaignId] = useState<string>('');
-  const [composerAssetId, setComposerAssetId] = useState<string>('');
-  const [composerPreset, setComposerPreset] = useState<string>('Broadcast-ProRes');
 
   // Alarm simulation
   const [alarmSimSeverity, setAlarmSimSeverity] = useState<"Minor" | "Major" | "Critical">('Major');
@@ -423,6 +418,11 @@ export default function App() {
           setAssetList(assets.map(a => ({ ...a, thumbnailUrl: a.storageKey?.startsWith('/api/') ? a.storageKey : a.thumbnailUrl })));
         }
         if (rendersRes.status === 'fulfilled') { const data = rendersRes.value as any; setRenderList(data.items || data); }
+        if (selectedCampaignId) {
+          fetchCampaignSummary(selectedCampaignId)
+            .then(s => setHasApprovedPlacements(s.hasApprovedPlacements))
+            .catch(() => setHasApprovedPlacements(false));
+        }
       } else {
         // Non-campaign views: still need campaigns, logs, alarms
       }
@@ -500,6 +500,11 @@ export default function App() {
         const data = alarmsRes.value as any;
         setAlarmList(data.items || data);
       }
+      if (selectedCampaignId) {
+        fetchCampaignSummary(selectedCampaignId)
+          .then(s => setHasApprovedPlacements(s.hasApprovedPlacements))
+          .catch(() => { /* keep last known value */ });
+      }
     } catch { /* silent — polling should never break the UI */ }
   };
 
@@ -519,6 +524,8 @@ export default function App() {
       setContentList(prev => prev.map(c =>
         c.id === e.contentId ? { ...c, detectionProgress: e.percent } : c
       ));
+      // Live-only phase label (e.g. "Embedding keyframes (8/40)") — not persisted, resets on reload
+      setDetectionPhaseLabel(prev => ({ ...prev, [e.contentId]: e.status }));
       // Clear AI analyzing flag when complete or failed
       if (e.percent >= 100 || e.status === 'Failed') {
         setAiAnalyzingVideoId(prev => prev === e.contentId ? null : prev);
@@ -531,9 +538,16 @@ export default function App() {
     },
     onRenderProgress: (e: RenderProgressEvent) => {
       setRenderList(prev => prev.map(r =>
-        r.id === e.renderId ? { ...r, progress: e.percent, renderStatus: e.percent >= 100 ? 'Finished' : r.renderStatus } : r
+        r.id === e.renderId
+          ? { ...r, progress: e.percent, renderStatus: e.status === 'Failed' ? 'Failed' : e.percent >= 100 ? 'Finished' : r.renderStatus }
+          : r
       ));
-      if (e.percent >= 100) {
+      // A full refetch picks up fields the progress push doesn't carry (previewStorageKey,
+      // lastErrorMessage, etc.) — needed on completion, on failure (ProcessPromptPreviewJob /
+      // ProcessPromptSpliceJob push status "Failed" from their catch blocks so a stuck
+      // "Processing" view doesn't sit unresolved), and for prompt-placement jobs specifically
+      // since they cap at 90% for "PreviewReady" rather than ever reaching 100%.
+      if (e.percent >= 100 || e.status === 'Failed' || (e.renderId === activePromptRenderId && e.percent >= 85)) {
         fetchOperationalData();
       }
     },
@@ -616,7 +630,10 @@ export default function App() {
       .then(async (data: SceneItem[]) => {
         setScenesForVideo(data);
         if (data.length > 0) {
-          setSelectedSceneId(data[0].id);
+          // Preserve the user's current scene selection across incremental re-fetches
+          // (e.g. while detection is still running on other scenes) — only default to
+          // the first scene if nothing is selected yet or the selection no longer exists.
+          setSelectedSceneId(prev => (prev && data.some(s => s.id === prev)) ? prev : data[0].id);
           // Batch-fetch surfaces for ALL scenes in one request
           const sceneIds = data.map((s: SceneItem) => s.id);
           try {
@@ -649,6 +666,16 @@ export default function App() {
       });
   }, [selectedVideo, token, sceneRefreshKey]);
 
+  // While the selected video is still detecting, periodically re-fetch its scenes/surfaces
+  // so scenes that finish early become usable (e.g. in EditorTab) without waiting for the
+  // whole video's pipeline to complete.
+  const selectedVideoDetecting = contentList.find(c => c.id === selectedVideo)?.ingestionStatus === 'SceneDetecting';
+  useEffect(() => {
+    if (!selectedVideo || !token || !selectedVideoDetecting) return;
+    const interval = setInterval(() => setSceneRefreshKey(k => k + 1), 4000);
+    return () => clearInterval(interval);
+  }, [selectedVideo, token, selectedVideoDetecting]);
+
   // Use cached surfaces from batch fetch when selected scene changes
   useEffect(() => {
     if (!selectedSceneId) return;
@@ -665,13 +692,6 @@ export default function App() {
       setSelectedSurfaceId('');
     }
   }, [selectedSceneId, surfacesByScene]);
-
-  // Sync composer campaign with selected campaign context (MReq 10)
-  useEffect(() => {
-    if (selectedCampaignId && !composerCampaignId) {
-      setComposerCampaignId(selectedCampaignId);
-    }
-  }, [selectedCampaignId]);
 
   // Sync chunked upload progress to App state for UI display
   useEffect(() => {
@@ -969,9 +989,8 @@ export default function App() {
 
   // Handle Surface Approval Decision (MReq 11: real campaign context, audit trail)
   const handleSurfaceDecision = async (decision: "Approved" | "Rejected") => {
-    console.log('[approve] called', { decision, selectedSurfaceId, hasUser: !!user, selectedSceneId });
-    if (!selectedSurfaceId) { alert('No surface selected. Click a surface on the video first.'); return; }
-    if (!user) { alert('User session not found. Please log in again.'); return; }
+    if (!selectedSurfaceId) throw new Error('No surface selected. Click a surface on the video first.');
+    if (!user) throw new Error('User session not found. Please log in again.');
     try {
       const r = await fetchWithAuth(`/api/surfaces/${selectedSurfaceId}/approve`, {
         method: 'POST',
@@ -985,8 +1004,7 @@ export default function App() {
       });
       if (!r.ok) {
         const data = await r.json();
-        alert(data.error || 'Approval failed.');
-        return;
+        throw new Error(data.error || 'Approval failed.');
       }
       setRejectionReason('');
       const rawUpdated = await fetchWithAuth(`/api/scenes/${selectedSceneId}/surfaces`).then(r => r.json()) as SurfaceItemResponse[];
@@ -994,33 +1012,9 @@ export default function App() {
       setSurfacesForScene(parsed);
       setSurfacesByScene(prev => ({ ...prev, [selectedSceneId]: parsed }));
       fetchOperationalData();
-      alert(`Surface ${decision === 'Approved' ? 'approved' : 'rejected'} successfully.`);
     } catch (err: any) {
-      alert(err.message || 'Approval failed. Check console.');
       console.error(err);
-    }
-  };
-
-  // Handle Render Job Compositing (MReq 7, 14, 23)
-  const handleQueueRender = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!composerCampaignId || !composerAssetId || !selectedSurfaceId) return;
-
-    try {
-      await fetchWithAuth('/api/renders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contentId: selectedVideo,
-          surfaceId: selectedSurfaceId,
-          campaignId: composerCampaignId,
-          assetId: composerAssetId,
-          exportPreset: composerPreset
-        })
-      });
-      fetchAllData();
-    } catch (err) {
-      console.error(err);
+      throw err;
     }
   };
 
@@ -1030,8 +1024,8 @@ export default function App() {
       await retryRender(renderId);
       await fetchAllData();
     } catch (err: any) {
-      alert(err.message || 'Failed to retry render. Check the console for details.');
       console.error('Failed to retry render:', err);
+      throw err;
     }
   };
 
@@ -1068,7 +1062,6 @@ export default function App() {
 
   // Handle scene-level approval (approve scene with its placed assets for rendering)
   const handleSceneApprove = async (sceneId: string) => {
-    console.log('[approve] handleSceneApprove called', { sceneId, selectedVideo });
     try {
       const r = await fetchWithAuth(`/api/scenes/update`, {
         method: 'POST',
@@ -1077,22 +1070,22 @@ export default function App() {
       });
       if (!r.ok) {
         const data = await r.json();
-        alert(data.error || 'Scene approval failed.');
-        return;
+        throw new Error(data.error || 'Scene approval failed.');
       }
       if (selectedVideo) {
         const refreshed = await fetchWithAuth(`/api/content/${selectedVideo}/scenes`).then(r => r.json());
         setScenesForVideo(refreshed);
       }
       fetchAllData();
-      alert('Scene approved successfully! You can now submit for rendering.');
     } catch (err: any) {
-      alert(err.message || 'Scene approval failed.');
       console.error('Failed to approve scene:', err);
+      throw err;
     }
   };
 
-  // Handle AI video splitting (scenes only — no surfaces). User triggers surfaces per-scene afterwards.
+  // Handle AI video splitting: full shot-aware pipeline (shot detection → clustering into
+  // scenes → surface detection per scene), so a scene can span multiple camera cuts and
+  // surfaces are ready without a separate per-scene trigger.
   const handleAiSplitAnalyze = async (contentId: string, videoTitle: string) => {
     if (!contentId || !videoTitle) return;
     setAiAnalyzingVideoId(contentId);
@@ -1105,14 +1098,22 @@ export default function App() {
     }, 10 * 60 * 1000);
 
     try {
-      // Queue scenes-only detection — SignalR DetectionProgress pushes live updates.
+      // Queue the full shot-aware pipeline — SignalR DetectionProgress pushes live updates.
       // onDetectionProgress callback handles completion + scene refresh.
-      await detectScenesOnly(contentId, videoTitle);
+      await aiSplitAnalyze(contentId, videoTitle);
+      // The backend flips ingestionStatus to SceneDetecting synchronously before returning —
+      // reflect that immediately instead of waiting for the next fetch/SignalR round trip,
+      // otherwise the progress bar (gated on ingestionStatus) has nothing to show yet.
+      setContentList(prev => prev.map(c =>
+        c.id === contentId ? { ...c, ingestionStatus: 'SceneDetecting', detectionProgress: 0 } : c
+      ));
+      // Clear any stale phase label from a previous run on this content
+      setDetectionPhaseLabel(prev => { const next = { ...prev }; delete next[contentId]; return next; });
     } catch (err: any) {
       console.error("AI Split/Analyze Error:", err);
-      alert("Scene detection failed. Please try again or contact support.");
       setAiAnalyzingVideoId(null);
       clearTimeout(safetyTimer);
+      throw new Error('Scene detection failed. Please try again or contact support.');
     }
   };
 
@@ -1127,11 +1128,18 @@ export default function App() {
     try {
       // Queue re-detect — SignalR DetectionProgress pushes live updates.
       await redetectScenes(contentId);
+      // Same reasoning as handleAiSplitAnalyze: reflect the synchronous server-side
+      // status flip immediately so the progress bar shows up right away.
+      setContentList(prev => prev.map(c =>
+        c.id === contentId ? { ...c, ingestionStatus: 'SceneDetecting', detectionProgress: 0 } : c
+      ));
+      // Clear any stale phase label from a previous run on this content
+      setDetectionPhaseLabel(prev => { const next = { ...prev }; delete next[contentId]; return next; });
     } catch (err: any) {
       console.error('Re-detect scenes error:', err);
-      alert("Failed to re-detect scenes. Please try again or contact support.");
       setAiAnalyzingVideoId(null);
       setIsPipelineActionPending(null);
+      throw new Error('Failed to re-detect scenes. Please try again or contact support.');
     }
   };
 
@@ -1144,7 +1152,7 @@ export default function App() {
       await fetchAllData();
     } catch (err: any) {
       console.error('Retranscode error:', err);
-      alert("Failed to restart transcoding. Please try again or contact support.");
+      throw new Error('Failed to restart transcoding. Please try again or contact support.');
     } finally {
       setIsPipelineActionPending(null);
     }
@@ -1173,7 +1181,79 @@ export default function App() {
       // and scene refresh when detection completes — no polling needed.
     } catch (err: any) {
       console.error('Surface detection error:', err);
-      alert(err.message || 'Failed to start surface detection.');
+      throw err;
+    }
+  };
+
+  /** Delete a single scene (and its surfaces/ad-slots/approvals). Blocked server-side if any surface is Approved. */
+  const handleDeleteScene = async (sceneId: string) => {
+    try {
+      await deleteScene(sceneId);
+      setScenesForVideo(prev => prev.filter(s => s.id !== sceneId));
+      setSurfacesByScene(prev => {
+        const next = { ...prev };
+        delete next[sceneId];
+        return next;
+      });
+      if (selectedSceneId === sceneId) {
+        setSelectedSceneId('');
+        setSurfacesForScene([]);
+        setSelectedSurfaceId('');
+      }
+    } catch (err: any) {
+      console.error('Delete scene error:', err);
+      throw err;
+    }
+  };
+
+  /** Delete all scenes for a content item. Blocked server-side if any surface is Approved. */
+  const handleDeleteAllScenes = async (contentId: string) => {
+    try {
+      await deleteAllScenes(contentId);
+      if (contentId === selectedVideo) {
+        setScenesForVideo([]);
+        setSurfacesByScene({});
+        setSurfacesForScene([]);
+        setSelectedSceneId('');
+        setSelectedSurfaceId('');
+      }
+    } catch (err: any) {
+      console.error('Delete all scenes error:', err);
+      throw err;
+    }
+  };
+
+  /** Delete a single surface (and its ad-slots/approvals). Blocked server-side if the surface is Approved. */
+  const handleDeleteSurface = async (surfaceId: string) => {
+    try {
+      await deleteSurface(surfaceId);
+      setSurfacesForScene(prev => prev.filter(sf => sf.id !== surfaceId));
+      setSurfacesByScene(prev => {
+        const next = { ...prev };
+        for (const sceneId of Object.keys(next)) {
+          next[sceneId] = next[sceneId].filter(sf => sf.id !== surfaceId);
+        }
+        return next;
+      });
+      if (selectedSurfaceId === surfaceId) setSelectedSurfaceId('');
+    } catch (err: any) {
+      console.error('Delete surface error:', err);
+      throw err;
+    }
+  };
+
+  /** Delete all surfaces for a scene. Blocked server-side if any surface is Approved. */
+  const handleDeleteAllSurfaces = async (sceneId: string) => {
+    try {
+      await deleteAllSurfaces(sceneId);
+      setSurfacesByScene(prev => ({ ...prev, [sceneId]: [] }));
+      if (selectedSceneId === sceneId) {
+        setSurfacesForScene([]);
+        setSelectedSurfaceId('');
+      }
+    } catch (err: any) {
+      console.error('Delete all surfaces error:', err);
+      throw err;
     }
   };
 
@@ -1191,7 +1271,7 @@ export default function App() {
       } catch { /* scenes may not exist after reset */ }
     } catch (err: any) {
       console.error('Reset pipeline error:', err);
-      alert("Failed to reset pipeline. Please try again or contact support.");
+      throw new Error('Failed to reset pipeline. Please try again or contact support.');
     } finally {
       setIsPipelineActionPending(null);
     }
@@ -1253,33 +1333,47 @@ export default function App() {
     });
   };
 
-  // Phase 2: Submit a surface+asset placement for rendering
+  // Phase 2: Submit a surface+asset placement for rendering. AI-detected surfaces are always
+  // AssetType "Generative" (detection never sets Planar — that's only set by the interactive
+  // draw-a-quad flow), so this always dispatches through the Generative interactive render job.
   const handleSubmitPlacement = async (surfaceId: string, assetId: string, campaignId: string) => {
-    if (!selectedVideo) return;
+    if (!selectedVideo) return false;
     try {
-      const r = await fetchWithAuth('/api/renders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contentId: selectedVideo,
-          surfaceId,
-          campaignId: campaignId || composerCampaignId,
-          assetId,
-          exportPreset: composerPreset
-        })
+      await confirmInteractivePlacement({
+        contentId: selectedVideo,
+        surfaceId,
+        campaignId: campaignId || selectedCampaignId || '',
+        assetId,
+        assetType: 'Generative',
       });
-      if (!r.ok) {
-        const data = await r.json();
-        alert(data.error || 'Failed to submit render.');
-        return false;
-      }
       fetchAllData();
       return true;
     } catch (err: any) {
-      alert(err.message || 'Failed to submit render. Check the console for details.');
       console.error('Failed to submit placement:', err);
-      return false;
+      throw err;
     }
+  };
+
+  // AI Placement Assistant — "Generate New" mode: prompt-based AI video placement (Kling O1),
+  // no pre-existing surface required. Two-phase — dispatch generates a preview clip the user
+  // must separately approve (splicing it into the full video) or reject.
+  // Errors here are surfaced inline by PromptGeneratePanel (it catches and displays them),
+  // not via alert() — so these intentionally let the error propagate rather than swallowing it.
+  const handleSubmitPromptPlacement = async (dto: CreatePromptRenderRequest) => {
+    const render = await submitPromptPlacement(dto);
+    setActivePromptRenderId(render.id);
+    setRenderList(prev => [render, ...prev.filter(r => r.id !== render.id)]);
+  };
+
+  const handleApprovePromptSplice = async (renderId: string) => {
+    const render = await approvePromptSplice(renderId);
+    setRenderList(prev => prev.map(r => (r.id === render.id ? render : r)));
+  };
+
+  const handleRejectPromptPlacement = async (renderId: string) => {
+    await rejectPromptPlacement(renderId);
+    setRenderList(prev => prev.map(r => (r.id === renderId ? { ...r, renderStatus: 'Rejected' } : r)));
+    setActivePromptRenderId(prev => (prev === renderId ? null : prev));
   };
 
   // Phase 3: AI-powered asset suggestion with smart category matching
@@ -1378,28 +1472,6 @@ export default function App() {
     return reasons.join(' · ');
   }
 
-  const handleDownloadDoc = () => {
-    setDownloading(true);
-    setTimeout(() => {
-      try {
-        const blob = new Blob([DOCUMENT_CONTENT], { type: 'application/msword' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'Brand_Inserts_Technology_Implementation_Plan.doc';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } catch (error) {
-        console.error('Download failed:', error);
-      } finally {
-        setDownloading(false);
-      }
-    }, 1000);
-  };
-
-  const currentDayDetails = TIMELINE_DATA.find(d => d.day === selectedDay) || TIMELINE_DATA[0];
   const currentSurface = surfacesForScene.find(sf => sf.id === selectedSurfaceId);
 
   if (!token || !user) {
@@ -1882,13 +1954,20 @@ export default function App() {
               /* Campaign selected — render the active view */
               <>
                 {activeView === 'dashboard' && (
-                  <CampaignDashboard
-                    campaign={campaignList.find(c => c.id === selectedCampaignId)!}
-                    assets={assetList.filter(a => a.campaignId === selectedCampaignId)}
-                    contentList={contentList.filter(v => selectedCampaignId && v.campaignId === selectedCampaignId)}
-                    renders={renderList.filter(r => r.campaignId === selectedCampaignId)}
-                    onNavigate={(view) => navigateTo(view, selectedCampaignId)}
-                  />
+                  campaignList.find(c => c.id === selectedCampaignId) ? (
+                    <CampaignDashboard
+                      campaign={campaignList.find(c => c.id === selectedCampaignId)!}
+                      assets={assetList.filter(a => a.campaignId === selectedCampaignId)}
+                      contentList={contentList.filter(v => selectedCampaignId && v.campaignId === selectedCampaignId)}
+                      renders={renderList.filter(r => r.campaignId === selectedCampaignId)}
+                      hasApprovedPlacements={hasApprovedPlacements}
+                      onNavigate={(view) => navigateTo(view, selectedCampaignId)}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center py-24 text-slate-400 text-sm font-mono">
+                      Loading campaign...
+                    </div>
+                  )
                 )}
 
                 {activeView === 'assets' && (
@@ -1950,6 +2029,9 @@ export default function App() {
                     onResetPipeline={handleResetPipeline}
                     isPipelineActionPending={isPipelineActionPending}
                     onDetectSurfacesForScene={handleDetectSurfacesForScene}
+                    detectionPhaseLabel={detectionPhaseLabel}
+                    onDeleteScene={handleDeleteScene}
+                    onDeleteAllScenes={handleDeleteAllScenes}
                   />
                 )}
 
@@ -1979,6 +2061,8 @@ export default function App() {
                     handleAiSplitAnalyze={handleAiSplitAnalyze}
                     aiAnalyzingVideoId={aiAnalyzingVideoId}
                     onDetectSurfacesForScene={handleDetectSurfacesForScene}
+                    onDeleteSurface={handleDeleteSurface}
+                    onDeleteAllSurfaces={handleDeleteAllSurfaces}
                     // Phase 2
                     selectedCampaignId={selectedCampaignId ?? undefined}
                     surfaceAssetPairs={surfaceAssetPairs}
@@ -2000,6 +2084,20 @@ export default function App() {
                     renderList={renderList}
                     onRetryRender={handleRetryRender}
                     userRole={user?.role}
+                    // AI Placement Assistant — Generate New mode
+                    onSubmitPromptPlacement={handleSubmitPromptPlacement}
+                    onApprovePromptSplice={handleApprovePromptSplice}
+                    onRejectPromptPlacement={handleRejectPromptPlacement}
+                    activePromptRender={
+                      // Derived from the server-fetched renderList (not just activePromptRenderId)
+                      // so a page reload or a different session still finds an in-flight or
+                      // awaiting-approval prompt render for whichever scene is selected.
+                      renderList
+                        .filter(r => r.renderMode === 'PromptEdit' && r.sceneId === selectedSceneId &&
+                          r.renderStatus !== 'Finished' && r.renderStatus !== 'Rejected')
+                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
+                        ?? null
+                    }
                   />
                 )}
 
@@ -2013,11 +2111,13 @@ export default function App() {
                 )}
 
                 {activeView === 'reports' && (
-                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto py-8 text-center" key="reports">
-                    <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                    <h3 className="text-lg font-bold text-slate-800 font-display">Campaign Reports</h3>
-                    <p className="text-sm text-slate-500 mt-2">Billing, exposure analytics, and audit logs for this campaign.</p>
-                    <div className="mt-6 p-6 bg-white border border-slate-200 rounded-xl shadow-sm text-left space-y-2">
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl mx-auto py-8 space-y-6" key="reports">
+                    <div className="text-center">
+                      <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                      <h3 className="text-lg font-bold text-slate-800 font-display">Campaign Reports</h3>
+                      <p className="text-sm text-slate-500 mt-2">Billing, exposure analytics, and audit logs for this campaign.</p>
+                    </div>
+                    <div className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm text-left space-y-2">
                       <div className="text-xs font-mono text-slate-600 flex justify-between">
                         <span>Campaign Budget:</span>
                         <span className="font-bold">${campaignList.find(c => c.id === selectedCampaignId)?.totalBudget.toLocaleString()}</span>
@@ -2035,6 +2135,7 @@ export default function App() {
                         <span className="font-bold">{(renderList.filter(r => r.campaignId === selectedCampaignId).reduce((sum, r) => sum + r.processingDurationMs, 0) / 1000).toFixed(1)}s</span>
                       </div>
                     </div>
+                    {selectedCampaignId && <InvoicePanel campaignId={selectedCampaignId} />}
                   </motion.div>
                 )}
               </>

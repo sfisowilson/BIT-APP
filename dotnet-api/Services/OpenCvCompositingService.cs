@@ -18,21 +18,18 @@ namespace Afrobotics.Bit.Api.Services;
 /// FFmpeg-based compositing: extracts the video frame and overlays the brand asset
 /// at the detected surface position. Activated when engine_compositing = "opencv".
 /// Uses FFmpeg for frame extraction and image overlay — no native OpenCV dependency.
-/// Falls back to BasicCompositingService if compositing fails.
 /// </summary>
 public class OpenCvCompositingService : ICompositingService
 {
     private readonly PostgresDbContext _context;
     private readonly IHostEnvironment _env;
     private readonly ILogger<OpenCvCompositingService> _logger;
-    private readonly ICompositingService _fallback;
 
     public OpenCvCompositingService(PostgresDbContext context, IHostEnvironment env, ILogger<OpenCvCompositingService> logger)
     {
         _context = context;
         _env = env;
         _logger = logger;
-        _fallback = new BasicCompositingService(context, env);
     }
 
     public async Task<CompositedFrame> CompositeAsync(CompositingRequest request)
@@ -138,13 +135,9 @@ public class OpenCvCompositingService : ICompositingService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[OpenCV] Compositing failed for asset {AssetId} — falling back to basic",
-                request.AssetId);
+            _logger.LogError(ex, "[OpenCV] Compositing failed for asset {AssetId}", request.AssetId);
             sw.Stop();
-            // Fall back to basic on any failure
-            var fallbackResult = await _fallback.CompositeAsync(request);
-            fallbackResult.EngineUsed = "OpenCvCompositor (fallback to basic)";
-            return fallbackResult;
+            throw;
         }
     }
 
@@ -217,7 +210,11 @@ public class OpenCvCompositingService : ICompositingService
             var x = xs.Min(); var y = ys.Min();
             return (x, y, Math.Max(1, xs.Max() - x), Math.Max(1, ys.Max() - y));
         }
-        catch { return (0, 0, 0, 0); }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[OpenCv] ParseOverlayBounds failed: {ex.Message}");
+            return (0, 0, 0, 0);
+        }
     }
 
     /// <summary>Runs an FFmpeg command and waits for completion.</summary>

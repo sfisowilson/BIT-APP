@@ -1,6 +1,6 @@
 import React from 'react';
 import { previewSegment } from '../apiClient';
-import { parseMaskPolygon, type MaskPolygon } from '../types';
+import { parseMaskPolygon, type MaskPolygon, type ShotItem } from '../types';
 
 export type InteractionMode = 'product' | 'signage';
 
@@ -15,7 +15,13 @@ export interface SurfaceClickOverlayProps {
   currentFrame: number;
   frameRate: number;
   mode: InteractionMode;
+  /** When false, the overlay stops intercepting clicks (pointer-events disabled) so the native
+   * video controls underneath are reachable, without unmounting and losing in-progress state
+   * (e.g. a partially-placed quad). Defaults to true. */
+  active?: boolean;
   assetUrl?: string;         // For live warp preview in signage mode
+  /** Shots making up the current scene, ordered by shotIndex. Used to flag cuts to the operator. */
+  shots?: ShotItem[];
   onMaskReceived?: (polygon: MaskPolygon) => void;
   onQuadConfirmed?: (corners: [QuadPoint, QuadPoint, QuadPoint, QuadPoint]) => void;
   onCancel?: () => void;
@@ -34,13 +40,21 @@ export const SurfaceClickOverlay: React.FC<SurfaceClickOverlayProps> = ({
   currentFrame,
   frameRate,
   mode,
+  active = true,
   assetUrl,
+  shots,
   onMaskReceived,
   onQuadConfirmed,
   onCancel,
 }) => {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // Which shot (camera cut) the playhead is currently in, for the cut-awareness badge.
+  const currentShot = React.useMemo(() => {
+    if (!shots || shots.length === 0) return null;
+    return shots.find(s => currentFrame >= s.startFrame && currentFrame <= s.endFrame) ?? null;
+  }, [shots, currentFrame]);
 
   // Product mode: mask polygon from SAM3
   const [maskPolygon, setMaskPolygon] = React.useState<MaskPolygon | null>(null);
@@ -134,6 +148,19 @@ export const SurfaceClickOverlay: React.FC<SurfaceClickOverlayProps> = ({
     const cssY = e.clientY - rect.top;
 
     const native = cssToNative(cssX, cssY);
+
+    // Reject a corner placed on top of (or too close to) an existing one — a degenerate quad
+    // with duplicate corners produces an invalid perspective transform downstream. Native pixel
+    // threshold since precision is limited when clicking on a scaled-down preview.
+    const minCornerDistance = 10;
+    const tooClose = quadCorners.some(c =>
+      Math.hypot(c.x - native.x, c.y - native.y) < minCornerDistance
+    );
+    if (tooClose) {
+      setError('That corner is too close to one you already placed — click a distinct point.');
+      return;
+    }
+
     const newCorners = [...quadCorners, native];
     setQuadCorners(newCorners);
 
@@ -167,7 +194,19 @@ export const SurfaceClickOverlay: React.FC<SurfaceClickOverlayProps> = ({
       });
     };
 
-    const handleUp = () => setDraggingCorner(null);
+    // Re-confirm with the parent after every drag — onQuadConfirmed previously only fired
+    // once, at the moment the 4th corner was first placed, so any subsequent dragging to
+    // refine the shape was reflected in the overlay but silently never reached the parent's
+    // stored quad (and therefore never reached the actual placement/render).
+    const handleUp = () => {
+      setDraggingCorner(null);
+      setQuadCorners(current => {
+        if (current.length === 4) {
+          onQuadConfirmed?.(current as [QuadPoint, QuadPoint, QuadPoint, QuadPoint]);
+        }
+        return current;
+      });
+    };
 
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
@@ -229,11 +268,24 @@ export const SurfaceClickOverlay: React.FC<SurfaceClickOverlayProps> = ({
         left: 0,
         width: '100%',
         height: '100%',
-        cursor: mode === 'product' ? 'crosshair' : quadCorners.length < 4 ? 'crosshair' : 'default',
+        cursor: !active ? 'auto' : mode === 'product' ? 'crosshair' : quadCorners.length < 4 ? 'crosshair' : 'default',
         zIndex: 10,
+        pointerEvents: active ? 'auto' : 'none',
       }}
-      onClick={mode === 'product' ? handleProductClick : handleSignageClick}
+      onClick={active ? (mode === 'product' ? handleProductClick : handleSignageClick) : undefined}
     >
+      {/* Shot-boundary awareness badge — this scene spans multiple camera cuts */}
+      {shots && shots.length > 1 && currentShot && (
+        <div style={{
+          position: 'absolute', top: 12, left: 12,
+          background: 'rgba(15,23,42,0.75)', color: '#fff',
+          padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+          zIndex: 15, pointerEvents: 'none',
+        }}>
+          ✂ Shot {currentShot.shotIndex + 1} / {shots.length} in this scene
+        </div>
+      )}
+
       {/* Loading overlay */}
       {loading && (
         <div style={{

@@ -80,6 +80,25 @@
 
 ---
 
+## Table: ShotItems
+
+> Added by the shot-detection/clustering pipeline (`ShotDetectionPipeline` + `ShotClusteringService`). A `SceneItem` is a temporally-contiguous group of one or more shots — this is what makes "a scene is not just one camera cut" true in this codebase. See `governance/plans/shot-aware-consistency.md`.
+
+| Column | Type | Required | Default | Notes |
+|---|---|---|---|---|
+| `Id` | string (PK) | Yes | `Guid.NewGuid()` | |
+| `ContentId` | string | Yes | — | FK → ContentItems |
+| `SceneId` | string | No | — | FK → SceneItems, `ON DELETE SET NULL`. Null = unassigned (pending clustering). **Single source of truth for shot→scene membership.** |
+| `ShotIndex` | int | Yes | — | 0-based sequential index within the content video |
+| `StartFrame` | int | Yes | — | |
+| `EndFrame` | int | Yes | — | |
+| `KeyframeTimestamp` | double | Yes | `0` | Seconds from start |
+| `KeyframePath` | string(500) | No | — | Relative path, e.g. `keyframes/{contentId}/shot_0001.jpg`, served via `/api/content/file/` |
+| `KeyframeEmbeddingJson` | string(20000) | No | — | SAM3 image embedding (JSON `float[]`) used for clustering similarity |
+| `CreatedAt` | DateTime | Yes | `UtcNow` | |
+
+---
+
 ## Table: SurfaceItems
 
 | Column | Type | Required | Default | Notes |
@@ -96,8 +115,12 @@
 | `ExclusionReason` | string | No | — | |
 | `PlacementImageUrl` | string | No | — | |
 | `DetectedAtFrame` | int | No | — | Frame number where surface was detected (0-based) |
-| `TrackedBoundariesJson` | string(100000) | No | — | Per-frame tracking data from SAM3 |
-| `Sam3Prompt` | string(500) | No | — | Gemini-generated visual description for SAM3 segmentation |
+| `Sam3Prompt` | string(500) | No | — | Gemini-generated visual description for SAM3 segmentation; also used as the shot-aware re-anchor text prompt |
+| `AssetType` | string(50) | Yes | `"Generative"` | "Generative" (pikaswaps) or "Planar" (homography warp) — drives which render job runs |
+| `Source` | string(50) | Yes | `"AI"` | "AI" (auto-detected) or "Manual" (interactive click/draw) |
+| `TrackingDataJson` | string(100000) | No | — | Shot-segmented per-frame data: `{shotSegments:[{shotId,shotIndex,startFrame,endFrame,status,trackId,confidence,frames:[...]}]}`. Generative frames: `{frame,rle,trackId}`. Planar frames: `{frame,corners:[{x,y}×4]}`. Falls back to a legacy flat array for surfaces tracked before shot-aware tracking existed. Produced by `ShotAwareTrackingService`. |
+| `TrackingPointsJson` | text | No | — | Lightweight derived centroid: flat, frame-ordered `[{frame,x,y}, ...]` across every shot segment (quad-corner average for Planar, decoded-RLE-mask-pixel average for Generative). Computed alongside `TrackingDataJson` by `ShotAwareTrackingService`; lets the Placement Workbench draw a single moving point tracking the surface during scene playback without decoding RLE or understanding the shot-segmented structure client-side. Null until a render has actually run for this surface. |
+| `TrackingStatus` | string(20) | Yes | `"NotTracked"` | NotTracked, Tracked (every shot tracked/re-anchored), PartialCoverage (some shots skipped, source video passes through), LockLost (seed shot failed or every shot skipped) |
 
 ---
 
@@ -170,14 +193,21 @@
 |---|---|---|---|---|
 | `Id` | string (PK) | Yes | `Guid.NewGuid()` | |
 | `ContentId` | string | Yes | — | FK → ContentItems |
-| `SurfaceId` | string | Yes | — | FK → SurfaceItems |
+| `SurfaceId` | string | No | — | FK → SurfaceItems, `SetNull` on delete. Null for `RenderMode = "PromptEdit"` renders — those target a `SceneId` directly, with no detected/drawn boundary |
 | `CampaignId` | string | Yes | — | FK → CampaignItems |
 | `AssetId` | string | Yes | — | FK → CreativeAssets |
 | `ExportPreset` | string | Yes | `"Web-Ready MP4"` | |
 | `StorageKey` | string | Yes | — | |
-| `RenderStatus` | string | Yes | `"Queued"` | Queued, Processing, Finished, Failed |
-| `Progress` | int | Yes | `0` | 0-100 |
+| `RenderStatus` | string | Yes | `"Queued"` | Queued, Processing, Finished, NeedsReview (partial shot coverage or drift-check below threshold — not a failure), Failed, PreviewReady (PromptEdit only — preview generated, awaiting approval), Rejected (PromptEdit only — user declined the preview) |
+| `SceneId` | string | No | — | FK → SceneItems, `SetNull` on delete. Always set for `RenderMode = "PromptEdit"` renders; Interactive renders derive their scene via `SurfaceId → SurfaceItem.SceneId` instead |
+| `PromptText` | string(1000) | No | — | User's free-text placement instruction for a `PromptEdit` render. Null for Interactive renders |
+| `PreviewStorageKey` | string | No | — | Download path (`/api/renders/{id}/preview`) for the not-yet-approved AI-generated preview clip, set once `ProcessPromptPreviewJob` reaches `RenderStatus = "PreviewReady"` |
+| `RenderMode` | string(20) | No | — | Null or `"Interactive"` (click/quad-based placement, the original two flows) vs `"PromptEdit"` (free-text AI video generation via Kling O1, no surface). Existing rows are all null/`"Interactive"` |
+| `Progress` | int | Yes | `0` | 0-100. `PromptEdit` preview generation caps at 90 (not 100) by design — it isn't a terminal state |
 | `ProcessingDurationMs` | int | Yes | `0` | |
+| `LastErrorMessage` | string(2000) | No | — | Diagnostic detail when `RenderStatus = Failed` |
+| `CompositingEngine` | string(50) | No | `""` | "pikaswaps", "PlanarWarp", "ffmpeg-luma", "ffmpeg-perspective", or "kling-o1-edit" |
+| `QualityTier` | string(20) | No | `""` | "AI" (pikaswaps or kling-o1-edit), "Exact" (planar warp), or "Standard" (ffmpeg fallback) |
 | `CreatedAt` | DateTime | Yes | `UtcNow` | |
 
 ---

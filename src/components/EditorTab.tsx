@@ -3,12 +3,13 @@ import { motion } from 'motion/react';
 import {
   Tv, Play, Shield, CheckCircle, AlertTriangle, Sparkles, Wand2,
   Loader2, Eye, Layout, Image, Package, ArrowRight, Search, Cpu,
-  MapPin, ChevronRight, X, Upload, RefreshCw, Download, Clock
+  MapPin, ChevronRight, X, Upload, RefreshCw, Download, Clock, Trash2
 } from 'lucide-react';
-import { ContentItem, SceneItem, SurfaceItem, CreativeAsset, CampaignItem, SurfaceAssetPair, RenderItem } from '../types';
+import { ContentItem, SceneItem, SurfaceItem, CreativeAsset, CampaignItem, SurfaceAssetPair, RenderItem, CreatePromptRenderRequest, MIN_PROMPT_EDIT_DURATION_SECONDS, MAX_PROMPT_EDIT_DURATION_SECONDS } from '../types';
 import { SurfaceClickOverlay } from './SurfaceClickOverlay';
-import { confirmInteractivePlacement } from '../apiClient';
-import type { MaskPolygon } from '../types';
+import { PromptGeneratePanel } from './PromptGeneratePanel';
+import { confirmInteractivePlacement, createSurfaceFromClick, createSurfaceFromQuad, fetchShotsForScene } from '../apiClient';
+import type { MaskPolygon, ShotItem } from '../types';
 
 interface EditorTabProps {
   // Core video/scene/surface selection
@@ -25,7 +26,7 @@ interface EditorTabProps {
   // Surface QA
   rejectionReason: string;
   setRejectionReason: (v: string) => void;
-  handleSurfaceDecision: (decision: "Approved" | "Rejected") => void;
+  handleSurfaceDecision: (decision: "Approved" | "Rejected") => Promise<void>;
   currentSurface: SurfaceItem | undefined;
 
   // Asset inventory
@@ -36,6 +37,8 @@ interface EditorTabProps {
   handleAiSplitAnalyze?: (contentId: string, videoTitle: string) => Promise<void>;
   aiAnalyzingVideoId?: string | null;
   onDetectSurfacesForScene?: (sceneId: string, contentId: string) => Promise<void>;
+  onDeleteSurface?: (surfaceId: string) => Promise<void>;
+  onDeleteAllSurfaces?: (sceneId: string) => Promise<void>;
 
   // Phase 2: Asset placement on surfaces
   selectedCampaignId?: string;
@@ -50,7 +53,7 @@ interface EditorTabProps {
   aiSuggestions?: Record<string, { assetId: string; reason: string }[]>;
 
   // Scene approval workflow
-  handleSceneApprove?: (sceneId: string) => void;
+  handleSceneApprove?: (sceneId: string) => Promise<void>;
 
   // Compositing preview
   onPreviewComposite?: (surfaceId: string, assetId: string) => void;
@@ -70,6 +73,12 @@ interface EditorTabProps {
   renderList?: RenderItem[];
   onRetryRender?: (renderId: string) => Promise<void>;
   userRole?: 'Admin' | 'Editor' | 'Advertiser';
+
+  // AI Placement Assistant — "Generate New" mode (prompt-based AI video placement, no surface required)
+  onSubmitPromptPlacement?: (dto: CreatePromptRenderRequest) => Promise<void>;
+  onApprovePromptSplice?: (renderId: string) => Promise<void>;
+  onRejectPromptPlacement?: (renderId: string) => Promise<void>;
+  activePromptRender?: RenderItem | null;
 }
 
 export const EditorTab: React.FC<EditorTabProps> = ({
@@ -92,6 +101,8 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   handleAiSplitAnalyze,
   aiAnalyzingVideoId,
   onDetectSurfacesForScene,
+  onDeleteSurface,
+  onDeleteAllSurfaces,
   // Phase 2
   selectedCampaignId,
   surfaceAssetPairs = {},
@@ -120,11 +131,42 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   renderList = [],
   onRetryRender,
   userRole,
+  // AI Placement Assistant — Generate New mode
+  onSubmitPromptPlacement,
+  onApprovePromptSplice,
+  onRejectPromptPlacement,
+  activePromptRender,
 }) => {
-  const [previewMode, setPreviewMode] = React.useState(false);
+  // Controls whether the click-to-place overlay (SurfaceClickOverlay) intercepts clicks on the
+  // video. It fully covers the player, including the native play/pause/seek controls, so it must
+  // be off by default — otherwise every click is swallowed as a placement click and the video is
+  // unplayable. Turned on automatically when the user picks a placement mode (explicit intent to
+  // click on the video next); the toggle button lets them drop back to normal playback at any time.
+  const [placementOverlayActive, setPlacementOverlayActive] = React.useState(false);
+
+  // Shared inline feedback for this tab's action handlers (approve/reject, delete, detect,
+  // submit placement, etc.) — these used to surface failures via a raw browser alert(); the
+  // handlers now let errors propagate and this banner displays them instead, consistent with
+  // the rest of the app's UI.
+  const [actionError, setActionError] = React.useState('');
+  const [actionSuccess, setActionSuccess] = React.useState('');
+  const runAction = async <T,>(fn: () => Promise<T>, successMessage?: string): Promise<T | undefined> => {
+    setActionError('');
+    setActionSuccess('');
+    try {
+      const result = await fn();
+      if (successMessage) setActionSuccess(successMessage);
+      return result;
+    } catch (err: any) {
+      setActionError(err.message || 'Action failed.');
+      return undefined;
+    }
+  };
+
   const [aiPromptText, setAiPromptText] = React.useState('');
   const [aiPlacing, setAiPlacing] = React.useState(false);
   const [aiExplanation, setAiExplanation] = React.useState('');
+  const [assistantMode, setAssistantMode] = React.useState<'match' | 'generate'>('match');
   const [previewAssetId, setPreviewAssetId] = React.useState<string>('');
   const [selectedBlendMode, setSelectedBlendMode] = React.useState<'multiply' | 'overlay' | 'normal'>('multiply');
   const [ambientIntensity, setAmbientIntensity] = React.useState<number>(0.85);
@@ -132,6 +174,10 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const [submitConfirming, setSubmitConfirming] = React.useState<string>('');
   const [redetectConfirmOpen, setRedetectConfirmOpen] = React.useState(false);
+  const [deleteSurfaceConfirmId, setDeleteSurfaceConfirmId] = React.useState<string | null>(null);
+  const [deleteAllSurfacesConfirmOpen, setDeleteAllSurfacesConfirmOpen] = React.useState(false);
+  const [deletingSurfaceId, setDeletingSurfaceId] = React.useState<string | null>(null);
+  const [deletingAllSurfaces, setDeletingAllSurfaces] = React.useState(false);
   const [retryingId, setRetryingId] = React.useState<string | null>(null);
 
   // ── Interactive placement state ──
@@ -146,63 +192,62 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   const activeVideo = contentList.find(v => v.id === selectedVideo);
   const isLocalVideo = activeVideo?.storageKey?.startsWith('/api/content/file/');
 
-  // Track video playback position as frame number
+  // Shots (camera cuts) making up the current scene — a scene can span multiple shots,
+  // and a placement must stay consistent across all of them.
+  const [shotsForScene, setShotsForScene] = React.useState<ShotItem[]>([]);
+  React.useEffect(() => {
+    if (!selectedSceneId) { setShotsForScene([]); return; }
+    let cancelled = false;
+    fetchShotsForScene(selectedSceneId)
+      .then(shots => { if (!cancelled) setShotsForScene(shots); })
+      .catch(() => { if (!cancelled) setShotsForScene([]); });
+    return () => { cancelled = true; };
+  }, [selectedSceneId]);
+
+  // Track video playback position as frame number. Also enforces the selected scene's
+  // boundary during playback — without this, native <video controls> playback runs straight
+  // past the scene into whatever comes next, with no indication the scene itself has ended.
   const [currentVideoFrame, setCurrentVideoFrame] = React.useState<number>(0);
   React.useEffect(() => {
     const vid = videoRef.current;
-    if (!vid || !activeVideo?.frameRate) { console.warn('[timeupdate] no video ref or frameRate'); return; }
+    if (!vid || !activeVideo?.frameRate) return;
     const fps = activeVideo.frameRate;
-    console.log('[timeupdate] listener attached, fps:', fps);
     const onTimeUpdate = () => {
       const frame = Math.round(vid.currentTime * fps);
       setCurrentVideoFrame(frame);
+      if (currentScene && !vid.paused && frame >= currentScene.endFrame) {
+        vid.currentTime = currentScene.endFrame / fps;
+        vid.pause();
+      }
     };
     vid.addEventListener('timeupdate', onTimeUpdate);
-    return () => { console.log('[timeupdate] listener removed'); vid.removeEventListener('timeupdate', onTimeUpdate); };
-  }, [activeVideo?.frameRate]);
+    return () => { vid.removeEventListener('timeupdate', onTimeUpdate); };
+  }, [activeVideo?.frameRate, selectedSceneId, currentScene?.endFrame]);
 
   // Filter surfaces: only show those detected near the current video frame (±30 frames)
   const visibleSurfaces = React.useMemo(() => {
     const frameWindow = 30;
-    const result = surfacesForScene.filter(sf => {
+    return surfacesForScene.filter(sf => {
       if (sf.id === selectedSurfaceId) return true;
       if (sf.detectedAtFrame == null || sf.detectedAtFrame === 0) return true;
       return Math.abs(sf.detectedAtFrame - currentVideoFrame) <= frameWindow;
     });
-    console.log('[visibleSurfaces]', { total: surfacesForScene.length, visible: result.length, currentVideoFrame, selectedSurfaceId, window: frameWindow });
-    return result;
   }, [surfacesForScene, currentVideoFrame, selectedSurfaceId]);
 
-  // Seek video to the exact frame where this surface was detected
-  const seekToSurface = (surfaceId: string) => {
-    console.log('[seekToSurface] clicked surface:', surfaceId);
-    setSelectedSurfaceId(surfaceId);
+  // Seek the video to a specific frame number, waiting for metadata if the video isn't ready yet.
+  const seekToFrame = (seekFrame: number) => {
     const vid = videoRef.current;
-    if (!vid || !activeVideo) { console.warn('[seekToSurface] no video ref or activeVideo'); return; }
-    const surface = surfacesForScene.find(s => s.id === surfaceId);
-    if (!surface || !activeVideo.frameRate) { console.warn('[seekToSurface] surface not found or no frameRate', { surface: !!surface, frameRate: activeVideo?.frameRate }); return; }
+    if (!vid || !activeVideo?.frameRate) return;
     const fps = activeVideo.frameRate;
-    console.log('[seekToSurface] surface:', { type: surface.surfaceType, detectedAtFrame: surface.detectedAtFrame, fps });
 
-    let seekFrame: number;
-    if (surface.detectedAtFrame != null && surface.detectedAtFrame >= 0) {
-      seekFrame = surface.detectedAtFrame;
-    } else {
-      const scene = scenesForVideo.find(s => s.id === surface.sceneId);
-      if (!scene) { console.warn('[seekToSurface] scene not found for surface'); return; }
-      seekFrame = scene.startFrame + (scene.endFrame - scene.startFrame) / 2;
-      console.log('[seekToSurface] no detectedAtFrame, using scene midpoint:', { startFrame: scene.startFrame, endFrame: scene.endFrame, seekFrame });
-    }
     let seekTime = seekFrame / fps;
     // Clamp to valid video range
     const maxSafeTime = Math.max(0.1, (vid.duration || 10) - 0.1);
     if (seekTime > maxSafeTime) seekTime = maxSafeTime;
-    console.log('[seekToSurface] seeking to:', { seekFrame, seekTime: seekTime.toFixed(2), fps, videoDuration: vid.duration, readyState: vid.readyState });
-    if (!isFinite(seekTime) || seekTime < 0) { console.warn('[seekToSurface] invalid seekTime'); return; }
+    if (!isFinite(seekTime) || seekTime < 0) return;
 
     const doSeek = () => {
-      if (!vid || vid.readyState < 1) { console.warn('[seekToSurface] doSeek: video not ready'); return; }
-      console.log('[seekToSurface] doSeek: setting currentTime to', seekTime.toFixed(2));
+      if (!vid || vid.readyState < 1) return;
       vid.currentTime = seekTime;
       vid.pause();
     };
@@ -210,7 +255,6 @@ export const EditorTab: React.FC<EditorTabProps> = ({
     if (vid.readyState >= 1) {
       doSeek();
     } else {
-      console.log('[seekToSurface] waiting for loadedmetadata...');
       const onLoaded = () => {
         vid.removeEventListener('loadedmetadata', onLoaded);
         doSeek();
@@ -218,6 +262,33 @@ export const EditorTab: React.FC<EditorTabProps> = ({
       vid.addEventListener('loadedmetadata', onLoaded);
     }
   };
+
+  // Seek video to the exact frame where this surface was detected
+  const seekToSurface = (surfaceId: string) => {
+    setSelectedSurfaceId(surfaceId);
+    if (!activeVideo) return;
+    const surface = surfacesForScene.find(s => s.id === surfaceId);
+    if (!surface) return;
+
+    let seekFrame: number;
+    if (surface.detectedAtFrame != null && surface.detectedAtFrame >= 0) {
+      seekFrame = surface.detectedAtFrame;
+    } else {
+      const scene = scenesForVideo.find(s => s.id === surface.sceneId);
+      if (!scene) return;
+      seekFrame = scene.startFrame + (scene.endFrame - scene.startFrame) / 2;
+    }
+    seekToFrame(seekFrame);
+  };
+
+  // Jump the video preview to the newly-selected scene's midpoint so the image actually
+  // reflects what's selected, instead of staying wherever it happened to be (e.g. frame 0).
+  React.useEffect(() => {
+    if (!currentScene) return;
+    const midpoint = currentScene.startFrame + (currentScene.endFrame - currentScene.startFrame) / 2;
+    seekToFrame(midpoint);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSceneId]);
   const hasCompletedVideos = contentList.some(v => v.ingestionStatus === 'Completed' && selectedCampaignId && v.campaignId === selectedCampaignId);
   const hasScenes = scenesForVideo.length > 0;
 
@@ -262,7 +333,6 @@ export const EditorTab: React.FC<EditorTabProps> = ({
       const dispH = vidH * scale;
       const offsetX = (elW - dispW) / 2;
       const offsetY = (elH - dispH) / 2;
-      console.log('[videoRect]', { elW, elH, vidW, vidH, scale, dispW, dispH, offsetX, offsetY });
       setVideoRect({ x: offsetX, y: offsetY, w: dispW, h: dispH });
     };
     updateRect();
@@ -373,7 +443,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                   const isDetecting = currentScene?.surfaceStatus === 'Detecting';
                   return (
                   <button
-                    onClick={() => onDetectSurfacesForScene(selectedSceneId, selectedVideo)}
+                    onClick={() => runAction(() => onDetectSurfacesForScene(selectedSceneId, selectedVideo))}
                     className={`inline-flex items-center gap-2 px-4 py-2 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer shadow-sm ${
                       isDetecting ? 'bg-amber-500 hover:bg-amber-400' : 'bg-amber-600 hover:bg-amber-500'
                     }`}
@@ -457,6 +527,19 @@ export const EditorTab: React.FC<EditorTabProps> = ({
       )}
 
       {/* ═══ Main layout ═══ */}
+        {(actionError || actionSuccess) && (
+          <div className={`mb-4 flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-xs font-semibold ${
+            actionError ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+          }`}>
+            <span>{actionError ? `⚠️ ${actionError}` : `✅ ${actionSuccess}`}</span>
+            <button
+              onClick={() => { setActionError(''); setActionSuccess(''); }}
+              className="shrink-0 text-current opacity-60 hover:opacity-100 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* ── LEFT (2/3): Video player + blend + AI enhance ── */}
           <div className="lg:col-span-2 space-y-6">
@@ -474,7 +557,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                   {/* Interactive mode toggle */}
                   <div className="flex items-center rounded-lg border border-indigo-200 overflow-hidden">
                     <button
-                      onClick={() => setInteractionMode('product')}
+                      onClick={() => { setInteractionMode('product'); setPlacementOverlayActive(true); }}
                       className={`px-2.5 py-1 text-[10px] font-bold cursor-pointer transition-colors ${
                         interactionMode === 'product'
                           ? 'bg-indigo-600 text-white'
@@ -484,7 +567,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                       🎯 Insert Product
                     </button>
                     <button
-                      onClick={() => setInteractionMode('signage')}
+                      onClick={() => { setInteractionMode('signage'); setPlacementOverlayActive(true); }}
                       className={`px-2.5 py-1 text-[10px] font-bold cursor-pointer transition-colors ${
                         interactionMode === 'signage'
                           ? 'bg-emerald-600 text-white'
@@ -494,6 +577,39 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                       📐 Place Signage
                     </button>
                   </div>
+                  {/* Escape hatch — the click-to-place overlay covers the whole video including
+                      native play/pause/seek controls, so this is the only way to play the video
+                      while a placement mode is selected. */}
+                  <button
+                    onClick={() => setPlacementOverlayActive(!placementOverlayActive)}
+                    title={placementOverlayActive ? 'Click-to-place is capturing clicks on the video — turn off to use play/pause/seek' : 'Video controls are active — turn on to click a point/corner on the video'}
+                    className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border cursor-pointer transition-colors ${
+                      placementOverlayActive
+                        ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {placementOverlayActive ? '🎯 Click-to-Place ON — click to play video instead' : '▶ Video Controls Active — click to place'}
+                  </button>
+                  {currentScene && (
+                    <button
+                      onClick={() => {
+                        // seekToFrame always pauses as part of the seek itself — play() called
+                        // immediately after races the still-in-progress seek and gets silently
+                        // dropped, so wait for the real 'seeked' event before resuming playback.
+                        const vid = videoRef.current;
+                        seekToFrame(currentScene.startFrame);
+                        if (vid) {
+                          const onSeeked = () => { vid.play(); vid.removeEventListener('seeked', onSeeked); };
+                          vid.addEventListener('seeked', onSeeked);
+                        }
+                      }}
+                      title="Jump back to the start of this scene and play"
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold rounded-lg border bg-white border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer transition-colors"
+                    >
+                      <RefreshCw className="h-3 w-3" /> Replay Scene
+                    </button>
+                  )}
                   {/* Approve interactive placement */}
                   {(interactiveMask || interactiveQuad) && selectedCampaignId && (
                     <button
@@ -502,9 +618,31 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                         setInteractivePlacing(true);
                         try {
                           const assetType = interactionMode === 'signage' ? 'Planar' : 'Generative';
+
+                          // Persist the click/quad as a real SurfaceItem first — the render
+                          // dispatch below requires a surfaceId that already exists in the DB.
+                          let surfaceId: string;
+                          if (assetType === 'Planar' && interactiveQuad) {
+                            const created = await createSurfaceFromQuad({
+                              contentId: selectedVideo,
+                              frameIndex: currentVideoFrame,
+                              quadCornersJson: JSON.stringify(interactiveQuad),
+                            });
+                            surfaceId = created.surfaceId;
+                          } else if (interactiveMask) {
+                            const created = await createSurfaceFromClick({
+                              contentId: selectedVideo,
+                              frameIndex: currentVideoFrame,
+                              maskPolygonJson: JSON.stringify(interactiveMask.points),
+                            });
+                            surfaceId = created.surfaceId;
+                          } else {
+                            return;
+                          }
+
                           await confirmInteractivePlacement({
                             contentId: selectedVideo,
-                            surfaceId: '', // Will be created server-side
+                            surfaceId,
                             campaignId: selectedCampaignId,
                             assetId: interactiveAssetId,
                             assetType,
@@ -513,6 +651,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                           setInteractiveQuad(null);
                         } catch (err: any) {
                           console.error('Interactive placement failed:', err);
+                          setActionError(err.message || 'Failed to submit placement.');
                         } finally {
                           setInteractivePlacing(false);
                         }
@@ -599,12 +738,8 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                         {compositingPreview ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating Preview...</> : <>🎬 Preview Composite</>}
                       </button>
                     )}
-                    <button onClick={() => setPreviewMode(!previewMode)}
-                      className="px-2.5 py-1 text-[10px] font-bold rounded-lg border bg-white hover:bg-slate-50 cursor-pointer transition-colors">
-                      {previewMode ? 'Hide Overlay' : '👁 Show Overlay'}
-                    </button>
                     {currentScene.qaStatus !== 'Approved' && handleSceneApprove && (
-                      <button onClick={() => handleSceneApprove(currentScene.id)}
+                      <button onClick={() => runAction(() => handleSceneApprove(currentScene.id), 'Scene approved successfully! You can now submit for rendering.')}
                         className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer transition-colors">
                         ✓ Approve Scene
                       </button>
@@ -638,14 +773,6 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     controls
                     preload="metadata"
                     id="qa_video_player"
-                    onLoadedMetadata={() => {
-                      const v = videoRef.current;
-                      console.log('[video] loadedmetadata:', { duration: v?.duration, videoWidth: v?.videoWidth, videoHeight: v?.videoHeight, readyState: v?.readyState });
-                    }}
-                    onSeeked={() => {
-                      const v = videoRef.current;
-                      console.log('[video] seeked: currentTime=', v?.currentTime, 'frame=', Math.round((v?.currentTime || 0) * (activeVideo?.frameRate || 30)));
-                    }}
                   />
                 ) : (
                   <div className="absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 flex items-center justify-center">
@@ -664,6 +791,8 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     currentFrame={currentVideoFrame}
                     frameRate={activeVideo.frameRate || 30}
                     mode={interactionMode}
+                    active={placementOverlayActive}
+                    shots={shotsForScene}
                     assetUrl={
                       interactiveAssetId
                         ? assetList.find(a => a.id === interactiveAssetId)?.storageKey
@@ -722,31 +851,6 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                       <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="0.5" />
                     </pattern>
                   </defs>
-                  {/* Debug: always-visible surface count badge */}
-                  <g className="pointer-events-none">
-                    <rect x="10" y="10" width="230" height="24" rx="6" fill="rgba(0,0,0,0.7)" stroke="rgba(255,255,255,0.3)" strokeWidth="1" />
-                    <text x="22" y="27" fill={surfacesForScene.length > 0 ? "#4ade80" : "#f87171"} fontSize="11" fontWeight="bold" fontFamily="monospace">
-                      {surfacesForScene.length > 0 ? `✓ ${surfacesForScene.length} surfaces` : '✗ No surfaces loaded'}
-                    </text>
-                  </g>
-                  {/* Debug: bright frame border — proves SVG overlay is alive */}
-                  <rect x="2" y="2" width={videoWidth - 4} height={videoHeight - 4} fill="none" stroke="#fbbf24" strokeWidth="3" strokeOpacity="0.6" rx="8" />
-                  {/* Debug: dump first surface coordinates as text */}
-                  {surfacesForScene.length > 0 && (() => {
-                    const first = visibleSurfaces[0] || surfacesForScene[0];
-                    const coords = first.boundaryCoordinates.slice(0, 4).map(p => `${p.x},${p.y}`).join(' → ');
-                    return (
-                      <g className="pointer-events-none">
-                        <rect x="10" y="40" width={videoWidth - 20} height="20" rx="4" fill="rgba(0,0,0,0.6)" />
-                        <text x="20" y="54" fill="#fbbf24" fontSize="9" fontWeight="bold" fontFamily="monospace">
-                          [{first.surfaceType}] coords: [{coords}] conf:{Math.round(first.confidenceScore * 100)}% | showing {visibleSurfaces.length}/{surfacesForScene.length}
-                        </text>
-                      </g>
-                    );
-                  })()}
-                  {/* Debug: crosshair at center to prove overlay position */}
-                  <line x1={videoWidth/2 - 30} y1={videoHeight/2} x2={videoWidth/2 + 30} y2={videoHeight/2} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-                  <line x1={videoWidth/2} y1={videoHeight/2 - 30} x2={videoWidth/2} y2={videoHeight/2 + 30} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
                   {visibleSurfaces.map(sf => {
                     const isSelected = selectedSurfaceId === sf.id;
                     const isExcluded = sf.status === "Excluded";
@@ -761,6 +865,16 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     const fillColor = isExcluded ? "#ef4444" : placedAsset ? "#10b981" : isApproved ? "#14b8a6" : "#3b82f6";
                     // Validate we have actual coordinates before rendering
                     if (!sf.boundaryCoordinates || sf.boundaryCoordinates.length < 3) return null;
+
+                    // Moving tracking pin — the most recent tracked centroid at or before the
+                    // current playback frame. Only present once a render has actually run for
+                    // this surface (tracking happens during rendering, not detection).
+                    let trackingPoint: { frame: number; x: number; y: number } | null = null;
+                    for (const p of sf.trackingPoints) {
+                      if (p.frame <= currentVideoFrame && (!trackingPoint || p.frame > trackingPoint.frame)) {
+                        trackingPoint = p;
+                      }
+                    }
 
                     return (
                       <g key={sf.id} className="cursor-pointer pointer-events-auto" onClick={() => seekToSurface(sf.id)} id={`svg_surface_${sf.id}`}>
@@ -833,6 +947,18 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                         <text x={sf.boundaryCoordinates[0].x} y={sf.boundaryCoordinates[0].y - 8} fill="white" fontSize="10" fontWeight="bold" className="font-mono">
                           {sf.surfaceType.slice(0, 20)} ({Math.round(sf.confidenceScore * 100)}%)
                         </text>
+                        {/* Moving tracking pin — follows the surface frame-by-frame during playback */}
+                        {trackingPoint && (
+                          <circle
+                            cx={trackingPoint.x}
+                            cy={trackingPoint.y}
+                            r="7"
+                            fill="#ef4444"
+                            stroke="white"
+                            strokeWidth="2"
+                            className="pointer-events-none"
+                          />
+                        )}
                       </g>
                     );
                   })}
@@ -854,6 +980,17 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider font-display">
                       🎯 Detected Surfaces ({surfacesForScene.length})
                     </h4>
+                    <div className="flex items-center gap-2">
+                    {onDeleteAllSurfaces && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteAllSurfacesConfirmOpen(true)}
+                        className="px-2 py-1.5 rounded-lg text-[10px] font-mono font-bold text-slate-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors border border-transparent hover:border-red-200"
+                        title="Delete all surfaces in this scene"
+                      >
+                        Delete All Surfaces
+                      </button>
+                    )}
                     {onDetectSurfacesForScene && activeVideo && selectedSceneId && (() => {
                       const currentScene = scenesForVideo.find(s => s.id === selectedSceneId);
                       const isDetecting = currentScene?.surfaceStatus === 'Detecting';
@@ -863,7 +1000,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                         if (approvedCount > 0) {
                           setRedetectConfirmOpen(true);
                         } else {
-                          onDetectSurfacesForScene(selectedSceneId, selectedVideo);
+                          runAction(() => onDetectSurfacesForScene(selectedSceneId, selectedVideo));
                         }
                       };
 
@@ -883,6 +1020,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                         </button>
                       );
                     })()}
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     {surfacesForScene.map(sf => {
@@ -892,11 +1030,24 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                         sf.status === 'Excluded' ? 'border-red-300 bg-red-50' :
                         'border-blue-300 bg-blue-50';
                       return (
-                        <button
+                        <div
                           key={sf.id}
+                          role="button"
+                          tabIndex={0}
                           onClick={() => seekToSurface(sf.id)}
-                          className={`text-left p-3 rounded-lg border cursor-pointer transition-all ${statusColor} ${isSelected ? 'ring-2 ring-blue-500 shadow-md' : 'hover:shadow-sm'}`}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') seekToSurface(sf.id); }}
+                          className={`relative text-left p-3 rounded-lg border cursor-pointer transition-all ${statusColor} ${isSelected ? 'ring-2 ring-blue-500 shadow-md' : 'hover:shadow-sm'}`}
                         >
+                          {onDeleteSurface && (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setDeleteSurfaceConfirmId(sf.id); }}
+                              className="absolute top-1 right-1 p-1 rounded bg-white/70 text-slate-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors z-10"
+                              title="Delete this surface"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          )}
                           <div className="flex items-start gap-2.5">
                             {/* Surface thumbnail */}
                             {sf.placementImageUrl ? (
@@ -914,7 +1065,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                             )}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs font-bold text-slate-800 truncate">{sf.surfaceType}</span>
+                                <span className="text-xs font-bold text-slate-800 truncate" title={sf.surfaceType}>{sf.surfaceType}</span>
                                 <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
                                   sf.confidenceScore > 0.7 ? 'bg-emerald-100 text-emerald-700' :
                                   sf.confidenceScore > 0.4 ? 'bg-amber-100 text-amber-700' :
@@ -929,11 +1080,11 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                                 <span>{sf.estimatedDepth}m</span>
                               </div>
                               {sf.exclusionReason && (
-                                <div className="mt-1 text-[10px] text-red-500 italic truncate">{sf.exclusionReason}</div>
+                                <div className="mt-1 text-[10px] text-red-500 italic truncate" title={sf.exclusionReason}>{sf.exclusionReason}</div>
                               )}
                             </div>
                           </div>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -1018,7 +1169,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                               <>
                                 <button onClick={() => onRemoveAsset(sf.id)} className="text-[10px] text-red-500 hover:text-red-700 font-medium cursor-pointer">Remove</button>
                                 <button
-                                  onClick={() => { setSubmitConfirming(sf.id); onSubmitPlacement(sf.id, asset.id, selectedCampaignId || ''); setTimeout(() => setSubmitConfirming(''), 2000); }}
+                                  onClick={() => { setSubmitConfirming(sf.id); runAction(() => onSubmitPlacement(sf.id, asset.id, selectedCampaignId || '')); setTimeout(() => setSubmitConfirming(''), 2000); }}
                                   disabled={submitConfirming === sf.id}
                                   className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-300 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all"
                                 >
@@ -1057,6 +1208,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                                     onClick={async () => {
                                       setRetryingId(renderForSurface!.id);
                                       try { await onRetryRender(renderForSurface!.id); }
+                                      catch (err: any) { setActionError(err.message || 'Failed to retry render.'); }
                                       finally { setRetryingId(null); }
                                     }}
                                     disabled={retryingId === renderForSurface.id}
@@ -1083,23 +1235,54 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               </div>
             )}
 
-            {/* AI Placement Assistant — auto-places assets on surfaces from natural language */}
+            {/* AI Placement Assistant — auto-places assets on surfaces, or generates a brand-new placement via AI video edit */}
             <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center gap-2.5 border-b border-slate-100 pb-4 mb-4">
-                <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
-                  <Sparkles className="h-4 w-4" />
+              <div className="flex items-center justify-between gap-2.5 border-b border-slate-100 pb-4 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${assistantMode === 'match' ? 'bg-emerald-50 text-emerald-600' : 'bg-fuchsia-50 text-fuchsia-600'}`}>
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800 font-display flex items-center gap-1.5">
+                      AI Placement Assistant
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      {assistantMode === 'match'
+                        ? <>Describe which assets to place on which surfaces. <strong>Never modifies the original scene.</strong></>
+                        : <>Describe a brand-new placement — AI generates the video clip directly.</>}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-800 font-display flex items-center gap-1.5">
-                    AI Placement Assistant
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Describe which assets to place on which surfaces. <strong>Never modifies the original scene.</strong>
-                  </p>
+                <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setAssistantMode('match')}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all cursor-pointer whitespace-nowrap ${assistantMode === 'match' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    🔗 Match to Surface
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAssistantMode('generate')}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all cursor-pointer whitespace-nowrap ${assistantMode === 'generate' ? 'bg-white text-fuchsia-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    ✨ Generate New
+                  </button>
                 </div>
               </div>
 
-              {currentScene ? (
+              {assistantMode === 'generate' ? (
+                <PromptGeneratePanel
+                  currentScene={currentScene}
+                  campaignAssets={campaignAssets}
+                  contentId={selectedVideo || ''}
+                  campaignId={selectedCampaignId}
+                  activePromptRender={activePromptRender}
+                  onSubmit={async (dto) => { await onSubmitPromptPlacement?.(dto); }}
+                  onApprove={async (renderId) => { await onApprovePromptSplice?.(renderId); }}
+                  onReject={async (renderId) => { await onRejectPromptPlacement?.(renderId); }}
+                />
+              ) : currentScene ? (
                 <div className="space-y-4">
                   <div className="text-2xs font-mono bg-emerald-50/50 text-emerald-700 border border-emerald-100/50 p-2.5 rounded-lg">
                     <span>Scene #{currentScene.sceneIndex} · {surfacesForScene.length} surfaces · {campaignAssets.length} campaign assets available</span>
@@ -1233,11 +1416,11 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     <div className="p-3.5 bg-red-50 border border-red-200/60 rounded-xl text-red-700 text-xs"><Shield className="h-4 w-4 inline mr-1 text-red-600" /><strong>Security Blocklist:</strong> Face classification overrides cannot be bypassed.</div>
                   ) : (
                     <div className="space-y-3 pt-2">
-                      <button onClick={() => handleSurfaceDecision("Approved")} className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg cursor-pointer transition-all shadow-xs"><CheckCircle className="h-3.5 w-3.5" />Approve Surface</button>
+                      <button onClick={() => runAction(() => handleSurfaceDecision("Approved"), 'Surface approved successfully.')} className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg cursor-pointer transition-all shadow-xs"><CheckCircle className="h-3.5 w-3.5" />Approve Surface</button>
                       <div className="pt-3 border-t border-slate-100">
                         <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Exclusion Reason</label>
                         <input type="text" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="e.g., Low contrast lighting" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-800 focus:outline-none focus:border-red-500/50 mb-2" />
-                        <button onClick={() => handleSurfaceDecision("Rejected")} disabled={!rejectionReason} className="w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-semibold text-xs rounded-lg cursor-pointer transition-all disabled:opacity-40"><AlertTriangle className="h-3.5 w-3.5" />Exclude Surface</button>
+                        <button onClick={() => runAction(() => handleSurfaceDecision("Rejected"), 'Surface rejected successfully.')} disabled={!rejectionReason} className="w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-semibold text-xs rounded-lg cursor-pointer transition-all disabled:opacity-40"><AlertTriangle className="h-3.5 w-3.5" />Exclude Surface</button>
                       </div>
                     </div>
                   )}
@@ -1290,7 +1473,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                           if (!suggAsset) return null;
                           return (
                             <div key={sugg.assetId} className="flex items-center gap-2 bg-white rounded-lg p-2 border border-fuchsia-100">
-                              <div className="flex-1 min-w-0"><div className="text-[10px] font-bold text-slate-800">{suggAsset.name}</div><div className="text-[9px] text-slate-400 truncate">{sugg.reason}</div></div>
+                              <div className="flex-1 min-w-0"><div className="text-[10px] font-bold text-slate-800">{suggAsset.name}</div><div className="text-[9px] text-slate-400 truncate" title={sugg.reason}>{sugg.reason}</div></div>
                               <button onClick={() => onPlaceAsset(currentSurface.id, suggAsset.id)} className="text-[9px] bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold px-2 py-1 rounded cursor-pointer shrink-0">Place</button>
                             </div>
                           );
@@ -1318,7 +1501,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                                     <Image className="h-4 w-4 text-slate-400" />
                                   )}
                                 </div>
-                                <div className="flex-1 min-w-0"><div className="text-xs font-bold text-slate-800 truncate">{asset.name}</div><div className="text-[10px] text-slate-400 font-mono">{asset.type} · {asset.brandCategory}</div></div>
+                                <div className="flex-1 min-w-0"><div className="text-xs font-bold text-slate-800 truncate" title={asset.name}>{asset.name}</div><div className="text-[10px] text-slate-400 font-mono">{asset.type} · {asset.brandCategory}</div></div>
                                 <div className="text-[10px] text-slate-300 font-mono">{asset.dimensions}</div>
                               </button>
                             ))}
@@ -1338,7 +1521,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                       if (!currentRender) {
                         return currentScene.qaStatus === 'Approved' ? (
                           <button
-                            onClick={async () => { setSubmitConfirming(currentSurface.id); const ok = await onSubmitPlacement(currentSurface.id, asset.id, selectedCampaignId || ''); setTimeout(() => setSubmitConfirming(''), 2000); if (ok) onNavigateToRenders?.(); }}
+                            onClick={async () => { setSubmitConfirming(currentSurface.id); const ok = await runAction(() => onSubmitPlacement(currentSurface.id, asset.id, selectedCampaignId || '')); setTimeout(() => setSubmitConfirming(''), 2000); if (ok) onNavigateToRenders?.(); }}
                             disabled={submitConfirming === currentSurface.id}
                             className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-300 text-white font-bold text-xs rounded-lg cursor-pointer transition-all shadow-sm"
                           >
@@ -1387,6 +1570,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                                   onClick={async () => {
                                     setRetryingId(currentRender.id);
                                     try { await onRetryRender(currentRender.id); }
+                                    catch (err: any) { setActionError(err.message || 'Failed to retry render.'); }
                                     finally { setRetryingId(null); }
                                   }}
                                   disabled={retryingId === currentRender.id}
@@ -1459,12 +1643,126 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                   onClick={() => {
                     setRedetectConfirmOpen(false);
                     if (onDetectSurfacesForScene && activeVideo && selectedSceneId) {
-                      onDetectSurfacesForScene(selectedSceneId, selectedVideo);
+                      runAction(() => onDetectSurfacesForScene(selectedSceneId, selectedVideo));
                     }
                   }}
                   className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg cursor-pointer transition-colors shadow-sm"
                 >
                   Delete &amp; Re-detect
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ── Delete Surface Confirmation Modal ── */}
+        {deleteSurfaceConfirmId && (() => {
+          const targetSurface = surfacesForScene.find(sf => sf.id === deleteSurfaceConfirmId);
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full mx-4 p-6"
+              >
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="h-10 w-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                    <Trash2 className="h-5 w-5 text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-bold text-slate-800 font-display">Delete Surface "{targetSurface?.surfaceType}"?</h3>
+                    <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                      This permanently deletes this surface and all its ad slots and approvals. This cannot be undone.
+                    </p>
+                    {targetSurface?.status === 'Approved' && (
+                      <p className="text-xs text-red-600 mt-2 font-semibold">
+                        This surface is approved — reject or exclude it first.
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 justify-end">
+                  <button
+                    onClick={() => setDeleteSurfaceConfirmId(null)}
+                    className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={deletingSurfaceId === deleteSurfaceConfirmId}
+                    onClick={async () => {
+                      if (!onDeleteSurface) return;
+                      setDeletingSurfaceId(deleteSurfaceConfirmId);
+                      try {
+                        await onDeleteSurface(deleteSurfaceConfirmId);
+                        setDeleteSurfaceConfirmId(null);
+                      } catch (err: any) {
+                        setActionError(err.message || 'Failed to delete surface.');
+                      } finally {
+                        setDeletingSurfaceId(null);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 disabled:bg-red-300 rounded-lg cursor-pointer transition-colors shadow-sm"
+                  >
+                    {deletingSurfaceId === deleteSurfaceConfirmId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    Delete Surface
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+
+        {/* ── Delete All Surfaces Confirmation Modal ── */}
+        {deleteAllSurfacesConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full mx-4 p-6"
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="h-10 w-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                  <Trash2 className="h-5 w-5 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-bold text-slate-800 font-display">Delete All {surfacesForScene.length} Surfaces?</h3>
+                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                    This permanently deletes <strong>every surface</strong> in this scene, along with all their ad slots
+                    and approvals. This cannot be undone.
+                  </p>
+                  {surfacesForScene.some(sf => sf.status === 'Approved') && (
+                    <p className="text-xs text-red-600 mt-2 font-semibold">
+                      This scene has approved surfaces — reject or exclude them first.
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  onClick={() => setDeleteAllSurfacesConfirmOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={deletingAllSurfaces}
+                  onClick={async () => {
+                    if (!onDeleteAllSurfaces || !selectedSceneId) return;
+                    setDeletingAllSurfaces(true);
+                    try {
+                      await onDeleteAllSurfaces(selectedSceneId);
+                      setDeleteAllSurfacesConfirmOpen(false);
+                    } catch (err: any) {
+                      setActionError(err.message || 'Failed to delete all surfaces.');
+                    } finally {
+                      setDeletingAllSurfaces(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 disabled:bg-red-300 rounded-lg cursor-pointer transition-colors shadow-sm"
+                >
+                  {deletingAllSurfaces ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  Delete All Surfaces
                 </button>
               </div>
             </motion.div>

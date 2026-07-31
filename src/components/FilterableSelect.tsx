@@ -109,7 +109,7 @@ export const FilterableSelect: React.FC<FilterableSelectProps> = ({
             className="w-full bg-blue-50 border border-blue-200 rounded-lg pl-3 pr-16 py-1.5 text-xs text-blue-800 flex items-center cursor-pointer"
             onClick={() => { setIsOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}
           >
-            <span className="truncate">{value}</span>
+            <span className="truncate" title={value}>{value}</span>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); clearValue(); }}

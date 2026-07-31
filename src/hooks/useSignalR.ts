@@ -47,17 +47,9 @@ interface SignalRCallbacks {
 
 const HUB_URL = '/hubs/bit';
 
+// Matches apiClient.ts's TOKEN_KEY — the JWT is stored as a plain string, not JSON.
 function getAccessToken(): string | undefined {
-  try {
-    const raw = localStorage.getItem('token');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return parsed?.token || parsed;
-    }
-    return undefined;
-  } catch {
-    return localStorage.getItem('token') || undefined;
-  }
+  return localStorage.getItem('bit_token') || undefined;
 }
 
 /**

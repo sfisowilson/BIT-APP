@@ -132,7 +132,7 @@ export const RoleRequestsPanel: React.FC = () => {
                       'bg-emerald-50 text-emerald-700'
                     }`}>{r.requestedRole}</span>
                   </td>
-                  <td className="p-4 text-slate-500 max-w-[200px] truncate">{r.reason || '—'}</td>
+                  <td className="p-4 text-slate-500 max-w-[200px] truncate" title={r.reason || undefined}>{r.reason || '—'}</td>
                   <td className="p-4">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                       r.status === 'Approved' ? 'bg-emerald-50 text-emerald-700' :

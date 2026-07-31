@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Afrobotics.Bit.Api.Models;
 
 namespace Afrobotics.Bit.Api.Services;
 
@@ -106,6 +107,115 @@ public class VideoChunkingService
     }
 
     /// <summary>
+    /// Split a video into chunks that never straddle a shot boundary. Each shot becomes its
+    /// own chunk (or, if a single shot exceeds MaxChunkDuration, is itself sub-split using the
+    /// same overlap logic as <see cref="SplitIntoChunksAsync"/> — but only within that shot's
+    /// own span). Used so per-shot re-prompting/re-anchoring never has to deal with a chunk
+    /// that spans two different camera angles.
+    /// </summary>
+    /// <param name="videoPath">Absolute path to the source video (already scoped to the scene).</param>
+    /// <param name="outputDir">Directory to write chunk files to.</param>
+    /// <param name="fps">Video frame rate.</param>
+    /// <param name="shotBoundaries">Each shot's (startTimeSeconds, durationSeconds), scene-relative and in shot order.</param>
+    public async Task<List<VideoChunk>> SplitByShotBoundariesAsync(
+        string videoPath, string outputDir, double fps,
+        List<(double startTimeSeconds, double durationSeconds)> shotBoundaries)
+    {
+        var chunks = new List<VideoChunk>();
+        int index = 0;
+
+        foreach (var (shotStart, shotDuration) in shotBoundaries)
+        {
+            var shotEnd = shotStart + shotDuration;
+            var subStart = shotStart;
+
+            while (subStart < shotEnd)
+            {
+                var subDuration = Math.Min(MaxChunkDuration, shotEnd - subStart);
+                var chunkPath = Path.Combine(outputDir, $"chunk_{index}.mp4");
+
+                var args = $"-y -hide_banner -loglevel error " +
+                    $"-ss {subStart:F3} -i \"{videoPath.Replace("\\", "/")}\" " +
+                    $"-t {subDuration:F3} -c copy \"{chunkPath.Replace("\\", "/")}\"";
+                await RunFfmpegAsync(args);
+
+                chunks.Add(new VideoChunk
+                {
+                    Index = index,
+                    SourceChunkPath = chunkPath,
+                    StartTimeSeconds = subStart,
+                    DurationSeconds = subDuration,
+                });
+
+                // Sub-splits within an over-long shot get the same overlap as the time-based
+                // splitter (smooth splice blending); a shot that fits in one chunk needs none.
+                subStart += subDuration;
+                if (subStart < shotEnd) subStart -= OverlapDuration;
+                index++;
+            }
+        }
+
+        _logger.LogInformation("[Chunking] Split {ShotCount} shots into {ChunkCount} chunks (shot-boundary-aware)",
+            shotBoundaries.Count, chunks.Count);
+        return chunks;
+    }
+
+    /// <summary>
+    /// Extract a single scene's frame range from its source video as a standalone MP4 clip.
+    /// Shared by ScenesController's /scenes/{id}/clip export endpoint and the prompt-based
+    /// placement pipeline (which sends this clip's URL to Kling O1). Throws
+    /// <see cref="InvalidOperationException"/> on any resolution/extraction failure — callers
+    /// translate that into the appropriate HTTP response or render-failure message.
+    /// </summary>
+    /// <param name="maxDimension">If set and the source exceeds it on either axis, the clip is
+    /// downscaled (never upscaled) to fit, preserving aspect ratio — e.g. Kling O1's hard
+    /// 2160px cap, which the plain clip-preview download endpoint has no need for and so leaves
+    /// unset.</param>
+    public async Task<string> ExtractSceneClipAsync(SceneItem scene, ContentItem content, string outputPath, CancellationToken ct = default, int? maxDimension = null)
+    {
+        var storageKey = content.StorageKey;
+        if (string.IsNullOrEmpty(storageKey) || !storageKey.StartsWith("/api/content/file/"))
+            throw new InvalidOperationException("Scene clip export requires a locally uploaded video file.");
+
+        var fileName = storageKey.Replace("/api/content/file/", "");
+        var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
+        var sourcePath = Path.Combine(uploadsDir, fileName);
+        var fullSourcePath = Path.GetFullPath(sourcePath);
+
+        // Directory traversal guard
+        if (!fullSourcePath.StartsWith(Path.GetFullPath(uploadsDir)))
+            throw new InvalidOperationException("Invalid file path.");
+
+        if (!File.Exists(fullSourcePath))
+            throw new InvalidOperationException("Source video file not found.");
+
+        var fps = content.FrameRate > 0 && content.FrameRate <= 240 ? content.FrameRate : 50;
+        var startTime = (double)scene.StartFrame / fps;
+        var duration = (double)(scene.EndFrame - scene.StartFrame) / fps;
+
+        var outputDir = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrEmpty(outputDir)) Directory.CreateDirectory(outputDir);
+
+        var scaleArg = "";
+        if (maxDimension.HasValue && content.Width > 0 && content.Height > 0 &&
+            (content.Width > maxDimension.Value || content.Height > maxDimension.Value))
+        {
+            var ratio = Math.Min((double)maxDimension.Value / content.Width, (double)maxDimension.Value / content.Height);
+            var targetWidth = Math.Max(2, (int)(content.Width * ratio / 2) * 2);
+            var targetHeight = Math.Max(2, (int)(content.Height * ratio / 2) * 2);
+            scaleArg = $"-vf \"scale={targetWidth}:{targetHeight}\" ";
+        }
+
+        var args = $"-hide_banner -loglevel error -ss {startTime:F3} -i \"{fullSourcePath}\" " +
+                   $"-t {duration:F3} {scaleArg}-c:v libx264 -preset fast -crf 23 " +
+                   $"-c:a aac -b:a 128k -pix_fmt yuv420p -movflags +faststart " +
+                   $"\"{outputPath}\" -y";
+
+        await RunFfmpegAsync(args);
+        return outputPath;
+    }
+
+    /// <summary>
     /// Splice processed chunks back into a single video using ffmpeg concat.
     /// Handles failed chunks by filling gaps with original video frames.
     /// </summary>
@@ -153,7 +263,7 @@ public class VideoChunkingService
         await RunFfmpegAsync(concatArgs);
 
         // Cleanup
-        try { File.Delete(concatListPath); } catch { }
+        try { File.Delete(concatListPath); } catch (Exception ex) { _logger.LogWarning(ex, "[VideoChunking] Failed to delete concat temp file"); }
 
         _logger.LogInformation("[Chunking] Spliced {Count} chunks → {Output}", chunks.Count, outputPath);
         return outputPath;

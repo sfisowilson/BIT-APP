@@ -200,7 +200,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({ onJobChanged }) => {
                         </span>
                       )}
                     </div>
-                    <h3 className="font-semibold text-slate-800 truncate">{job.videoTitle}</h3>
+                    <h3 className="font-semibold text-slate-800 truncate" title={job.videoTitle}>{job.videoTitle}</h3>
                     <p className="text-xs text-slate-400 font-mono mt-0.5">{job.contentId}</p>
 
                     {/* Progress bar */}

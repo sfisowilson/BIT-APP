@@ -5,38 +5,12 @@ using System.Threading.Tasks;
 namespace Afrobotics.Bit.Api.Services;
 
 /// <summary>
-/// Tracks a surface boundary through every frame of its scene.
-///
-/// Takes an operator-adjusted seed boundary and propagates it through
-/// frames 1..N using SAM 3 video mode, returning per-frame polygon data
-/// with drift confidence estimates.
-///
-/// Activated by the engine_tracking platform setting.
+/// Segments and tracks a surface within a video via SAM3: single-frame click preview and
+/// per-shot video-rle segmentation (the foundation for ShotAwareTrackingService's cross-cut
+/// tracking). Activated by the engine_tracking platform setting.
 /// </summary>
 public interface ISurfaceTrackingService
 {
-    /// <summary>
-    /// Track a surface boundary across a frame range.
-    /// </summary>
-    /// <param name="surfaceId">The surface being tracked.</param>
-    /// <param name="videoPath">Absolute path to the source video file.</param>
-    /// <param name="startFrame">First frame to track (typically scene start).</param>
-    /// <param name="endFrame">Last frame to track (typically scene end).</param>
-    /// <param name="seedBoundaryJson">Operator-adjusted boundary polygon as JSON [{x,y},...].</param>
-    /// <param name="promptFrame">Frame number where the seed boundary was detected (used as SAM3 prompt frame).</param>
-    /// <param name="sam3Prompt">Gemini-generated visual description for SAM3 segmentation. Null if unavailable.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Per-frame boundary data. Empty list if tracking fails or is unsupported.</returns>
-    Task<List<FrameBoundary>> TrackAsync(
-        string surfaceId,
-        string videoPath,
-        int startFrame,
-        int endFrame,
-        string seedBoundaryJson,
-        int promptFrame = -1,
-        string? sam3Prompt = null,
-        CancellationToken cancellationToken = default);
-
     /// <summary>
     /// Preview segment a clicked point on a single video frame using SAM3 video-rle.
     /// Returns the decoded polygon for UI overlay. Null if unsupported or no mask found.
@@ -48,6 +22,46 @@ public interface ISurfaceTrackingService
         int x,
         int y,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Segment a frame range via fal-ai/sam-3/video-rle, seeded by a point (single-frame preview
+    /// click), a box (continuous tracking from a known pixel location — used within the shot
+    /// containing the seed click/quad), or a text prompt (re-anchoring after a hard cut, where the
+    /// previous pixel location is meaningless in the new camera angle but the surface's semantic
+    /// description still identifies it). Returns per-frame RLE masks keyed by a stable track_id.
+    /// Empty list if nothing clears <paramref name="detectionThreshold"/> in this frame range.
+    /// </summary>
+    Task<List<RleFrameResult>> SegmentVideoRleAsync(
+        string videoPath,
+        int startFrame,
+        int endFrame,
+        (int xMin, int yMin, int xMax, int yMax)? seedBox = null,
+        (int x, int y)? seedPoint = null,
+        string? textPrompt = null,
+        int promptFrame = -1,
+        double detectionThreshold = 0.5,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>Per-frame RLE mask data returned by SAM3 video-rle segmentation.</summary>
+public class RleFrameResult
+{
+    /// <summary>0-based absolute frame index in the source video.</summary>
+    public int FrameIndex { get; set; }
+
+    public List<RleObjectResult> Objects { get; set; } = new();
+}
+
+/// <summary>A single tracked object's mask within one frame.</summary>
+public class RleObjectResult
+{
+    /// <summary>Stable track id — the same object keeps the same id across frames within one call.</summary>
+    public int TrackId { get; set; }
+
+    /// <summary>Kaggle/COCO-order run-length-encoded mask.</summary>
+    public string Rle { get; set; } = string.Empty;
+
+    public double Confidence { get; set; }
 }
 
 /// <summary>
@@ -72,22 +86,4 @@ public class SegmentPreviewResult
 
     /// <summary>Bounding box of the mask.</summary>
     public (int xMin, int yMin, int xMax, int yMax) Bounds { get; set; }
-}
-
-/// <summary>
-/// Boundary data for a single frame within a tracked surface.
-/// </summary>
-public class FrameBoundary
-{
-    /// <summary>Absolute frame number.</summary>
-    public int Frame { get; set; }
-
-    /// <summary>Boundary polygon as JSON [{x,y}, ...].</summary>
-    public string BoundaryCoordinatesJson { get; set; } = "[]";
-
-    /// <summary>
-    /// Confidence that the boundary hasn't drifted from the seed (0.0–1.0).
-    /// Low values indicate the tracker lost the surface or it left the frame.
-    /// </summary>
-    public double DriftConfidence { get; set; }
 }

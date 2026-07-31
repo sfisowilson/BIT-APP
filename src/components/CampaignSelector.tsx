@@ -110,7 +110,7 @@ export const CampaignSelector: React.FC<CampaignSelectorProps> = ({
               selected.status === 'Draft' ? 'bg-blue-500' :
               selected.status === 'Completed' ? 'bg-slate-400' : 'bg-amber-500'
             }`} />
-            <span className="flex-1 text-left truncate">{selected.name}</span>
+            <span className="flex-1 text-left truncate" title={selected.name}>{selected.name}</span>
             <span className="text-[10px] text-slate-400 font-mono font-normal">
               {assetCounts[selected.id] || 0} assets
             </span>
@@ -165,7 +165,7 @@ export const CampaignSelector: React.FC<CampaignSelectorProps> = ({
                         c.status === 'Draft' ? 'bg-blue-500' : 'bg-slate-400'
                       }`} />
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs font-bold text-slate-800 truncate">{c.name}</div>
+                        <div className="text-xs font-bold text-slate-800 truncate" title={c.name}>{c.name}</div>
                         <div className="text-[10px] text-slate-400 font-mono">{c.namingStructureCode}</div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">

@@ -214,7 +214,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                 </div>
                 <div className="bg-slate-50 rounded-lg p-2">
                   <p className="text-[10px] text-slate-500">Region</p>
-                  <p className="text-xs font-bold text-slate-800 truncate">{selectedCampaign.targetRegion}</p>
+                  <p className="text-xs font-bold text-slate-800 truncate" title={selectedCampaign.targetRegion}>{selectedCampaign.targetRegion}</p>
                 </div>
                 <div className="bg-slate-50 rounded-lg p-2">
                   <p className="text-[10px] text-slate-500">Assets</p>
@@ -275,7 +275,9 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                           <div className="flex items-center gap-3 min-w-0 flex-1">
                             {/* Thumbnail — clickable to view full */}
                             <div
-                              className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200 cursor-pointer hover:border-blue-400 hover:shadow-sm transition-all"
+                              className={`h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200 transition-all ${
+                                as.thumbnailUrl ? 'cursor-pointer hover:border-blue-400 hover:shadow-sm' : ''
+                              }`}
                               onClick={() => as.thumbnailUrl && setPreviewAsset(as)}
                               title={as.thumbnailUrl ? 'Click to view full image' : 'No preview available'}
                             >
@@ -286,7 +288,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-2xs font-bold text-slate-800 truncate">{as.name}</p>
+                              <p className="text-2xs font-bold text-slate-800 truncate" title={as.name}>{as.name}</p>
                               <div className="flex items-center gap-2 mt-1">
                                 <span className="text-[8px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-mono">{as.type}</span>
                                 <span className="text-[8px] text-slate-400 font-mono">{as.brandCategory}</span>
@@ -402,7 +404,9 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           {/* Thumbnail — clickable to view full */}
                           <div
-                            className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-amber-200 cursor-pointer hover:border-blue-400 hover:shadow-sm transition-all"
+                            className={`h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-amber-200 transition-all ${
+                              as.thumbnailUrl ? 'cursor-pointer hover:border-blue-400 hover:shadow-sm' : ''
+                            }`}
                             onClick={() => as.thumbnailUrl && setPreviewAsset(as)}
                             title={as.thumbnailUrl ? 'Click to view full image' : 'No preview available'}
                           >
@@ -413,7 +417,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="text-2xs font-bold text-slate-800 truncate">{as.name}</p>
+                            <p className="text-2xs font-bold text-slate-800 truncate" title={as.name}>{as.name}</p>
                             <div className="flex items-center gap-2 mt-1">
                               <span className="text-[8px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-600 font-mono">{as.type}</span>
                               <span className="text-[8px] text-slate-400 font-mono">{as.brandCategory}</span>
@@ -542,7 +546,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
               <div className="min-w-0">
-                <h3 className="text-sm font-bold text-slate-800 truncate">{previewAsset.name}</h3>
+                <h3 className="text-sm font-bold text-slate-800 truncate" title={previewAsset.name}>{previewAsset.name}</h3>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-mono">{previewAsset.type}</span>
                   <span className="text-[10px] text-slate-400 font-mono">{previewAsset.brandCategory}</span>

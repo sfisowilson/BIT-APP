@@ -363,7 +363,11 @@ public class ReplicateSurfaceDetectionService : ISurfaceDetectionService
             var proxyPath = Path.Combine(uploadsDir, "proxies", fileName);
             return File.Exists(proxyPath) ? proxyPath : null;
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Replicate] Failed to resolve video path for {ContentId}", contentId);
+            return null;
+        }
     }
 
     private async Task<string?> ExtractKeyFrameAsync(string videoPath, int frameNumber, CancellationToken ct)
@@ -388,7 +392,11 @@ public class ReplicateSurfaceDetectionService : ISurfaceDetectionService
             var bytes = await File.ReadAllBytesAsync(tempFile, ct);
             return Convert.ToBase64String(bytes);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Replicate] Failed to extract keyframe at frame {Frame}", frameNumber);
+            return null;
+        }
         finally { try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { } }
     }
 }

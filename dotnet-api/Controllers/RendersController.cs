@@ -34,27 +34,6 @@ namespace Afrobotics.Bit.Api.Controllers
             return Ok(renders);
         }
 
-        [HttpPost]
-        public async Task<IActionResult> DispatchRender([FromBody] CreateRenderDto dto)
-        {
-            try
-            {
-                var render = await _renderService.DispatchRenderAsync(dto);
-                return Accepted(render);
-            }
-            catch (ArgumentException ex)
-            {
-                await _eventLog.LogEventAsync("Render", "RENDER_DISPATCH_INVALID", "Warning", ex.Message);
-                return BadRequest(new { error = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                await _eventLog.LogEventAsync("Render", "RENDER_DISPATCH_ERROR", "Error",
-                    $"{ex.GetType().Name} — {ex.Message}");
-                return StatusCode(500, new { error = ex.Message });
-            }
-        }
-
         /// <summary>
         /// Dispatch an interactive placement render — routes to generative (pikaswaps) or planar (warp) path.
         /// </summary>
@@ -74,6 +53,84 @@ namespace Afrobotics.Bit.Api.Controllers
             catch (Exception ex)
             {
                 await _eventLog.LogEventAsync("Render", "INTERACTIVE_DISPATCH_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Dispatch a prompt-based AI placement preview — the "AI Placement Assistant → Generate
+        /// New" flow. No pre-existing surface required; generates a preview clip the user must
+        /// separately approve (see approve-splice) before it's committed into the final video.
+        /// </summary>
+        [HttpPost("prompt-preview")]
+        public async Task<IActionResult> DispatchPromptPreview([FromBody] CreatePromptRenderDto dto)
+        {
+            try
+            {
+                var render = await _renderService.DispatchPromptPreviewRenderAsync(dto);
+                return Accepted(render);
+            }
+            catch (ArgumentException ex)
+            {
+                await _eventLog.LogEventAsync("Render", "PROMPT_PREVIEW_DISPATCH_INVALID", "Warning", ex.Message);
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Render", "PROMPT_PREVIEW_DISPATCH_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>Approve a PreviewReady prompt-placement render — splices it into the full source video.</summary>
+        [HttpPost("{id}/approve-splice")]
+        public async Task<IActionResult> ApproveSplice(string id)
+        {
+            try
+            {
+                var render = await _renderService.ApproveSpliceAsync(id);
+                return Ok(render);
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                await _eventLog.LogEventAsync("Render", "PROMPT_SPLICE_APPROVE_INVALID", "Warning", ex.Message);
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Render", "PROMPT_SPLICE_APPROVE_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>Reject a PreviewReady prompt-placement render — no splice, no final video produced.</summary>
+        [HttpPost("{id}/reject-prompt")]
+        public async Task<IActionResult> RejectPrompt(string id, [FromBody] RejectPromptRenderDto? dto)
+        {
+            try
+            {
+                await _renderService.RejectPromptRenderAsync(id, dto?.Reason);
+                return Ok(new { success = true });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                await _eventLog.LogEventAsync("Render", "PROMPT_REJECT_INVALID", "Warning", ex.Message);
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Render", "PROMPT_REJECT_ERROR", "Error",
                     $"{ex.GetType().Name} — {ex.Message}");
                 return StatusCode(500, new { error = ex.Message });
             }
@@ -150,6 +207,27 @@ namespace Afrobotics.Bit.Api.Controllers
 
             var stream = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read);
             return File(stream, "video/mp4", $"BIT_Export_{id}.mp4", enableRangeProcessing: true);
+        }
+
+        /// <summary>Serves the not-yet-approved Kling preview clip for the video preview player.</summary>
+        [HttpGet("{id}/preview")]
+        [AllowAnonymous] // Allow direct video player stream, matching /download
+        public async Task<IActionResult> DownloadPreview(string id)
+        {
+            var render = await _context.Renders.FindAsync(id);
+            if (render == null)
+            {
+                return NotFound(new { error = $"Render '{id}' not found." });
+            }
+
+            var localPath = Path.Combine(Directory.GetCurrentDirectory(), "renders", $"BIT_Preview_{id}.mp4");
+            if (!System.IO.File.Exists(localPath))
+            {
+                return NotFound(new { error = "Preview file not found on disk." });
+            }
+
+            var stream = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return File(stream, "video/mp4", $"BIT_Preview_{id}.mp4", enableRangeProcessing: true);
         }
     }
 }

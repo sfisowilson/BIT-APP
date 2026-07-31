@@ -1,0 +1,80 @@
+Feature: Shot-Aware Cross-Cut Consistency for Interactive Placement
+  As an editor placing a brand asset in a scene that contains multiple camera cuts
+  I want the placement to track and composite correctly in every shot of that scene
+  So that the brand asset appears consistently throughout the scene, not just in one camera angle
+
+  Background:
+    Given a content item has been processed by ShotDetectionPipeline and ShotClusteringService
+    And a SceneItem exists that spans 3 shots, clustered by SAM3 keyframe embedding similarity
+    And SAM3 video-rle (fal-ai/sam-3/video-rle) is configured as the tracking engine
+    And a SurfaceItem exists with a seed click/quad placed in the scene's first shot
+
+  # ── Surface creation (prerequisite fix) ──
+
+  Scenario: Approving an interactive placement creates a real surface before dispatching a render
+    Given I click a product in "Insert Product" mode and receive a SAM3 mask preview
+    And I select a brand asset and click "Approve & Render"
+    When the editor calls POST /api/surfaces/from-click before POST /api/renders/interactive
+    Then a SurfaceItem is persisted with Source="Manual", Status="Approved", and the correct SceneId
+    And the render dispatch receives a real surfaceId that resolves successfully
+
+  # ── Shot-aware tracking ──
+
+  Scenario: The seed shot is tracked continuously via a box prompt
+    Given the surface's seed frame falls within shot 0 of the scene
+    When ShotAwareTrackingService tracks the surface
+    Then a single fal-ai/sam-3/video-rle call is made for shot 0's frame range with a box prompt
+    And the resulting per-frame masks are stored in TrackingDataJson under shotSegments[0]
+    And shotSegments[0].status is "Tracked"
+
+  Scenario: A subsequent shot re-anchors with a text prompt, not the previous shot's coordinates
+    Given shot 0 was tracked successfully and shot 1 begins after a hard cut
+    When ShotAwareTrackingService processes shot 1
+    Then a separate fal-ai/sam-3/video-rle call is made for shot 1's frame range using a text prompt
+    And the text prompt is a Gemini-generated visual description of the surface, not shot 0's pixel coordinates
+    And shotSegments[1].status is "Reanchored" if a match is found
+
+  Scenario: A shot where the surface cannot be re-detected is skipped, not failed
+    Given shot 2 does not contain a visible instance of the surface (occluded or off-screen)
+    When ShotAwareTrackingService's text-prompted re-anchor call for shot 2 returns no detection above threshold
+    Then shotSegments[2].status is "Skipped" and its frames array is empty
+    And the render job passes the source video through unmodified for shot 2's frame range
+    And the surface's overall TrackingStatus is "PartialCoverage"
+    And the completed render's status is "NeedsReview", not "Failed"
+
+  Scenario: The seed shot itself fails to track
+    Given the surface's seed shot has no detection above threshold
+    When ShotAwareTrackingService completes
+    Then the surface's overall TrackingStatus is "LockLost"
+    And the render job throws before compositing anything
+    And the render's status is "Failed"
+
+  # ── Planar path ──
+
+  Scenario: A tracked quad is fitted from the RLE mask via min-area-rect, not OpenCV
+    Given a tracked frame's RLE mask decodes to a polygon
+    When the Planar path processes that frame
+    Then MinAreaRectFitter.FitQuad computes a 4-corner quad via rotating calipers
+    And no OpenCV dependency is introduced (matches this codebase's ffmpeg-CLI convention)
+
+  Scenario: Planar render reassembles shots into one scene-length clip
+    Given shots 0 and 1 were tracked/re-anchored and shot 2 was skipped
+    When ProcessPlanarRenderJob composites each shot segment independently
+    Then shot 2's frame range is extracted directly from the source video with no compositing
+    And VideoChunkingService.SpliceChunksAsync concatenates all three shot outputs in ShotIndex order
+    And the final render plays back as one continuous scene-length clip
+
+  # ── Generative path ──
+
+  Scenario: Generative chunking never straddles a shot boundary
+    Given the scene's shots have durations of 2s, 6s, and 3s
+    When VideoChunkingService.SplitByShotBoundariesAsync splits the scene for pikaswaps
+    Then the 2s and 3s shots each become exactly one chunk
+    And the 6s shot (exceeding pikaswaps' 4.75s limit) is sub-split only within its own span
+    And no chunk boundary falls in the middle of a different shot
+
+  Scenario: Drift-check flags but does not fail a render with weak re-detection confidence
+    Given a shot's composited output is re-detected via SAM3 video-rle at its seed frame
+    When the re-detected bounding box has IoU < 0.85 against the pre-composite tracked mask
+    Then the render completes with status "NeedsReview", not "Failed"
+    And the drift IoU is logged for QA review

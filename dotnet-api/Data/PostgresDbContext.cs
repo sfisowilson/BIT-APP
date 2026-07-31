@@ -13,6 +13,7 @@ namespace Afrobotics.Bit.Api.Data
         public DbSet<User> Users { get; set; } = null!;
         public DbSet<ContentItem> ContentItems { get; set; } = null!;
         public DbSet<SceneItem> SceneItems { get; set; } = null!;
+        public DbSet<ShotItem> Shots { get; set; } = null!;
         public DbSet<SurfaceItem> SurfaceItems { get; set; } = null!;
         public DbSet<CampaignItem> Campaigns { get; set; } = null!;
         public DbSet<CreativeAsset> CreativeAssets { get; set; } = null!;
@@ -56,6 +57,20 @@ namespace Afrobotics.Bit.Api.Data
             // ── SceneItem indexes ──
             modelBuilder.Entity<SceneItem>()
                 .HasIndex(s => s.ContentId);
+
+            // ── ShotItem indexes ──
+            modelBuilder.Entity<ShotItem>()
+                .HasIndex(s => s.ContentId);
+            modelBuilder.Entity<ShotItem>()
+                .HasIndex(s => s.SceneId);
+            modelBuilder.Entity<ShotItem>()
+                .HasIndex(s => s.ShotIndex);
+            // ShotItem → SceneItem FK
+            modelBuilder.Entity<ShotItem>()
+                .HasOne<SceneItem>()
+                .WithMany()
+                .HasForeignKey(s => s.SceneId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             // ── SurfaceItem indexes ──
             modelBuilder.Entity<SurfaceItem>()
@@ -140,11 +155,21 @@ namespace Afrobotics.Bit.Api.Data
                 .HasForeignKey(r => r.ContentId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // SurfaceItem → RenderItem (additional FK — set to null on surface delete)
+            // SurfaceItem → RenderItem (optional FK — null for PromptEdit renders, set to null on surface delete)
             modelBuilder.Entity<RenderItem>()
                 .HasOne<SurfaceItem>()
                 .WithMany()
                 .HasForeignKey(r => r.SurfaceId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // SceneItem → RenderItem (optional FK — set for PromptEdit renders; no cascade, a render
+            // should remain queryable even if its target scene is later deleted)
+            modelBuilder.Entity<RenderItem>()
+                .HasOne<SceneItem>()
+                .WithMany()
+                .HasForeignKey(r => r.SceneId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.SetNull);
         }
     }

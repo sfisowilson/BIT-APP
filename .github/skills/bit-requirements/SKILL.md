@@ -136,7 +136,7 @@ To maintain platform stability, clean code, and zero hallucinations, all agents 
     *   API Endpoints ➔ `governance/contracts/api-contract.md`
     *   Database Schema ➔ `governance/contracts/db-schema.md`
     *   React Props ➔ `governance/contracts/component-contracts.md`
-*   **Rule 1 (No Mock Code):** Stubs, fakes, placeholders, or extensions to the legacy `server.ts` in-memory database are strictly prohibited. Code must be fully and natively implemented.
+*   **Rule 1 (No Mock Code):** Stubs, fakes, placeholders, or "basic"/no-op fallback engines are strictly prohibited. Code must be fully and natively implemented.
 *   **Rule 2 (Unit Testing):** No code changes can be committed without corresponding unit tests:
     *   Backend: xUnit in `dotnet-api.Tests/`
     *   Frontend: Vitest/React Testing Library

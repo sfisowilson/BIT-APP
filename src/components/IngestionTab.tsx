@@ -42,6 +42,10 @@ interface IngestionTabProps {
   onRedetectScenes?: (contentId: string, videoTitle: string) => Promise<void>;
   onResetPipeline?: (contentId: string) => Promise<void>;
   isPipelineActionPending?: string | null; // contentId of item being acted on
+  /** Live-only phase label per contentId (e.g. "Embedding keyframes (8/40)"), pushed via SignalR — not persisted, resets on reload. */
+  detectionPhaseLabel?: Record<string, string>;
+  onDeleteScene?: (sceneId: string) => Promise<void>;
+  onDeleteAllScenes?: (contentId: string) => Promise<void>;
 }
 
 /** Pipeline stage display order with icons and labels */
@@ -118,6 +122,9 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
   onRedetectScenes,
   onResetPipeline,
   isPipelineActionPending,
+  detectionPhaseLabel,
+  onDeleteScene,
+  onDeleteAllScenes,
 }) => {
   // ── Paginated content list ──
   const {
@@ -138,6 +145,10 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
   const [contentStatusFilter, setContentStatusFilter] = React.useState('');
   const [contentSearchFilter, setContentSearchFilter] = React.useState('');
   const [reDetectConfirmId, setReDetectConfirmId] = React.useState<string | null>(null);
+  const [deleteSceneConfirmId, setDeleteSceneConfirmId] = React.useState<string | null>(null);
+  const [deletingSceneId, setDeletingSceneId] = React.useState<string | null>(null);
+  const [deleteAllScenesConfirmVideoId, setDeleteAllScenesConfirmVideoId] = React.useState<string | null>(null);
+  const [deletingAllScenes, setDeletingAllScenes] = React.useState(false);
 
   React.useEffect(() => {
     setContentFilters({
@@ -181,12 +192,23 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
 
   const selectedCampaignName = campaignList?.find(c => c.id === selectedCampaignId)?.name;
 
+  // Shared inline feedback for this tab's action handlers — see the matching pattern/comment
+  // in EditorTab.tsx. Replaces the raw browser alert() these handlers used to trigger.
+  const [actionError, setActionError] = React.useState('');
+  const runAction = async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
+    setActionError('');
+    try {
+      return await fn();
+    } catch (err: any) {
+      setActionError(err.message || 'Action failed.');
+      return undefined;
+    }
+  };
+
   // MReq 1: Extract metadata from uploaded video file
-  const [metadataExtracted, setMetadataExtracted] = React.useState(false);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
 
   const extractVideoMetadata = (file: File) => {
-    setMetadataExtracted(false);
     const url = URL.createObjectURL(file);
     const video = document.createElement('video');
     videoRef.current = video;
@@ -210,11 +232,9 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
       }
       // FPS not available from browser API — defaults to 25; adjust manually for your source
       setNewVideoFps(25);
-      setMetadataExtracted(true);
       URL.revokeObjectURL(url);
     };
     video.onerror = () => {
-      setMetadataExtracted(false);
       URL.revokeObjectURL(url);
     };
     video.src = url;
@@ -225,8 +245,6 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
     if (newVideoFile) {
       setNewVideoTitle(newVideoFile.name.replace(/\.[^.]+$/, ''));
       extractVideoMetadata(newVideoFile);
-    } else {
-      setMetadataExtracted(false);
     }
   }, [newVideoFile]);
 
@@ -238,6 +256,13 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
       className="grid grid-cols-1 lg:grid-cols-3 gap-8"
       key="ingestion_tab"
     >
+      {actionError && (
+        <div className="lg:col-span-3 flex items-center justify-between gap-3 rounded-xl border bg-red-50 border-red-200 text-red-700 px-4 py-2.5 text-xs font-semibold">
+          <span>⚠️ {actionError}</span>
+          <button onClick={() => setActionError('')} className="shrink-0 text-current opacity-60 hover:opacity-100 cursor-pointer">✕</button>
+        </div>
+      )}
+
       {/* Informational guide */}
       <div className="lg:col-span-3 bg-blue-50 border border-blue-100 rounded-2xl p-5 text-xs text-blue-800 flex items-start gap-3 shadow-xs">
         <Video className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
@@ -617,6 +642,10 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
             {!contentLoading && contentData.map(video => {
               const isSelected = selectedVideo === video.id;
               const isComplete = video.ingestionStatus === 'Completed';
+              // Server-confirmed truth, unlike aiAnalyzingVideoId/isPipelineActionPending which
+              // reset on page reload — prevents re-triggering detection on a video that already
+              // has a job running (a race that produces DbUpdateConcurrencyException server-side).
+              const isDetecting = video.ingestionStatus === 'SceneDetecting';
               return (
                 <div 
                   key={video.id} 
@@ -695,7 +724,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-[9px] font-mono font-bold text-fuchsia-600 flex items-center gap-1">
                           <Sparkles className="h-3 w-3" />
-                          Detecting scenes...
+                          {detectionPhaseLabel?.[video.id] ?? 'Detecting scenes...'}
                         </span>
                         <span className="text-[9px] font-mono font-bold text-fuchsia-600">
                           {detectionProgressMap[video.id] ?? video.detectionProgress}%
@@ -715,18 +744,19 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                     {!isComplete && handleAiSplitAnalyze && (
                       <button
                         type="button"
-                        disabled={aiAnalyzingVideoId !== null || isPipelineActionPending !== null}
+                        disabled={isDetecting || aiAnalyzingVideoId !== null || isPipelineActionPending !== null}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleAiSplitAnalyze(video.id, video.title);
+                          runAction(() => handleAiSplitAnalyze(video.id, video.title));
                         }}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase transition-all border cursor-pointer ${
-                          aiAnalyzingVideoId === video.id
+                          isDetecting || aiAnalyzingVideoId === video.id
                             ? 'bg-fuchsia-50 border-fuchsia-200 text-fuchsia-600'
                             : 'bg-fuchsia-600 hover:bg-fuchsia-500 border-fuchsia-700 text-white shadow-xs'
                         }`}
+                        title={isDetecting ? 'Scene detection is already running for this video' : undefined}
                       >
-                        {aiAnalyzingVideoId === video.id ? (
+                        {isDetecting || aiAnalyzingVideoId === video.id ? (
                           <><Loader2 className="h-3 w-3 animate-spin" /> Detecting scenes...</>
                         ) : (
                           <><Sparkles className="h-3 w-3" /> Run Scene Detection</>
@@ -746,7 +776,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                           }
                           // Second click — confirmed
                           setReDetectConfirmId(null);
-                          await onRedetectScenes(video.id, video.title);
+                          await runAction(() => onRedetectScenes(video.id, video.title));
                         }}
                         onBlur={() => setReDetectConfirmId(null)}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase transition-all border cursor-pointer ${
@@ -780,7 +810,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                         disabled={isPipelineActionPending !== null}
                         onClick={async (e) => {
                           e.stopPropagation();
-                          await onResetPipeline(video.id);
+                          await runAction(() => onResetPipeline(video.id));
                         }}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase transition-all border cursor-pointer ${
                           isPipelineActionPending === video.id
@@ -811,10 +841,22 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                   {/* Scene cuts list shown for selected video */}
                   {isSelected && (
                     <div className="mt-4 pt-4 border-t border-slate-200/80">
-                      <div className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400 mb-2 font-mono flex items-center gap-2">
-                        <Film className="h-3 w-3" />
-                        Indexed Scene Cuts
-                        {scenesForVideo.length > 0 && <span className="text-blue-500">({scenesForVideo.length})</span>}
+                      <div className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400 mb-2 font-mono flex items-center gap-2 justify-between">
+                        <div className="flex items-center gap-2">
+                          <Film className="h-3 w-3" />
+                          Indexed Scene Cuts
+                          {scenesForVideo.length > 0 && <span className="text-blue-500">({scenesForVideo.length})</span>}
+                        </div>
+                        {scenesForVideo.length > 0 && onDeleteAllScenes && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setDeleteAllScenesConfirmVideoId(video.id); }}
+                            className="normal-case font-sans px-2 py-1 rounded-lg text-[10px] font-bold text-slate-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors border border-transparent hover:border-red-200"
+                            title="Delete all scenes for this video"
+                          >
+                            Delete All Scenes
+                          </button>
+                        )}
                       </div>
                       {scenesForVideo.length === 0 ? (
                         <div className="text-2xs text-slate-400 italic bg-slate-50 rounded-lg p-3 border border-dashed border-slate-200">
@@ -826,12 +868,22 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                             <div
                               key={scene.id}
                               onClick={() => { setSelectedSceneId(scene.id); onNavigateToPlacements(); }}
-                              className={`bg-white border rounded-lg p-2.5 font-mono text-[10px] transition-all cursor-pointer ${
+                              className={`relative bg-white border rounded-lg p-2.5 font-mono text-[10px] transition-all cursor-pointer ${
                                 scene.id === selectedSceneId
                                   ? 'border-blue-400 bg-blue-50 shadow-sm ring-1 ring-blue-300'
                                   : 'border-slate-200/80 hover:border-blue-300 hover:bg-blue-50/30'
                               }`}
                             >
+                              {onDeleteScene && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setDeleteSceneConfirmId(scene.id); }}
+                                  className="absolute top-1.5 right-1.5 p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors"
+                                  title="Delete this scene"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              )}
                               <div className="text-slate-800 font-bold">Scene #{scene.sceneIndex}</div>
                               <div className="text-slate-400 mt-1">Frames: {scene.startFrame}–{scene.endFrame}</div>
                               <div className="text-slate-400">{scene.durationSeconds}s</div>
@@ -865,6 +917,113 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
           />
         </div>
       </div>
+
+      {/* ── Delete Scene Confirmation Modal ── */}
+      {deleteSceneConfirmId && (() => {
+        const targetScene = scenesForVideo.find(s => s.id === deleteSceneConfirmId);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full mx-4 p-6"
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="h-10 w-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                  <Trash2 className="h-5 w-5 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-bold text-slate-800 font-display">Delete Scene #{targetScene?.sceneIndex}?</h3>
+                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                    This permanently deletes this scene and all its surfaces, ad slots, and approvals. This cannot be undone.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  onClick={() => setDeleteSceneConfirmId(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={deletingSceneId === deleteSceneConfirmId}
+                  onClick={async () => {
+                    if (!onDeleteScene) return;
+                    setDeletingSceneId(deleteSceneConfirmId);
+                    try {
+                      await onDeleteScene(deleteSceneConfirmId);
+                      setDeleteSceneConfirmId(null);
+                    } catch (err: any) {
+                      setActionError(err.message || 'Failed to delete scene.');
+                    } finally {
+                      setDeletingSceneId(null);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 disabled:bg-red-300 rounded-lg cursor-pointer transition-colors shadow-sm"
+                >
+                  {deletingSceneId === deleteSceneConfirmId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  Delete Scene
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        );
+      })()}
+
+      {/* ── Delete All Scenes Confirmation Modal ── */}
+      {deleteAllScenesConfirmVideoId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full mx-4 p-6"
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <div className="h-10 w-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                <Trash2 className="h-5 w-5 text-red-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-slate-800 font-display">Delete All {scenesForVideo.length} Scenes?</h3>
+                <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                  This permanently deletes <strong>every scene</strong> for this video, along with all their surfaces,
+                  ad slots, and approvals. This cannot be undone.
+                </p>
+                <p className="text-xs text-slate-400 mt-2">
+                  Run scene detection again afterward to regenerate scenes from scratch.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                onClick={() => setDeleteAllScenesConfirmVideoId(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={deletingAllScenes}
+                onClick={async () => {
+                  if (!onDeleteAllScenes || !deleteAllScenesConfirmVideoId) return;
+                  setDeletingAllScenes(true);
+                  try {
+                    await onDeleteAllScenes(deleteAllScenesConfirmVideoId);
+                    setDeleteAllScenesConfirmVideoId(null);
+                  } catch (err: any) {
+                    setActionError(err.message || 'Failed to delete all scenes.');
+                  } finally {
+                    setDeletingAllScenes(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 disabled:bg-red-300 rounded-lg cursor-pointer transition-colors shadow-sm"
+              >
+                {deletingAllScenes ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                Delete All Scenes
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
   );
 };

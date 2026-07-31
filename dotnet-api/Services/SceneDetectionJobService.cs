@@ -22,15 +22,18 @@ public class SceneDetectionJobService
     private readonly IServiceProvider _serviceProvider;
     private readonly IHubContext<BitHub, IBitClient> _hubContext;
     private readonly ILogger<SceneDetectionJobService> _logger;
+    private readonly IEventLogService _eventLog;
 
     public SceneDetectionJobService(
         IServiceProvider serviceProvider,
         IHubContext<BitHub, IBitClient> hubContext,
-        ILogger<SceneDetectionJobService> logger)
+        ILogger<SceneDetectionJobService> logger,
+        IEventLogService eventLog)
     {
         _serviceProvider = serviceProvider;
         _hubContext = hubContext;
         _logger = logger;
+        _eventLog = eventLog;
     }
 
     [AutomaticRetry(Attempts = 1, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
@@ -45,11 +48,20 @@ public class SceneDetectionJobService
             contentId, 1, "Starting", null);
 
         using var scope = _serviceProvider.CreateScope();
-        var pipeline = scope.ServiceProvider.GetRequiredService<SurfaceDetectionPipeline>();
+        var shotPipeline = scope.ServiceProvider.GetRequiredService<ShotDetectionPipeline>();
+        var surfacePipeline = scope.ServiceProvider.GetRequiredService<SurfaceDetectionPipeline>();
 
         try
         {
-            await pipeline.RunAsync(contentId, cancellationToken);
+            // ── Phase 1: Shot detection → embedding → clustering (1% → 30%) ──
+            await _hubContext.Clients.All.DetectionProgress(
+                contentId, 2, "Detecting shots", null);
+            await shotPipeline.RunAsync(contentId, cancellationToken);
+
+            // ── Phase 2: Surface detection per scene (30% → 100%) ──
+            await _hubContext.Clients.All.DetectionProgress(
+                contentId, 30, "Detecting surfaces", null);
+            await surfacePipeline.RunAsync(contentId, cancellationToken);
 
             // Broadcast completion
             await _hubContext.Clients.All.DetectionProgress(
@@ -60,42 +72,8 @@ public class SceneDetectionJobService
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SceneDetectionJob] Full pipeline FAILED for {ContentId}", contentId);
-            await _hubContext.Clients.All.DetectionProgress(
-                contentId, 0, "Failed", null);
-            await _hubContext.Clients.All.ContentStatusChanged(
-                contentId, "Failed", videoTitle);
-            throw;
-        }
-    }
-
-    /// <summary>Scenes-only: FFmpeg scene detection + thumbnails. No surfaces. Cheap.</summary>
-    [AutomaticRetry(Attempts = 1, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
-    [DisableConcurrentExecution(timeoutInSeconds: 86400)]
-    public async Task RunScenesOnlyPipeline(
-        string contentId,
-        string videoTitle,
-        CancellationToken cancellationToken)
-    {
-        // Broadcast start of detection
-        await _hubContext.Clients.All.DetectionProgress(
-            contentId, 1, "Starting scenes-only detection", null);
-
-        using var scope = _serviceProvider.CreateScope();
-        var pipeline = scope.ServiceProvider.GetRequiredService<SurfaceDetectionPipeline>();
-
-        try
-        {
-            await pipeline.RunScenesOnlyAsync(contentId, cancellationToken);
-
-            // Broadcast completion — the frontend uses this to clear the spinner + refresh scenes
-            await _hubContext.Clients.All.DetectionProgress(
-                contentId, 100, "Completed", null);
-            await _hubContext.Clients.All.ContentStatusChanged(
-                contentId, "Completed", videoTitle);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[SceneDetectionJob] Scenes-only pipeline FAILED for {ContentId}", contentId);
+            await _eventLog.LogEventAsync("SceneDetection", "PIPELINE_FAILED", "Error",
+                $"Full detection pipeline failed for '{videoTitle}' ({contentId}): {ex.GetType().Name} — {ex.Message}");
             await _hubContext.Clients.All.DetectionProgress(
                 contentId, 0, "Failed", null);
             await _hubContext.Clients.All.ContentStatusChanged(
@@ -153,6 +131,8 @@ public class SceneDetectionJobService
         catch (Exception ex)
         {
             _logger.LogError(ex, "[SceneDetectionJob] Per-scene surface detection FAILED for scene {SceneId}", sceneId);
+            await _eventLog.LogEventAsync("SceneDetection", "SCENE_SURFACE_DETECTION_FAILED", "Error",
+                $"Per-scene surface detection failed for scene {sceneId}: {ex.GetType().Name} — {ex.Message}");
             if (contentId != null)
             {
                 await _hubContext.Clients.All.DetectionProgress(

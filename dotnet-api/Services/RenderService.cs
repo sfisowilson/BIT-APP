@@ -16,9 +16,11 @@ namespace Afrobotics.Bit.Api.Services
     public interface IRenderService
     {
         Task<PaginatedResult<RenderItem>> GetRendersAsync(RenderFilterParams filter);
-        Task<RenderItem> DispatchRenderAsync(CreateRenderDto dto);
         Task<RenderItem> DispatchInteractiveRenderAsync(CreateInteractiveRenderDto dto);
         Task<RenderItem> RetryRenderAsync(string renderId);
+        Task<RenderItem> DispatchPromptPreviewRenderAsync(CreatePromptRenderDto dto);
+        Task<RenderItem> ApproveSpliceAsync(string renderId);
+        Task RejectPromptRenderAsync(string renderId, string? reason);
     }
 
     public class RenderService : IRenderService
@@ -55,51 +57,6 @@ namespace Afrobotics.Bit.Api.Services
             return await query.ToPaginatedResultAsync(filter.Page, filter.PageSize);
         }
 
-        public async Task<RenderItem> DispatchRenderAsync(CreateRenderDto dto)
-        {
-            if (string.IsNullOrEmpty(dto.ContentId) || string.IsNullOrEmpty(dto.SurfaceId) || 
-                string.IsNullOrEmpty(dto.CampaignId) || string.IsNullOrEmpty(dto.AssetId))
-            {
-                throw new ArgumentException("Missing mandatory compositing target parameters.");
-            }
-
-            // MReq 11: Enforce approval gate — render only approved placements
-            var surface = await _context.SurfaceItems.FindAsync(dto.SurfaceId);
-            if (surface == null)
-                throw new ArgumentException("Surface not found.");
-            if (surface.Status != "Approved")
-                throw new InvalidOperationException(
-                    $"Placement not approved. Surface '{surface.SurfaceType}' is '{surface.Status}'. " +
-                    "Only Approved surfaces can be rendered.");
-
-            await _eventLog.LogEventAsync("RenderEngine", "RENDER_QUEUED", "Info",
-                $"Render queued for surface '{surface.SurfaceType}' (campaign {dto.CampaignId}).");
-
-            var renderId = "r-" + Guid.NewGuid().ToString().Substring(0, 4);
-            var render = new RenderItem
-            {
-                Id = renderId,
-                ContentId = dto.ContentId,
-                SurfaceId = dto.SurfaceId,
-                CampaignId = dto.CampaignId,
-                AssetId = dto.AssetId,
-                ExportPreset = dto.ExportPreset ?? "Web-Ready MP4",
-                StorageKey = $"s3://afrobotics-finished-renders/render_job_{renderId}.mp4",
-                RenderStatus = "Queued",
-                Progress = 0,
-                ProcessingDurationMs = 0,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await _renderRepository.AddAsync(render);
-            await _renderRepository.SaveChangesAsync();
-
-            // Enqueue render processing as a Hangfire background job (survives restarts, retries on failure)
-            BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessRenderJob(render.Id, default));
-
-            return render;
-        }
-
         public async Task<RenderItem> DispatchInteractiveRenderAsync(CreateInteractiveRenderDto dto)
         {
             if (string.IsNullOrEmpty(dto.ContentId) || string.IsNullOrEmpty(dto.SurfaceId) ||
@@ -109,7 +66,7 @@ namespace Afrobotics.Bit.Api.Services
             var surface = await _context.SurfaceItems.FindAsync(dto.SurfaceId);
             if (surface == null) throw new ArgumentException("Surface not found.");
 
-            var renderId = "r-" + Guid.NewGuid().ToString()[..4];
+            var renderId = "r-" + Guid.NewGuid();
             var render = new RenderItem
             {
                 Id = renderId,
@@ -151,29 +108,135 @@ namespace Afrobotics.Bit.Api.Services
                 throw new InvalidOperationException(
                     $"Only Failed renders can be retried. Render '{renderId}' is currently '{render.RenderStatus}'.");
 
-            // Re-validate the surface is still approved
+            if (render.RenderMode == "PromptEdit")
+            {
+                await _eventLog.LogEventAsync("RenderEngine", "RENDER_RETRY_QUEUED", "Info",
+                    $"Render '{render.Id}' retry queued (PromptEdit, scene {render.SceneId}, campaign {render.CampaignId}).");
+
+                render.RenderStatus = "Queued";
+                render.Progress = 0;
+                render.ProcessingDurationMs = 0;
+                render.LastErrorMessage = null;
+                await _renderRepository.SaveChangesAsync();
+
+                BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessPromptPreviewJob(render.Id, default));
+                return render;
+            }
+
+            if (string.IsNullOrEmpty(render.SurfaceId))
+                throw new InvalidOperationException(
+                    "This render has no associated surface or scene and cannot be retried.");
+
             var surface = await _context.SurfaceItems.FindAsync(render.SurfaceId);
             if (surface == null)
                 throw new InvalidOperationException(
                     "The surface for this render no longer exists. Please re-submit from the Editor tab.");
-            if (surface.Status != "Approved")
-                throw new InvalidOperationException(
-                    $"Surface '{surface.SurfaceType}' is no longer Approved (current status: '{surface.Status}'). " +
-                    "Please re-approve the surface before retrying.");
 
             await _eventLog.LogEventAsync("RenderEngine", "RENDER_RETRY_QUEUED", "Info",
-                $"Render '{render.Id}' retry queued (surface '{surface.SurfaceType}', campaign {render.CampaignId}).");
+                $"Render '{render.Id}' retry queued (surface '{surface.SurfaceType}', campaign {render.CampaignId}, engine {render.CompositingEngine}).");
 
-            // Reset render state and re-enqueue
+            // Reset render state and re-enqueue on the same engine it was originally dispatched to
             render.RenderStatus = "Queued";
             render.Progress = 0;
             render.ProcessingDurationMs = 0;
             render.LastErrorMessage = null;
             await _renderRepository.SaveChangesAsync();
 
-            BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessRenderJob(render.Id, default));
+            if (render.CompositingEngine == "PlanarWarp")
+                BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessPlanarRenderJob(render.Id, default));
+            else
+                BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessGenerativeRenderJob(render.Id, default));
 
             return render;
+        }
+
+        public async Task<RenderItem> DispatchPromptPreviewRenderAsync(CreatePromptRenderDto dto)
+        {
+            if (string.IsNullOrEmpty(dto.ContentId) || string.IsNullOrEmpty(dto.SceneId) ||
+                string.IsNullOrEmpty(dto.CampaignId) || string.IsNullOrEmpty(dto.AssetId) ||
+                string.IsNullOrWhiteSpace(dto.PromptText))
+                throw new ArgumentException("Missing mandatory parameters.");
+
+            var scene = await _context.SceneItems.FindAsync(dto.SceneId);
+            if (scene == null) throw new ArgumentException("Scene not found.");
+
+            // Authoritative duration gate — checked before any Hangfire job is enqueued, so an
+            // invalid request never spends fal.ai budget. Re-checked again inside the job itself.
+            if (scene.DurationSeconds < KlingPromptEditService.MinPromptEditDurationSeconds ||
+                scene.DurationSeconds > KlingPromptEditService.MaxPromptEditDurationSeconds)
+                throw new ArgumentException(
+                    $"Scene duration {scene.DurationSeconds:F1}s is outside the allowed " +
+                    $"{KlingPromptEditService.MinPromptEditDurationSeconds}-{KlingPromptEditService.MaxPromptEditDurationSeconds}s window for AI-generated placement.");
+
+            var renderId = "r-" + Guid.NewGuid();
+            var render = new RenderItem
+            {
+                Id = renderId,
+                ContentId = dto.ContentId,
+                SurfaceId = null,
+                SceneId = dto.SceneId,
+                CampaignId = dto.CampaignId,
+                AssetId = dto.AssetId,
+                PromptText = dto.PromptText.Trim(),
+                ExportPreset = dto.ExportPreset ?? "Web-Ready MP4",
+                StorageKey = $"s3://afrobotics-finished-renders/render_job_{renderId}.mp4",
+                RenderStatus = "Queued",
+                Progress = 0,
+                ProcessingDurationMs = 0,
+                RenderMode = "PromptEdit",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await _renderRepository.AddAsync(render);
+            await _renderRepository.SaveChangesAsync();
+
+            BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessPromptPreviewJob(render.Id, default));
+
+            await _eventLog.LogEventAsync("RenderEngine", "PROMPT_PREVIEW_QUEUED", "Info",
+                $"Prompt placement render {renderId}: scene {dto.SceneId}, campaign {dto.CampaignId}.");
+
+            return render;
+        }
+
+        public async Task<RenderItem> ApproveSpliceAsync(string renderId)
+        {
+            var render = await _renderRepository.GetByIdAsync(renderId);
+            if (render == null)
+                throw new ArgumentException($"Render '{renderId}' not found.");
+
+            if (render.RenderStatus != "PreviewReady")
+                throw new InvalidOperationException(
+                    $"Render '{renderId}' is not awaiting approval (status: '{render.RenderStatus}').");
+
+            // Flip status before enqueueing so a rapid double-click can't enqueue the splice
+            // job twice — the job itself re-checks this too, but this closes the race window.
+            render.RenderStatus = "Processing";
+            await _renderRepository.SaveChangesAsync();
+
+            BackgroundJob.Enqueue<RenderJobService>(s => s.ProcessPromptSpliceJob(render.Id, default));
+
+            await _eventLog.LogEventAsync("RenderEngine", "PROMPT_SPLICE_QUEUED", "Info",
+                $"Render '{render.Id}' approved — splice queued.");
+
+            return render;
+        }
+
+        public async Task RejectPromptRenderAsync(string renderId, string? reason)
+        {
+            var render = await _renderRepository.GetByIdAsync(renderId);
+            if (render == null)
+                throw new ArgumentException($"Render '{renderId}' not found.");
+
+            if (render.RenderStatus != "PreviewReady")
+                throw new InvalidOperationException(
+                    $"Render '{renderId}' is not awaiting approval (status: '{render.RenderStatus}').");
+
+            render.RenderStatus = "Rejected";
+            render.LastErrorMessage = string.IsNullOrWhiteSpace(reason) ? "Rejected by user after preview." : reason;
+            await _renderRepository.SaveChangesAsync();
+
+            await _eventLog.LogEventAsync("RenderEngine", "PROMPT_REJECTED", "Info",
+                $"Render '{render.Id}' rejected by user.");
         }
     }
 }

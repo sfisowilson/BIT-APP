@@ -100,8 +100,7 @@ For any feature, ensure:
 See `governance/rules/no-mock-code.md` for the full rule. In summary:
 - Never create stub/fake/dummy/placeholder code
 - Always implement real functionality
-- `server.ts` in-memory DB is legacy — never extend it
-- No `Basic*Service` stubs beyond the existing admin-configurable fallbacks
+- No "basic"/no-op fallback engines — a misconfigured engine setting must throw, not silently degrade
 
 ---
 

@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Afrobotics.Bit.Api.Data;
 using Afrobotics.Bit.Api.DTOs;
 using Afrobotics.Bit.Api.Models;
 using Afrobotics.Bit.Api.Services;
@@ -16,11 +19,13 @@ namespace Afrobotics.Bit.Api.Controllers
     {
         private readonly ICampaignService _campaignService;
         private readonly IAssetService _assetService;
+        private readonly PostgresDbContext _context;
 
-        public CampaignsController(ICampaignService campaignService, IAssetService assetService)
+        public CampaignsController(ICampaignService campaignService, IAssetService assetService, PostgresDbContext context)
         {
             _campaignService = campaignService;
             _assetService = assetService;
+            _context = context;
         }
 
         [HttpGet]
@@ -28,6 +33,25 @@ namespace Afrobotics.Bit.Api.Controllers
         {
             var result = await _campaignService.GetCampaignsAsync(filter);
             return Ok(result);
+        }
+
+        /// <summary>
+        /// Lightweight per-campaign summary for pipeline-status indicators (e.g. the Campaign
+        /// Dashboard's "Placements" step) that need to know "has anything actually been approved
+        /// yet" without the full content/scene/surface fetch the Placement Workbench does.
+        /// </summary>
+        [HttpGet("{id}/summary")]
+        public async Task<IActionResult> GetCampaignSummary(string id)
+        {
+            var hasApprovedPlacements = await (
+                from surface in _context.SurfaceItems
+                join scene in _context.SceneItems on surface.SceneId equals scene.Id
+                join content in _context.ContentItems on scene.ContentId equals content.Id
+                where content.CampaignId == id && surface.Status == "Approved"
+                select surface.Id
+            ).AnyAsync();
+
+            return Ok(new { hasApprovedPlacements });
         }
 
         [HttpGet("{id}/assets")]

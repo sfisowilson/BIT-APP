@@ -83,8 +83,8 @@
 ### Planar Path
 - Per-frame quad coordinates are deterministic — no drift, no regeneration risk
 - Pixel-perfect guarantee: warp is a mathematical transform, content never reinterpreted
-- Tracking lock-loss: if ≥1 corner loses lock, render is Failed (not degraded)
-- Tracking recovery after temporary occlusion: interpolate missing frames from bracketing frames
+- **[Amended by `governance/plans/shot-aware-consistency.md`]** Tracking lock-loss is now a **per-shot**, not scene-wide, rule: if the *seed* shot loses lock, or *every* shot in the scene fails to track, the render is Failed. If tracking succeeds on the seed shot but a *later* shot in the scene fails to re-anchor (a hard cut moved the surface out of frame, or SAM3 couldn't re-detect it), that shot is marked `Skipped` — the source video passes through unmodified for that shot's frames, the surface's `TrackingStatus` is set to `PartialCoverage`, and the render completes as `NeedsReview` (not `Failed`). This replaces the original "any corner loses lock → always Failed" rule now that a scene can span multiple shots/cuts with different camera angles.
+- Tracking recovery after temporary occlusion (within a single shot): interpolate missing frames from bracketing frames
 - SAM3 video-rle provides per-frame RLE masks for foreground occlusion (person crossing in front)
 
 ### Engine Provenance
@@ -110,8 +110,8 @@
 - Drift check failure → render marked "NeedsReview", not silently passed
 
 ### Planar Path
-- Quad tracking loses lock on ≥1 corner → render Failed, log frame + corner index
-- Tracking recovers after temporary occlusion → interpolate missing frames from bracketing frames
+- **[Amended — see the per-shot lock-loss rule above]** Quad tracking loses lock in the seed shot, or every shot in the scene → render Failed, log shot index + frame. Loses lock in a later shot only → that shot marked Skipped (pass-through), render completes as NeedsReview.
+- Tracking recovers after temporary occlusion within a shot → interpolate missing frames from bracketing frames
 - Asset has wrong aspect ratio → warn user during placement, suggest cropping
 - Asset missing alpha channel → auto-add white background with warning
 - Foreground occlusion mask missing → render without occlusion (signage always visible, even behind objects)

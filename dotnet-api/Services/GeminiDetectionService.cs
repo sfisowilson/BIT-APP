@@ -208,8 +208,10 @@ If no surfaces found, return { ""surfaces"": [] }.
             var text = result?.Candidates?[0]?.Content?.Parts?[0]?.Text;
             if (string.IsNullOrEmpty(text))
             {
-                _logger.LogInformation("[Gemini] Empty response for {ContentId}", contentId);
-                return new List<SurfaceDetectionResult>();
+                // Try top-level parse — Gemini may return JSON directly when response_mime_type is set
+                _logger.LogWarning("[Gemini] No candidates[0].content.parts[0].text — trying top-level parse. Response: {Response}",
+                    responseJson.Length <= 500 ? responseJson : responseJson[..500] + "...");
+                text = responseJson;
             }
 
             // Strip markdown code fences if present (fallback for non-JSON-mode responses)
@@ -491,7 +493,10 @@ If no surfaces found, return { ""surfaces"": [] }.
             if (parts.Length >= 2 && int.TryParse(parts[0], out var w) && int.TryParse(parts[1], out var h))
                 return (w, h);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[Gemini] ffprobe dimensions failed: {ex.Message}");
+        }
         return (0, 0);
     }
 
@@ -544,7 +549,11 @@ If no surfaces found, return { ""surfaces"": [] }.
             return Convert.ToBase64String(bytes);
         }
         catch (OperationCanceledException) { return null; }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Gemini] Failed to extract keyframe at frame {Frame}", frameNumber);
+            return null;
+        }
         finally { try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { } }
     }
 
@@ -729,6 +738,74 @@ Rules:
             _logger.LogWarning(ex, "[Gemini] Failed to generate pikaswaps prompt for {SurfaceType} + {AssetName}",
                 surfaceType, assetName);
             return (null, null);
+        }
+    }
+
+    /// <summary>
+    /// Generate a short visual description of a surface, used as a SAM3 video-rle text
+    /// prompt to re-anchor tracking in a shot after a hard cut — the pixel location from the
+    /// previous shot is meaningless in the new camera angle, but a semantic description
+    /// ("the LED perimeter board on the field") still identifies the same real-world surface.
+    /// </summary>
+    /// <param name="surfaceType">The detected surface type (e.g. "Stadium Perimeter LED Board").</param>
+    /// <param name="assetName">The brand asset being placed, for context. Not required to match visually.</param>
+    /// <returns>A short description, or null if generation fails (caller should fall back to surfaceType itself).</returns>
+    public async Task<string?> GenerateSurfaceDescriptionAsync(string surfaceType, string assetName)
+    {
+        try
+        {
+            var apiKey = await _settings.GetAsync("gemini_api_key");
+            if (string.IsNullOrEmpty(apiKey)) return null;
+
+            var model = await _settings.GetAsync("gemini_model", DefaultModel);
+            var url = $"{GeminiBaseUrl}/models/{model}:generateContent?key={apiKey}";
+
+            var promptText = $@"You are a video segmentation assistant. A surface of type ""{surfaceType}"" " +
+                $@"(currently displaying a ""{assetName}"" brand placement) needs to be re-located in a different " +
+                $@"camera shot of the same video scene, where its screen position has changed.
+
+Return ONLY a short visual description (under 12 words) of the surface itself, suitable as a text
+prompt for an object-segmentation model — e.g. ""the LED perimeter board along the field edge"".
+Describe the physical surface, not the brand content on it. No markdown, no quotes, just the phrase.";
+
+            var payload = new
+            {
+                contents = new[]
+                {
+                    new { parts = new[] { new { text = promptText } } }
+                },
+                generationConfig = new { temperature = 0.2, maxOutputTokens = 40 }
+            };
+
+            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            });
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await _http.PostAsync(url, content);
+            var responseBody = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode) return null;
+
+            using var doc = JsonDocument.Parse(responseBody);
+            var text = doc.RootElement
+                .GetProperty("candidates")[0]
+                .GetProperty("content")
+                .GetProperty("parts")[0]
+                .GetProperty("text")
+                .GetString();
+
+            var description = text?.Trim().Trim('"');
+            if (string.IsNullOrWhiteSpace(description)) return null;
+
+            _logger.LogInformation("[Gemini] Generated re-anchor description for {SurfaceType}: '{Description}'",
+                surfaceType, description);
+            return description;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Gemini] Failed to generate surface description for {SurfaceType}", surfaceType);
+            return null;
         }
     }
 }

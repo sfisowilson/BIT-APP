@@ -62,12 +62,27 @@ public class SurfaceDetectionPipeline
             content.DetectionProgress = 10;
             await db.SaveChangesAsync(ct);
 
-            var scenes = DetectScenes(content, out var fps, out var totalFrames);
-            _logger.LogInformation("[Pipeline] FFmpeg found {Count} scenes in {Title}", scenes.Count, content.Title);
+            // ── Scenes already clustered by ShotDetectionPipeline — read from DB ──
+            var sceneItems = await db.SceneItems
+                .Where(s => s.ContentId == contentId)
+                .OrderBy(s => s.SceneIndex)
+                .ToListAsync(ct);
+
+            var fps = content.FrameRate > 0 && content.FrameRate <= 240 ? content.FrameRate : 30;
+            var totalFrames = (int)(ParseDuration(content.Duration) * fps);
+
+            var scenes = sceneItems.Select(s => new SceneCut
+            {
+                SceneIndex = s.SceneIndex,
+                StartFrame = s.StartFrame,
+                EndFrame = s.EndFrame,
+                DurationSeconds = s.DurationSeconds,
+            }).ToList();
+
+            _logger.LogInformation("[Pipeline] Reading {Count} clustered scenes from DB for {Title}", scenes.Count, content.Title);
 
             content.DetectionProgress = 40;
             await db.SaveChangesAsync(ct);
-            await DeleteExistingScenes(db, contentId, ct);
 
             var videoPath = ResolveVideoPath(content);
             if (string.IsNullOrEmpty(videoPath))
@@ -89,6 +104,9 @@ public class SurfaceDetectionPipeline
             {
                 await CheckPauseOrCancellationAsync(db, contentId, ct);
                 var scene = scenes[i];
+                // The real, already-persisted entity from ShotClusteringService — reuse it
+                // rather than creating a duplicate SceneItem row for the same scene index.
+                var sceneItem = sceneItems[i];
 
                 content.DetectionProgress = 42 + (int)(40.0 * i / totalScenes);
                 await db.SaveChangesAsync(ct);
@@ -108,17 +126,6 @@ public class SurfaceDetectionPipeline
                     content.DetectionProgress = 48;
                     await db.SaveChangesAsync(ct);
 
-                    var sceneItem = new SceneItem
-                    {
-                        Id = $"s-{Guid.NewGuid().ToString()[..4]}",
-                        ContentId = contentId,
-                        SceneIndex = scene.SceneIndex,
-                        StartFrame = scene.StartFrame,
-                        EndFrame = scene.EndFrame,
-                        DurationSeconds = scene.DurationSeconds,
-                        QaStatus = "Unchecked",
-                    };
-                    db.SceneItems.Add(sceneItem);
                     persistedScenes.Add(sceneItem);
 
                     foreach (var surface in surfaces)
@@ -205,118 +212,6 @@ public class SurfaceDetectionPipeline
             content.LastErrorMessage = $"[{ex.GetType().Name}] {ex.Message}";
             content.LastErrorAt = DateTime.UtcNow;
             content.DetectionProgress = Math.Max(content.DetectionProgress, 0);
-            await db.SaveChangesAsync();
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Scenes-only mode: FFmpeg scene detection + thumbnails. No Gemini, no surfaces.
-    /// </summary>
-    public async Task RunScenesOnlyAsync(string contentId, CancellationToken ct)
-    {
-        using var scope = _serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
-        var contentService = scope.ServiceProvider.GetRequiredService<IContentService>();
-        var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
-
-        var content = await db.ContentItems.FindAsync(contentId);
-        if (content == null) return;
-
-        try
-        {
-            await TransitionToSceneDetecting(contentService, content, ct);
-            content.DetectionProgress = 5;
-            await db.SaveChangesAsync(ct);
-
-            content.DetectionProgress = 10;
-            await db.SaveChangesAsync(ct);
-            var scenes = DetectScenes(content, out _, out _);
-            _logger.LogInformation("[Pipeline:ScenesOnly] FFmpeg found {Count} scenes", scenes.Count);
-
-            content.DetectionProgress = 40;
-            await db.SaveChangesAsync(ct);
-            await DeleteExistingScenes(db, contentId, ct);
-
-            var videoPath = ResolveVideoPath(content);
-            var persistedScenes = new List<SceneItem>();
-            var totalScenes = scenes.Count;
-
-            for (int i = 0; i < scenes.Count; i++)
-            {
-                ct.ThrowIfCancellationRequested();
-                var scene = scenes[i];
-                content.DetectionProgress = 42 + (int)(58.0 * i / totalScenes);
-                await db.SaveChangesAsync(ct);
-
-                var sceneItem = new SceneItem
-                {
-                    Id = $"s-{Guid.NewGuid().ToString()[..4]}",
-                    ContentId = contentId,
-                    SceneIndex = scene.SceneIndex,
-                    StartFrame = scene.StartFrame,
-                    EndFrame = scene.EndFrame,
-                    DurationSeconds = scene.DurationSeconds,
-                    QaStatus = "Unchecked",
-                    SurfaceStatus = "Pending",
-                };
-                db.SceneItems.Add(sceneItem);
-                persistedScenes.Add(sceneItem);
-
-                content.DetectionProgress = 42 + (int)(58.0 * (i + 1) / totalScenes);
-                await db.SaveChangesAsync(ct);
-            }
-
-            if (persistedScenes.Count > 0 && !string.IsNullOrEmpty(videoPath))
-            {
-                var thumbDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "thumbnails");
-                Directory.CreateDirectory(thumbDir);
-
-                for (int i = 0; i < persistedScenes.Count; i++)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    var sceneItem = persistedScenes[i];
-                    var middleFrame = (sceneItem.StartFrame + sceneItem.EndFrame) / 2;
-                    var thumbFile = $"scene-{sceneItem.Id}.jpg";
-                    var thumbPath = Path.Combine(thumbDir, thumbFile);
-
-                    try
-                    {
-                        await GenerateThumbnailAsync(videoPath, middleFrame, thumbPath, ct);
-                        sceneItem.ThumbnailPath = $"thumbnails/{thumbFile}";
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "[Pipeline:ScenesOnly] Thumbnail failed for scene {Index}", sceneItem.SceneIndex);
-                    }
-                }
-                await db.SaveChangesAsync(ct);
-            }
-
-            content.IngestionStatus = PipelineStages.Completed;
-            content.SceneDetectingCompletedAt = DateTime.UtcNow;
-            content.DetectionProgress = 100;
-            await db.SaveChangesAsync(ct);
-
-            await eventLog.LogEventAsync("SceneDetection", "Completed", "Info",
-                $"Scenes-only detection complete: {totalScenes} scenes (no surfaces). Run per-scene surface detection next.");
-            _logger.LogInformation("[Pipeline:ScenesOnly] {Count} scenes, {Thumbs} thumbnails",
-                totalScenes, persistedScenes.Count(s => s.ThumbnailPath != null));
-        }
-        catch (OperationCanceledException)
-        {
-            content.IngestionStatus = PipelineStages.Failed;
-            content.LastErrorMessage = "Scene detection was cancelled.";
-            content.LastErrorAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[Pipeline:ScenesOnly] FAILED for {ContentId}", contentId);
-            content.IngestionStatus = PipelineStages.Failed;
-            content.LastErrorMessage = $"[{ex.GetType().Name}] {ex.Message}";
-            content.LastErrorAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
             throw;
         }
@@ -459,7 +354,7 @@ public class SurfaceDetectionPipeline
             {
                 surfaces.Add(new SurfaceItem
                 {
-                    Id = $"sf-{Guid.NewGuid().ToString()[..4]}",
+                    Id = $"sf-{Guid.NewGuid()}",
                     SurfaceType = det.SurfaceType,
                     BoundaryCoordinatesJson = det.BoundaryCoordinatesJson,
                     EstimatedDepth = det.EstimatedDepth,
@@ -575,7 +470,7 @@ public class SurfaceDetectionPipeline
 
             surfaces.Add(new SurfaceItem
             {
-                Id = $"sf-{Guid.NewGuid().ToString()[..4]}",
+                Id = $"sf-{Guid.NewGuid()}",
                 SurfaceType = det.SurfaceType,
                 BoundaryCoordinatesJson = det.BoundaryCoordinatesJson,
                 EstimatedDepth = det.EstimatedDepth,
@@ -584,6 +479,7 @@ public class SurfaceDetectionPipeline
                 ViabilityScore = det.ViabilityScore,
                 Status = string.IsNullOrEmpty(det.ExclusionReason) ? "Candidate" : "Excluded",
                 ExclusionReason = det.ExclusionReason,
+                DetectedAtFrame = keyFrameNum,
                 Sam3Prompt = det.Sam3Prompt,
             });
         }
@@ -597,100 +493,6 @@ public class SurfaceDetectionPipeline
             await contentService.TransitionStageAsync(content.Id, PipelineStages.Transcoding);
         if (content.IngestionStatus is PipelineStages.Transcoding or PipelineStages.Completed)
             await contentService.TransitionStageAsync(content.Id, PipelineStages.SceneDetecting);
-    }
-
-    private static List<SceneCut> DetectScenes(ContentItem content, out int fps, out int totalFrames)
-    {
-        fps = content.FrameRate > 0 && content.FrameRate <= 240 ? content.FrameRate : 50;
-        var totalDurationSec = ParseDuration(content.Duration);
-        totalFrames = (int)(totalDurationSec * fps);
-
-        var fileName = content.StorageKey?.Replace("/api/content/file/", "") ?? "";
-        var videoPath = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", fileName);
-
-        var timestamps = new List<double>();
-
-        try
-        {
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "ffmpeg",
-                    Arguments = $"-hide_banner -i \"{videoPath}\" -vf \"select=gt(scene\\,0.4),showinfo\" -vsync vfr -f null NUL",
-                    RedirectStandardError = true,
-                    RedirectStandardOutput = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                },
-            };
-            process.Start();
-            var stderr = process.StandardError.ReadToEnd();
-            process.WaitForExit(120_000);
-
-            var regex = new System.Text.RegularExpressions.Regex(@"pts_time:([\d\.]+)");
-            foreach (System.Text.RegularExpressions.Match m in regex.Matches(stderr))
-            {
-                if (double.TryParse(m.Groups[1].Value,
-                    System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out var ts) && ts > 0)
-                    timestamps.Add(ts);
-            }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Pipeline] FFmpeg scene detection failed: {ex.Message}");
-        }
-
-        return BuildSceneCuts(timestamps, totalDurationSec, fps, totalFrames);
-    }
-
-    private static List<SceneCut> BuildSceneCuts(List<double> timestamps, double totalDuration, int fps, int totalFrames)
-    {
-        if (totalDuration <= 0) totalDuration = 60;
-        if (totalFrames <= 0) totalFrames = (int)(totalDuration * fps);
-
-        var scenes = new List<SceneCut>();
-        var cuts = new List<double> { 0 };
-        cuts.AddRange(timestamps.Where(t => t > 0.5 && t < totalDuration - 0.5));
-        cuts.Add(totalDuration);
-        cuts = cuts.Distinct().OrderBy(t => t).ToList();
-
-        // Single continuous shot — keep as one scene, don't forcibly split
-        if (cuts.Count <= 2 && totalDuration > 3)
-        {
-            cuts = new List<double> { 0, totalDuration };
-        }
-
-        for (int i = 0; i < cuts.Count - 1; i++)
-        {
-            var startSec = cuts[i];
-            var endSec = cuts[i + 1];
-            var startFrame = (int)(startSec * fps);
-            var endFrame = Math.Max(startFrame + 1, Math.Min((int)(endSec * fps) - 1, totalFrames - 1));
-            scenes.Add(new SceneCut
-            {
-                SceneIndex = i + 1,
-                StartFrame = startFrame,
-                EndFrame = endFrame,
-                DurationSeconds = Math.Max(0.5, endSec - startSec),
-            });
-        }
-
-        return scenes;
-    }
-
-    private static async Task DeleteExistingScenes(PostgresDbContext db, string contentId, CancellationToken ct)
-    {
-        var existing = await db.SceneItems.Where(s => s.ContentId == contentId).ToListAsync(ct);
-        foreach (var scene in existing)
-        {
-            var surfaces = await db.SurfaceItems.Where(s => s.SceneId == scene.Id).ToListAsync(ct);
-            db.SurfaceItems.RemoveRange(surfaces);
-        }
-        db.SceneItems.RemoveRange(existing);
-        await db.SaveChangesAsync(ct);
     }
 
     /// <summary>Generate a thumbnail at the given frame number. Uses ffprobe for real FPS.</summary>

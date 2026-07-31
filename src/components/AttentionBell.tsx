@@ -36,6 +36,17 @@ export const AttentionBell: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchCounts]);
 
+  // Close on outside click
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
   const handleItemClick = (path: string | null) => {
     setOpen(false);
     if (path) navigate(path);
@@ -119,7 +130,7 @@ export const AttentionBell: React.FC = () => {
               </div>
             )}
             <div className="p-2 border-t border-slate-100 bg-slate-50/30">
-              <p className="text-[9px] text-slate-400 text-center">Refreshes every 30 seconds</p>
+              <p className="text-[9px] text-slate-400 text-center">Refreshes every 60 seconds</p>
             </div>
           </motion.div>
         )}

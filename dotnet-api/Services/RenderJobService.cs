@@ -34,280 +34,6 @@ public class RenderJobService
         _logger = logger;
     }
 
-    [AutomaticRetry(Attempts = 1, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
-    [DisableConcurrentExecution(timeoutInSeconds: 1800)] // 30 min — SAM3 tracking can take a while
-    public async Task ProcessRenderJob(string renderId, CancellationToken cancellationToken)
-    {
-        var sw = Stopwatch.StartNew();
-        using var scope = _serviceProvider.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
-        var tracker = scope.ServiceProvider.GetRequiredService<ISurfaceTrackingService>();
-        var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
-
-        var render = await db.Renders.FindAsync(new object[] { renderId }, cancellationToken);
-        if (render == null) return;
-
-        try
-        {
-            // ── Phase 1: Validate assets (5% → 20%) ──
-            render.Progress = 5; render.RenderStatus = "Processing";
-            await db.SaveChangesAsync(cancellationToken);
-            await _hubContext.Clients.All.RenderProgress(renderId, 5, "Validating");
-
-            var content = await db.ContentItems.FindAsync(new object[] { render.ContentId }, cancellationToken);
-            if (content == null) throw new InvalidOperationException($"Content {render.ContentId} not found.");
-
-            var surface = await db.SurfaceItems.FindAsync(new object[] { render.SurfaceId }, cancellationToken);
-            if (surface == null) throw new InvalidOperationException($"Surface {render.SurfaceId} not found.");
-
-            var asset = await db.CreativeAssets.FindAsync(new object[] { render.AssetId }, cancellationToken);
-            if (asset == null) throw new InvalidOperationException($"Asset {render.AssetId} not found.");
-            var assetPath = ResolveAssetPath(asset.StorageKey);
-            if (!File.Exists(assetPath)) throw new InvalidOperationException($"Asset file not found: {assetPath}");
-
-            var scene = await db.SceneItems.FirstOrDefaultAsync(s => s.Id == surface.SceneId, cancellationToken);
-            if (scene == null) throw new InvalidOperationException($"Scene not found for surface {render.SurfaceId}.");
-
-            var videoPath = ResolveVideoPath(content.StorageKey);
-            if (string.IsNullOrEmpty(videoPath) || !File.Exists(videoPath))
-                throw new InvalidOperationException($"Source video not found: {content.StorageKey}");
-
-            var fps = content.FrameRate > 0 && content.FrameRate <= 240 ? content.FrameRate : 30;
-            var totalFrames = scene.EndFrame - scene.StartFrame + 1;
-
-            render.Progress = 20;
-            await db.SaveChangesAsync(cancellationToken);
-            await _hubContext.Clients.All.RenderProgress(renderId, 20, $"Tracking surface across {totalFrames} frames");
-
-            // ── Phase 2: SAM 3 surface tracking (20% → 40%) ──
-            var trackedFrames = await tracker.TrackAsync(
-                render.SurfaceId, videoPath,
-                scene.StartFrame, scene.EndFrame,
-                surface.BoundaryCoordinatesJson,
-                surface.DetectedAtFrame ?? scene.StartFrame,
-                sam3Prompt: surface.Sam3Prompt,
-                cancellationToken: cancellationToken);
-
-            if (trackedFrames.Count == 0)
-                throw new InvalidOperationException(
-                    "SAM3 returned 0 frames. Check fal.ai API key, sam3_video_base_url setting, and network connectivity.");
-
-            // Check if SAM3 returned a segmented video (single frame with sam3_video path)
-            var firstFrameJson = trackedFrames[0].BoundaryCoordinatesJson;
-            string? sam3VideoPath = null;
-            try
-            {
-                using var doc = JsonDocument.Parse(firstFrameJson);
-                if (doc.RootElement.TryGetProperty("sam3_video", out var vidPath))
-                    sam3VideoPath = vidPath.GetString();
-            }
-            catch { }
-
-            if (sam3VideoPath != null && File.Exists(sam3VideoPath))
-            {
-                // SAM3 returned a segmented video — use it as a per-pixel luma mask
-                // Tracked region = bright → asset visible. Background = dark → asset hidden.
-                await eventLog.LogEventAsync("RenderEngine", "USING_SAM3_VIDEO", "Info",
-                    $"Using SAM3 segmented video as luma mask: {sam3VideoPath}");
-                await _hubContext.Clients.All.RenderProgress(renderId, 60, "Compositing with SAM3 mask");
-
-                var sam3RendersDir = Path.Combine(Directory.GetCurrentDirectory(), "renders");
-                Directory.CreateDirectory(sam3RendersDir);
-                var sam3OutputPath = Path.Combine(sam3RendersDir, $"BIT_Render_{renderId}.mp4");
-
-                var safeOrig = videoPath.Replace("\\", "/");
-                var safeSam3 = sam3VideoPath.Replace("\\", "/");
-                var safePng = assetPath.Replace("\\", "/");
-
-                // Compositing pipeline:
-                // 1. Extract luma from SAM3 video → binary mask (bright>10 = white, else black)
-                // 2. Scale asset, convert to RGBA
-                // 3. Apply SAM3 mask as alpha channel to asset (alphamerge)
-                // 4. Overlay masked asset on original video
-                // Result: asset visible ONLY where SAM3 tracked the surface
-                var overlayArgs = $"-y -hide_banner -loglevel error " +
-                    $"-i \"{safeOrig}\" -i \"{safeSam3}\" -i \"{safePng}\" " +
-                    $"-filter_complex \"" +
-                    $"[1:v]format=gray,geq=r='if(gt(lum(X\\,Y)\\,10)\\,255\\,0)' [mask];" +
-                    $"[2:v]scale=W:H,format=rgba [asset_rgba];" +
-                    $"[asset_rgba][mask]alphamerge [asset_masked];" +
-                    $"[0:v][asset_masked]overlay=0:0,format=yuv420p [out]" +
-                    $"\" -map \"[out]\" " +
-                    $"-c:v libx264 -preset fast -crf 23 -an \"{sam3OutputPath}\"";
-                await RunFfmpegAsync(overlayArgs, cancellationToken);
-
-                // Cleanup SAM3 temp file
-                try { File.Delete(sam3VideoPath); } catch { }
-
-                render.Progress = 100;
-                render.RenderStatus = "Finished";
-                render.StorageKey = $"/api/renders/{renderId}/download";
-                render.ProcessingDurationMs = (int)sw.ElapsedMilliseconds;
-                await db.SaveChangesAsync(cancellationToken);
-                await _hubContext.Clients.All.RenderProgress(renderId, 100, "Complete");
-                await eventLog.LogEventAsync("RenderEngine", "RENDER_COMPLETED", "Info",
-                    $"Render '{render.Id}' completed with SAM3 luma-mask compositing in {sw.Elapsed.TotalSeconds:F1}s.");
-                return;
-            }
-
-            await _hubContext.Clients.All.RenderProgress(renderId, 40,
-                $"Tracked {trackedFrames.Count} frames");
-
-            // ── Phase 3: Per-frame compositing (40% → 80%) ──
-            var rendersDir = Path.Combine(Directory.GetCurrentDirectory(), "renders");
-            Directory.CreateDirectory(rendersDir);
-            var frameDir = Path.Combine(rendersDir, $"frames_{renderId}");
-            Directory.CreateDirectory(frameDir);
-            var outputFilePath = Path.Combine(rendersDir, $"BIT_Render_{renderId}.mp4");
-
-            var safeVideo = videoPath.Replace("\\", "/");
-            var safeAsset = assetPath.Replace("\\", "/");
-            var safeFrameDir = frameDir.Replace("\\", "/");
-
-            // Extract all scene frames at once (fast, single ffmpeg call)
-            var sceneStartSec = scene.StartFrame / (double)fps;
-            var extractArgs = $"-y -hide_banner -loglevel error " +
-                $"-ss {sceneStartSec:F3} -i \"{safeVideo}\" " +
-                $"-t {scene.DurationSeconds:F3} " +
-                $"-vf fps={fps} \"{safeFrameDir}/raw_%04d.png\"";
-            await RunFfmpegAsync(extractArgs, cancellationToken);
-
-            render.Progress = 50;
-            await db.SaveChangesAsync(cancellationToken);
-            await _hubContext.Clients.All.RenderProgress(renderId, 50, "Compositing per-frame");
-
-            // Composite each tracked frame: extract raw frame → warp asset → overlay → save
-            var processedCount = 0;
-            var totalTracked = trackedFrames.Count;
-            var parallelOpts = new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = cancellationToken };
-
-            await Parallel.ForEachAsync(trackedFrames, parallelOpts, async (tf, ct) =>
-            {
-                var frameIdx = tf.Frame - scene.StartFrame;
-                var rawFramePath = Path.Combine(frameDir, $"raw_{frameIdx:D4}.png");
-                if (!File.Exists(rawFramePath)) return;
-
-                var outPath = Path.Combine(frameDir, $"comp_{tf.Frame:D6}.png");
-                var safeRaw = rawFramePath.Replace("\\", "/");
-                var safeOut = outPath.Replace("\\", "/");
-
-                // Build perspective transform from tracked polygon (4 corners)
-                var perspectiveArgs = await BuildPerspectiveArgsAsync(tf.BoundaryCoordinatesJson, assetPath, ct);
-                if (perspectiveArgs == null) return;
-
-                var compArgs = $"-y -hide_banner -loglevel error " +
-                    $"-i \"{safeRaw}\" -i \"{safeAsset}\" " +
-                    $"-filter_complex \"[1:v]{perspectiveArgs}[warped];[0:v][warped]overlay=0:0\" " +
-                    $"-vframes 1 \"{safeOut}\"";
-                await RunFfmpegAsync(compArgs, ct);
-
-                var done = Interlocked.Increment(ref processedCount);
-                if (done % 10 == 0 || done == totalTracked)
-                {
-                    var pct = 50 + (int)(30.0 * done / totalTracked);
-                    await _hubContext.Clients.All.RenderProgress(renderId, pct,
-                        $"Composited {done}/{totalTracked} frames");
-                }
-            });
-
-            render.Progress = 85;
-            await db.SaveChangesAsync(cancellationToken);
-            await _hubContext.Clients.All.RenderProgress(renderId, 85, "Encoding video");
-
-            // ── Phase 4: Encode PNG sequence to MP4 (85% → 100%) ──
-            var encodeArgs = $"-y -hide_banner -loglevel error " +
-                $"-framerate {fps} -i \"{safeFrameDir}/comp_%06d.png\" " +
-                $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p " +
-                $"-an \"{outputFilePath}\"";
-            await RunFfmpegAsync(encodeArgs, cancellationToken);
-
-            // Cleanup frame temp dir
-            try { Directory.Delete(frameDir, true); } catch { }
-
-            render.Progress = 100;
-            render.RenderStatus = "Finished";
-            render.StorageKey = $"/api/renders/{renderId}/download";
-            render.ProcessingDurationMs = (int)sw.ElapsedMilliseconds;
-            await db.SaveChangesAsync(cancellationToken);
-
-            await _hubContext.Clients.All.RenderProgress(renderId, 100, "Complete");
-            await eventLog.LogEventAsync("RenderEngine", "RENDER_COMPLETED", "Info",
-                $"Render '{render.Id}' ({asset.Name} → {surface.SurfaceType}): {trackedFrames.Count} frames tracked & composited in {sw.Elapsed.TotalSeconds:F1}s.");
-        }
-        catch (OperationCanceledException)
-        {
-            render.RenderStatus = "Cancelled";
-            await db.SaveChangesAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[RenderJob] Render {RenderId} FAILED", renderId);
-            render.RenderStatus = "Failed";
-            render.LastErrorMessage = ex.Message;
-            await db.SaveChangesAsync();
-            await eventLog.LogEventAsync("RenderEngine", "RENDER_FAILED", "Warning", $"Render '{render.Id}' failed: {ex.Message}");
-            throw;
-        }
-    }
-
-    /// <summary>Build ffmpeg perspective filter args from a 4-corner boundary JSON array.</summary>
-    private static async Task<string?> BuildPerspectiveArgsAsync(string boundaryJson, string assetPath, CancellationToken ct)
-    {
-        try
-        {
-            var pts = JsonSerializer.Deserialize<List<JsonElement>>(boundaryJson);
-            if (pts == null || pts.Count < 4) return null;
-
-            var corners = pts.Take(4).Select(p =>
-            {
-                double x = 0, y = 0;
-                if (p.ValueKind == JsonValueKind.Array) { x = p[0].GetDouble(); y = p[1].GetDouble(); }
-                else if (p.TryGetProperty("x", out var px)) { x = px.GetDouble(); y = p.GetProperty("y").GetDouble(); }
-                else if (p.TryGetProperty("X", out var pX)) { x = pX.GetDouble(); y = p.GetProperty("Y").GetDouble(); }
-                return (x, y);
-            }).ToList();
-
-            if (corners.Count < 4) return null;
-
-            var (aW, aH) = await GetImageSizeAsync(assetPath, ct);
-            if (aW <= 0 || aH <= 0) return null;
-
-            var (tlx, tly) = corners[0]; var (trx, try_) = corners[1];
-            var (brx, bry) = corners[2]; var (blx, bly) = corners[3];
-
-            return $"perspective=0:0:0:{aH}:{aW}:{aH}:{aW}:0:" +
-                   $"{tlx:F1}:{tly:F1}:{trx:F1}:{try_:F1}:{brx:F1}:{bry:F1}:{blx:F1}:{bly:F1}:sense=destination";
-        }
-        catch { return null; }
-    }
-
-    private static async Task<(int w, int h)> GetImageSizeAsync(string imagePath, CancellationToken ct)
-    {
-        try
-        {
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "ffprobe",
-                    Arguments = $"-v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 \"{imagePath}\"",
-                    UseShellExecute = false, CreateNoWindow = true,
-                    RedirectStandardOutput = true, RedirectStandardError = true,
-                },
-            };
-            process.Start();
-            var readOut = process.StandardOutput.ReadToEndAsync();
-            var readErr = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync(ct);
-            await Task.WhenAll(readOut, readErr);
-            var parts = readOut.Result.Trim().Split(',');
-            if (parts.Length >= 2 && int.TryParse(parts[0], out var w) && int.TryParse(parts[1], out var h))
-                return (w, h);
-        }
-        catch { }
-        return (0, 0);
-    }
-
     private static string ResolveAssetPath(string storageKey)
     {
         if (string.IsNullOrEmpty(storageKey)) throw new ArgumentException("Invalid asset storage key");
@@ -378,16 +104,21 @@ public class RenderJobService
         var chunker = scope.ServiceProvider.GetRequiredService<VideoChunkingService>();
         var gemini = scope.ServiceProvider.GetRequiredService<GeminiDetectionService>();
         var platformSettings = scope.ServiceProvider.GetRequiredService<IPlatformSettingsService>();
+        var shotTracker = scope.ServiceProvider.GetRequiredService<IShotAwareTrackingService>();
+        var tracker = scope.ServiceProvider.GetRequiredService<ISurfaceTrackingService>();
 
         var render = await db.Renders.FindAsync(new object[] { renderId }, cancellationToken);
         if (render == null) return;
 
         try
         {
-            // Phase 1: Validate (5% → 15%)
+            // Phase 1: Validate (5% → 10%)
             render.Progress = 5; render.RenderStatus = "Processing";
             await db.SaveChangesAsync(cancellationToken);
             await _hubContext.Clients.All.RenderProgress(renderId, 5, "Validating");
+
+            if (string.IsNullOrEmpty(render.SurfaceId))
+                throw new InvalidOperationException("ProcessGenerativeRenderJob requires a SurfaceId (Interactive placement only — PromptEdit renders use ProcessPromptPreviewJob).");
 
             var content = await db.ContentItems.FindAsync(new object[] { render.ContentId }, cancellationToken);
             var surface = await db.SurfaceItems.FindAsync(new object[] { render.SurfaceId }, cancellationToken);
@@ -401,17 +132,42 @@ public class RenderJobService
                 throw new InvalidOperationException("Video or asset file not found.");
 
             var fps = content.FrameRate > 0 ? content.FrameRate : 30;
+            var (videoWidth, videoHeight) = VideoProbe.GetDimensions(videoPath);
             var videoBaseUrl = await platformSettings.GetAsync("sam3_video_base_url", "http://localhost:57220");
-            var videoFileName = Path.GetFileName(videoPath);
-            var videoUrl = $"{videoBaseUrl}/api/content/file/{videoFileName}";
             var assetFileName = Path.GetFileName(assetPath);
             var assetUrl = $"{videoBaseUrl}/api/assets/file/{assetFileName}";
 
-            render.Progress = 15;
-            await db.SaveChangesAsync(cancellationToken);
-            await _hubContext.Clients.All.RenderProgress(renderId, 15, "Generating prompt");
+            // ── Phase 2: Shot-aware mask tracking (10% → 20%) — feeds the drift-check and luma fallback ──
+            await _hubContext.Clients.All.RenderProgress(renderId, 10, "Tracking across shots");
 
-            // Phase 2: Gemini prompt generation (15% → 20%)
+            var seedPoints = ParsePoints(surface.BoundaryCoordinatesJson);
+            var seedBox = seedPoints.Count >= 2
+                ? (xMin: seedPoints.Min(p => p.x), yMin: seedPoints.Min(p => p.y), xMax: seedPoints.Max(p => p.x), yMax: seedPoints.Max(p => p.y))
+                : (xMin: 0, yMin: 0, xMax: videoWidth, yMax: videoHeight);
+
+            var trackResult = await shotTracker.TrackMaskAcrossShotsAsync(
+                surface.SceneId, videoPath, seedBox, surface.DetectedAtFrame ?? 0,
+                surface.Sam3Prompt, surface.SurfaceType, cancellationToken);
+
+            surface.TrackingDataJson = trackResult.TrackingDataJson;
+            surface.TrackingPointsJson = trackResult.TrackingPointsJson;
+            surface.TrackingStatus = trackResult.OverallStatus;
+            await db.SaveChangesAsync(cancellationToken);
+
+            if (trackResult.OverallStatus == "LockLost")
+                throw new InvalidOperationException(
+                    "Shot-aware tracking lost the surface in its seed shot (or every shot in the scene was skipped) — nothing to render.");
+
+            var segments = ParseGenerativeShotSegments(trackResult.TrackingDataJson);
+            if (segments.Count == 0)
+                throw new InvalidOperationException("No shot segments available for generative compositing.");
+
+            render.Progress = 20;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 20, "Generating prompt");
+
+            // ── Phase 3: Gemini prompt (20% → 25%) — shared across shots in this scene, since
+            // ShotClusteringService only groups visually-similar shots into one scene ──
             var (modifyRegion, prompt) = await gemini.GeneratePikaswapsPromptAsync(
                 surface.SurfaceType, asset.Name ?? "brand asset");
 
@@ -424,84 +180,111 @@ public class RenderJobService
             await eventLog.LogEventAsync("RenderEngine", "GEMINI_PROMPT_COMPLETE", "Info",
                 $"Generative render {renderId}: modify_region='{modifyRegion}', prompt='{prompt}'");
 
-            render.Progress = 20;
+            render.Progress = 25;
             await db.SaveChangesAsync(cancellationToken);
 
-            // Determine scene duration from video
-            var totalDuration = await GetVideoDurationAsync(videoPath, cancellationToken);
+            // Work files live under Uploads/ (not the OS temp dir) so they're servable via
+            // /api/content/file/... — pikaswaps fetches chunks by URL, not by local path.
+            var workRelDir = $"tmp-renders/{renderId}";
+            var workAbsDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "tmp-renders", renderId);
+            Directory.CreateDirectory(workAbsDir);
 
-            // Phase 3: Chunking (20% → 25%)
-            string? finalVideoPath;
-            if (totalDuration <= 4.75)
+            // ── Phase 4: Per-shot compositing, never straddling a cut (25% → 80%) ──
+            var shotChunks = new List<VideoChunkingService.VideoChunk>();
+            var totalShots = segments.Count;
+            var shotsDone = 0;
+
+            foreach (var seg in segments)
             {
-                // Single pikaswaps call — no chunking
-                await _hubContext.Clients.All.RenderProgress(renderId, 25, "Compositing with pikaswaps");
-                finalVideoPath = await pikaswaps.CompositeWithPromptAsync(
-                    videoUrl, assetUrl, modifyRegion, prompt, render.SurfaceId, ct: cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                var shotStartSec = seg.StartFrame / fps;
+                var shotDurationSec = (seg.EndFrame - seg.StartFrame + 1) / fps;
+                string shotOutputPath;
 
-                if (finalVideoPath == null)
-                    throw new InvalidOperationException("Pikaswaps returned no video for single-chunk render.");
-            }
-            else
-            {
-                var chunkDir = Path.Combine(Path.GetTempPath(), $"bit-chunks-{renderId}");
-                Directory.CreateDirectory(chunkDir);
-
-                await _hubContext.Clients.All.RenderProgress(renderId, 22, "Chunking video");
-                var chunks = await chunker.SplitIntoChunksAsync(videoPath, chunkDir, fps, totalDuration);
-
-                render.Progress = 25;
-                await db.SaveChangesAsync(cancellationToken);
-
-                // Process each chunk through pikaswaps
-                int completed = 0;
-                foreach (var chunk in chunks)
+                if (seg.Status == "Skipped" || seg.Frames.Count == 0)
                 {
-                    await _hubContext.Clients.All.RenderProgress(renderId,
-                        25 + (int)(40.0 * completed / chunks.Count),
-                        $"Compositing chunk {chunk.Index + 1}/{chunks.Count}");
+                    // No detection for this shot — pass the source video through unmodified.
+                    shotOutputPath = Path.Combine(workAbsDir, $"shot_{seg.ShotIndex}_passthrough.mp4");
+                    var passArgs = $"-y -hide_banner -loglevel error " +
+                        $"-ss {shotStartSec:F3} -i \"{videoPath.Replace("\\", "/")}\" " +
+                        $"-t {shotDurationSec:F3} -c copy \"{shotOutputPath.Replace("\\", "/")}\"";
+                    await RunFfmpegAsync(passArgs, cancellationToken);
+                }
+                else
+                {
+                    var shotSourcePath = Path.Combine(workAbsDir, $"shot_{seg.ShotIndex}_src.mp4");
+                    var extractArgs = $"-y -hide_banner -loglevel error " +
+                        $"-ss {shotStartSec:F3} -i \"{videoPath.Replace("\\", "/")}\" " +
+                        $"-t {shotDurationSec:F3} -c copy \"{shotSourcePath.Replace("\\", "/")}\"";
+                    await RunFfmpegAsync(extractArgs, cancellationToken);
 
-                    try
+                    if (shotDurationSec <= 4.75)
                     {
-                        var chunkVideoUrl = $"{videoBaseUrl}/api/content/file/{Path.GetFileName(chunk.SourceChunkPath)}";
+                        var shotVideoUrl = $"{videoBaseUrl}/api/content/file/{workRelDir}/{Path.GetFileName(shotSourcePath)}";
                         var processedPath = await pikaswaps.CompositeWithPromptAsync(
-                            chunkVideoUrl, assetUrl, modifyRegion, prompt, $"{render.SurfaceId}_c{chunk.Index}",
-                            ct: cancellationToken);
-
-                        if (processedPath != null)
-                            chunk.ProcessedChunkPath = processedPath;
-                        else
-                            chunk.Failed = true;
+                            shotVideoUrl, assetUrl, modifyRegion, prompt, $"{render.SurfaceId}_s{seg.ShotIndex}", ct: cancellationToken);
+                        shotOutputPath = processedPath ?? shotSourcePath; // fall back to un-composited shot on failure
                     }
-                    catch
+                    else
                     {
-                        chunk.Failed = true;
-                    }
+                        // Shot exceeds pikaswaps' 4.75s limit — sub-split just this shot's own clip.
+                        var subDir = Path.Combine(workAbsDir, $"shot_{seg.ShotIndex}_sub");
+                        Directory.CreateDirectory(subDir);
+                        var subChunks = await chunker.SplitByShotBoundariesAsync(
+                            shotSourcePath, subDir, fps, new List<(double, double)> { (0, shotDurationSec) });
 
-                    completed++;
+                        foreach (var sub in subChunks)
+                        {
+                            var subUrl = $"{videoBaseUrl}/api/content/file/{workRelDir}/shot_{seg.ShotIndex}_sub/{Path.GetFileName(sub.SourceChunkPath)}";
+                            try
+                            {
+                                var processed = await pikaswaps.CompositeWithPromptAsync(
+                                    subUrl, assetUrl, modifyRegion, prompt, $"{render.SurfaceId}_s{seg.ShotIndex}_c{sub.Index}", ct: cancellationToken);
+                                if (processed != null) sub.ProcessedChunkPath = processed; else sub.Failed = true;
+                            }
+                            catch { sub.Failed = true; }
+                        }
+
+                        shotOutputPath = Path.Combine(workAbsDir, $"shot_{seg.ShotIndex}.mp4");
+                        await chunker.SpliceChunksAsync(subChunks, shotSourcePath, shotOutputPath, fps);
+                        try { Directory.Delete(subDir, true); } catch { }
+                    }
                 }
 
-                // Splice
-                await _hubContext.Clients.All.RenderProgress(renderId, 70, "Splicing chunks");
-                var spliceOutput = Path.Combine(Path.GetTempPath(), $"bit-splice-{renderId}.mp4");
-                finalVideoPath = await chunker.SpliceChunksAsync(chunks, videoPath, spliceOutput, fps);
+                shotChunks.Add(new VideoChunkingService.VideoChunk
+                {
+                    Index = seg.ShotIndex, SourceChunkPath = shotOutputPath,
+                    StartTimeSeconds = shotStartSec, DurationSeconds = shotDurationSec,
+                });
+
+                shotsDone++;
+                var pct = 25 + (int)(55.0 * shotsDone / totalShots);
+                await _hubContext.Clients.All.RenderProgress(renderId, pct, $"Composited shot {shotsDone}/{totalShots}");
             }
 
-            // Phase 4: Drift check with SAM3 video-rle (placeholder — runs SAM3 on output, compares IoU)
-            await _hubContext.Clients.All.RenderProgress(renderId, 85, "QA drift-check");
-            // TODO: Implement full drift-check — re-run SAM3 video-rle on finalVideoPath,
-            // compare per-frame RLE masks to original track_id mask, set NeedsReview if IoU < 0.85
+            // ── Phase 5: Splice shots back into one scene-length clip (80% → 85%) ──
+            await _hubContext.Clients.All.RenderProgress(renderId, 80, "Splicing shots");
+            var finalVideoPath = Path.Combine(workAbsDir, $"spliced_{renderId}.mp4");
+            await chunker.SpliceChunksAsync(shotChunks.OrderBy(c => c.Index).ToList(), videoPath, finalVideoPath, fps);
 
-            // Phase 5: Finalize
+            // ── Phase 6: Drift check (85% → 90%) — re-detect the surface in the composited output
+            // and compare against the pre-composite tracked mask; flags NeedsReview, doesn't fail the render ──
+            await _hubContext.Clients.All.RenderProgress(renderId, 85, "QA drift-check");
+            var driftIoU = await RunDriftCheckAsync(
+                tracker, finalVideoPath, segments, surface.Sam3Prompt, surface.SurfaceType,
+                videoWidth, videoHeight, cancellationToken);
+
+            // ── Phase 7: Finalize ──
             var rendersDir = Path.Combine(Directory.GetCurrentDirectory(), "renders");
             Directory.CreateDirectory(rendersDir);
             var outputPath = Path.Combine(rendersDir, $"BIT_Render_{renderId}.mp4");
+            File.Copy(finalVideoPath, outputPath, overwrite: true);
 
-            if (finalVideoPath != null && File.Exists(finalVideoPath))
-                File.Copy(finalVideoPath, outputPath, overwrite: true);
+            try { Directory.Delete(workAbsDir, true); } catch { }
 
+            var needsReview = trackResult.OverallStatus == "PartialCoverage" || driftIoU < 0.85;
             render.Progress = 100;
-            render.RenderStatus = "Finished";
+            render.RenderStatus = needsReview ? "NeedsReview" : "Finished";
             render.CompositingEngine = "pikaswaps";
             render.QualityTier = "AI";
             render.StorageKey = $"/api/renders/{renderId}/download";
@@ -510,7 +293,7 @@ public class RenderJobService
             await _hubContext.Clients.All.RenderProgress(renderId, 100, "Complete");
 
             await eventLog.LogEventAsync("RenderEngine", "GENERATIVE_RENDER_COMPLETE", "Info",
-                $"Generative render {renderId}: pikaswaps, {sw.Elapsed.TotalSeconds:F1}s");
+                $"Generative render {renderId}: {totalShots} shots ({trackResult.OverallStatus}), driftIoU={driftIoU:F2}, {sw.Elapsed.TotalSeconds:F1}s");
         }
         catch (Exception ex)
         {
@@ -523,6 +306,59 @@ public class RenderJobService
                 $"Render {renderId} failed: {ex.Message}");
             throw;
         }
+    }
+
+    /// <summary>
+    /// Re-detects the surface in the composited output at each shot's seed frame and compares
+    /// its bounding box against the pre-composite tracked mask via IoU. A low score means the
+    /// compositing pass likely drifted off the intended surface. Returns 1.0 (no penalty) if
+    /// there's nothing trackable to compare.
+    /// </summary>
+    private static async Task<double> RunDriftCheckAsync(
+        ISurfaceTrackingService tracker, string finalVideoPath, List<GenerativeShotSegment> segments,
+        string? sam3Prompt, string surfaceType, int videoWidth, int videoHeight, CancellationToken ct)
+    {
+        var ious = new List<double>();
+        var reanchorText = string.IsNullOrWhiteSpace(sam3Prompt) ? $"the {surfaceType}" : sam3Prompt;
+
+        foreach (var seg in segments)
+        {
+            if (seg.Frames.Count == 0) continue;
+
+            var (sampleFrame, sampleRle) = seg.Frames[0];
+            var originalPolygon = RleDecoder.MaskToPolygon(RleDecoder.Decode(sampleRle, videoWidth, videoHeight));
+            if (originalPolygon.Count < 3) continue;
+            var originalBounds = RleDecoder.PolygonBounds(originalPolygon);
+
+            var redetected = await tracker.SegmentVideoRleAsync(
+                finalVideoPath, sampleFrame, sampleFrame, textPrompt: reanchorText, promptFrame: sampleFrame, cancellationToken: ct);
+
+            var obj = redetected.FirstOrDefault(f => f.FrameIndex == sampleFrame)?.Objects
+                .OrderByDescending(o => o.Confidence).FirstOrDefault();
+
+            if (obj == null || string.IsNullOrEmpty(obj.Rle)) { ious.Add(0); continue; }
+
+            var newPolygon = RleDecoder.MaskToPolygon(RleDecoder.Decode(obj.Rle, videoWidth, videoHeight));
+            if (newPolygon.Count < 3) { ious.Add(0); continue; }
+
+            ious.Add(ComputeBoundsIoU(originalBounds, RleDecoder.PolygonBounds(newPolygon)));
+        }
+
+        return ious.Count > 0 ? ious.Average() : 1.0;
+    }
+
+    private static double ComputeBoundsIoU(
+        (int xMin, int yMin, int xMax, int yMax) a, (int xMin, int yMin, int xMax, int yMax) b)
+    {
+        var ix1 = Math.Max(a.xMin, b.xMin); var iy1 = Math.Max(a.yMin, b.yMin);
+        var ix2 = Math.Min(a.xMax, b.xMax); var iy2 = Math.Min(a.yMax, b.yMax);
+        double interArea = Math.Max(0, ix2 - ix1) * (double)Math.Max(0, iy2 - iy1);
+
+        double areaA = Math.Max(0, a.xMax - a.xMin) * (double)Math.Max(0, a.yMax - a.yMin);
+        double areaB = Math.Max(0, b.xMax - b.xMin) * (double)Math.Max(0, b.yMax - b.yMin);
+        var union = areaA + areaB - interArea;
+
+        return union > 0 ? interArea / union : 0;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -538,6 +374,8 @@ public class RenderJobService
         var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
         var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
         var planar = scope.ServiceProvider.GetRequiredService<PlanarWarpCompositingService>();
+        var chunker = scope.ServiceProvider.GetRequiredService<VideoChunkingService>();
+        var shotTracker = scope.ServiceProvider.GetRequiredService<IShotAwareTrackingService>();
 
         var render = await db.Renders.FindAsync(new object[] { renderId }, cancellationToken);
         if (render == null) return;
@@ -547,6 +385,9 @@ public class RenderJobService
             render.Progress = 5; render.RenderStatus = "Processing";
             await db.SaveChangesAsync(cancellationToken);
             await _hubContext.Clients.All.RenderProgress(renderId, 5, "Validating");
+
+            if (string.IsNullOrEmpty(render.SurfaceId))
+                throw new InvalidOperationException("ProcessPlanarRenderJob requires a SurfaceId (Interactive placement only — PromptEdit renders use ProcessPromptPreviewJob).");
 
             var content = await db.ContentItems.FindAsync(new object[] { render.ContentId }, cancellationToken);
             var surface = await db.SurfaceItems.FindAsync(new object[] { render.SurfaceId }, cancellationToken);
@@ -561,82 +402,137 @@ public class RenderJobService
 
             var fps = content.FrameRate > 0 ? content.FrameRate : 30;
 
-            // Parse per-frame quad data from TrackingDataJson
-            var frameQuads = ParseFrameQuads(surface.TrackingDataJson ?? surface.BoundaryCoordinatesJson);
-            if (frameQuads.Count == 0)
-                throw new InvalidOperationException("No quad coordinates available for planar warp.");
+            // ── Phase 2: Shot-aware quad tracking (5% → 25%) — re-anchors at every cut within the scene ──
+            await _hubContext.Clients.All.RenderProgress(renderId, 10, "Tracking across shots");
 
-            render.Progress = 15;
+            var seedQuad = ParsePoints(surface.BoundaryCoordinatesJson);
+            if (seedQuad.Count < 4)
+                throw new InvalidOperationException("Surface has no valid seed quad to track.");
+
+            var trackResult = await shotTracker.TrackQuadAcrossShotsAsync(
+                surface.SceneId, videoPath, seedQuad, surface.DetectedAtFrame ?? 0,
+                surface.Sam3Prompt, surface.SurfaceType, cancellationToken);
+
+            surface.TrackingDataJson = trackResult.TrackingDataJson;
+            surface.TrackingPointsJson = trackResult.TrackingPointsJson;
+            surface.TrackingStatus = trackResult.OverallStatus;
             await db.SaveChangesAsync(cancellationToken);
-            await _hubContext.Clients.All.RenderProgress(renderId, 15, "Extracting frames");
 
-            // Phase 2: Extract video frames
-            var rendersDir = Path.Combine(Directory.GetCurrentDirectory(), "renders");
-            Directory.CreateDirectory(rendersDir);
-            var frameDir = Path.Combine(rendersDir, $"planar_frames_{renderId}");
-            Directory.CreateDirectory(frameDir);
+            if (trackResult.OverallStatus == "LockLost")
+                throw new InvalidOperationException(
+                    "Shot-aware tracking lost the surface in its seed shot (or every shot in the scene was skipped) — nothing to render.");
 
-            var safeVideo = videoPath.Replace("\\", "/");
-            var safeFrameDir = frameDir.Replace("\\", "/");
-            var totalFrames = frameQuads.Count;
-
-            // Extract all frames
-            var extractArgs = $"-y -hide_banner -loglevel error " +
-                $"-i \"{safeVideo}\" -vf fps={fps} \"{safeFrameDir}/raw_%06d.png\"";
-            await RunFfmpegAsync(extractArgs, cancellationToken);
+            var segments = ParsePlanarShotSegments(trackResult.TrackingDataJson);
+            if (segments.Count == 0)
+                throw new InvalidOperationException("No shot segments available for planar warp.");
 
             render.Progress = 25;
             await db.SaveChangesAsync(cancellationToken);
 
-            // Phase 3: Per-frame warp + relight + composite
-            var processedCount = 0;
-            var parallelOpts = new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = cancellationToken };
+            // ── Phase 3: Per-shot extraction + compositing (25% → 80%) ──
+            var rendersDir = Path.Combine(Directory.GetCurrentDirectory(), "renders");
+            Directory.CreateDirectory(rendersDir);
+            var workDir = Path.Combine(rendersDir, $"planar_{renderId}");
+            Directory.CreateDirectory(workDir);
 
-            await Parallel.ForEachAsync(frameQuads, parallelOpts, async (item, ct) =>
+            var shotChunks = new List<VideoChunkingService.VideoChunk>();
+            var totalShots = segments.Count;
+            var shotsDone = 0;
+
+            foreach (var seg in segments)
             {
-                var rawPath = Path.Combine(frameDir, $"raw_{item.frameIndex:D6}.png");
-                if (!File.Exists(rawPath)) return;
+                cancellationToken.ThrowIfCancellationRequested();
+                var shotStartSec = seg.StartFrame / fps;
+                var shotDurationSec = (seg.EndFrame - seg.StartFrame + 1) / fps;
 
-                var compPath = Path.Combine(frameDir, $"comp_{item.frameIndex:D6}.png");
-                var quadCorners = item.corners.Select(c => ((double)c.x, (double)c.y)).ToList();
-
-                var ok = await planar.CompositeFrameAsync(rawPath, assetPath, quadCorners, compPath);
-                if (!ok) return;
-
-                // Relight
-                var wall = planar.ComputeWallRegion(quadCorners, content.Width, content.Height);
-                var relitPath = Path.Combine(frameDir, $"relit_{item.frameIndex:D6}.png");
-                await planar.RelightFrameAsync(compPath, rawPath, wall, relitPath);
-
-                // Move relit over comp
-                if (File.Exists(relitPath))
+                if (seg.Status == "Skipped" || seg.Frames.Count == 0)
                 {
-                    File.Delete(compPath);
-                    File.Move(relitPath, compPath);
+                    // No tracking data for this shot — pass the source video through unmodified.
+                    var passThroughPath = Path.Combine(workDir, $"shot_{seg.ShotIndex}_passthrough.mp4");
+                    var passArgs = $"-y -hide_banner -loglevel error " +
+                        $"-ss {shotStartSec:F3} -i \"{videoPath.Replace("\\", "/")}\" " +
+                        $"-t {shotDurationSec:F3} -c copy \"{passThroughPath.Replace("\\", "/")}\"";
+                    await RunFfmpegAsync(passArgs, cancellationToken);
+                    shotChunks.Add(new VideoChunkingService.VideoChunk
+                    {
+                        Index = seg.ShotIndex, SourceChunkPath = passThroughPath,
+                        StartTimeSeconds = shotStartSec, DurationSeconds = shotDurationSec,
+                    });
+                }
+                else
+                {
+                    var shotFrameDir = Path.Combine(workDir, $"shot_{seg.ShotIndex}_frames");
+                    Directory.CreateDirectory(shotFrameDir);
+                    var safeShotDir = shotFrameDir.Replace("\\", "/");
+
+                    var extractArgs = $"-y -hide_banner -loglevel error " +
+                        $"-ss {shotStartSec:F3} -i \"{videoPath.Replace("\\", "/")}\" " +
+                        $"-t {shotDurationSec:F3} -vf fps={fps} \"{safeShotDir}/raw_%06d.png\"";
+                    await RunFfmpegAsync(extractArgs, cancellationToken);
+
+                    var quadByFrame = seg.Frames.ToDictionary(f => f.frame, f => f.corners);
+                    var frameCount = (int)Math.Round(shotDurationSec * (double)fps);
+                    var parallelOpts = new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = cancellationToken };
+
+                    await Parallel.ForEachAsync(Enumerable.Range(1, Math.Max(frameCount, 1)), parallelOpts, async (relFrame, ct) =>
+                    {
+                        var rawPath = Path.Combine(shotFrameDir, $"raw_{relFrame:D6}.png");
+                        if (!File.Exists(rawPath)) return;
+
+                        var compPath = Path.Combine(shotFrameDir, $"comp_{relFrame:D6}.png");
+                        var absFrame = seg.StartFrame + (relFrame - 1);
+
+                        if (!quadByFrame.TryGetValue(absFrame, out var corners) || corners.Count < 4)
+                        {
+                            // Occlusion mid-shot or gap — pass this single frame through unmodified.
+                            File.Copy(rawPath, compPath, overwrite: true);
+                            return;
+                        }
+
+                        var quadCorners = corners.Select(c => ((double)c.x, (double)c.y)).ToList();
+                        var ok = await planar.CompositeFrameAsync(rawPath, assetPath, quadCorners, compPath);
+                        if (!ok) { File.Copy(rawPath, compPath, overwrite: true); return; }
+
+                        var wall = planar.ComputeWallRegion(quadCorners, content.Width, content.Height);
+                        var relitPath = Path.Combine(shotFrameDir, $"relit_{relFrame:D6}.png");
+                        await planar.RelightFrameAsync(compPath, rawPath, wall, relitPath);
+                        if (File.Exists(relitPath))
+                        {
+                            File.Delete(compPath);
+                            File.Move(relitPath, compPath);
+                        }
+                    });
+
+                    var shotOutputPath = Path.Combine(workDir, $"shot_{seg.ShotIndex}.mp4");
+                    await planar.EncodeToMp4Async(shotFrameDir, shotOutputPath, fps);
+                    shotChunks.Add(new VideoChunkingService.VideoChunk
+                    {
+                        Index = seg.ShotIndex, SourceChunkPath = shotOutputPath,
+                        StartTimeSeconds = shotStartSec, DurationSeconds = shotDurationSec,
+                    });
+
+                    try { Directory.Delete(shotFrameDir, true); } catch { }
                 }
 
-                var done = Interlocked.Increment(ref processedCount);
-                if (done % 10 == 0 || done == totalFrames)
-                {
-                    var pct = 25 + (int)(60.0 * done / totalFrames);
-                    await _hubContext.Clients.All.RenderProgress(renderId, pct,
-                        $"Composited {done}/{totalFrames} frames");
-                }
-            });
+                shotsDone++;
+                var pct = 25 + (int)(55.0 * shotsDone / totalShots);
+                await _hubContext.Clients.All.RenderProgress(renderId, pct, $"Composited shot {shotsDone}/{totalShots}");
+            }
 
-            // Phase 4: Encode to MP4
-            render.Progress = 90;
+            // ── Phase 4: Splice shots back into one scene-length clip (80% → 100%) ──
+            render.Progress = 85;
             await db.SaveChangesAsync(cancellationToken);
-            await _hubContext.Clients.All.RenderProgress(renderId, 90, "Encoding video");
+            await _hubContext.Clients.All.RenderProgress(renderId, 85, "Splicing shots");
 
             var outputPath = Path.Combine(rendersDir, $"BIT_Render_{renderId}.mp4");
-            await planar.EncodeToMp4Async(frameDir, outputPath, fps);
+            await chunker.SpliceChunksAsync(
+                shotChunks.OrderBy(c => c.Index).ToList(), videoPath, outputPath, fps);
 
             // Cleanup
-            try { Directory.Delete(frameDir, true); } catch { }
+            try { Directory.Delete(workDir, true); } catch { }
 
             render.Progress = 100;
-            render.RenderStatus = "Finished";
+            render.RenderStatus = trackResult.OverallStatus == "PartialCoverage" ? "NeedsReview" : "Finished";
             render.CompositingEngine = "PlanarWarp";
             render.QualityTier = "Exact";
             render.StorageKey = $"/api/renders/{renderId}/download";
@@ -645,7 +541,7 @@ public class RenderJobService
             await _hubContext.Clients.All.RenderProgress(renderId, 100, "Complete");
 
             await eventLog.LogEventAsync("RenderEngine", "PLANAR_RENDER_COMPLETE", "Info",
-                $"Planar render {renderId}: {totalFrames} frames in {sw.Elapsed.TotalSeconds:F1}s");
+                $"Planar render {renderId}: {totalShots} shots ({trackResult.OverallStatus}) in {sw.Elapsed.TotalSeconds:F1}s");
         }
         catch (Exception ex)
         {
@@ -662,54 +558,426 @@ public class RenderJobService
 
     // ── Helpers for new render jobs ──
 
-    private static List<(int frameIndex, List<(int x, int y)> corners)> ParseFrameQuads(string trackingDataJson)
+    /// <summary>One shot's tracking outcome, parsed from the shot-segmented TrackingDataJson.</summary>
+    private class PlanarShotSegment
     {
-        var result = new List<(int, List<(int, int)>)>();
+        public int ShotIndex { get; set; }
+        public int StartFrame { get; set; }
+        public int EndFrame { get; set; }
+        public string Status { get; set; } = "Skipped";
+        public List<(int frame, List<(int x, int y)> corners)> Frames { get; set; } = new();
+    }
+
+    private static List<(int x, int y)> ParsePoints(string json)
+    {
+        var result = new List<(int, int)>();
         try
         {
-            using var doc = JsonDocument.Parse(trackingDataJson);
-            foreach (var frame in doc.RootElement.EnumerateArray())
+            using var doc = JsonDocument.Parse(json);
+            foreach (var pt in doc.RootElement.EnumerateArray())
             {
-                var fi = frame.TryGetProperty("frame", out var f) ? f.GetInt32() : 0;
-                var corners = new List<(int, int)>();
-                if (frame.TryGetProperty("corners", out var c))
-                {
-                    foreach (var pt in c.EnumerateArray())
-                    {
-                        int x = 0, y = 0;
-                        if (pt.TryGetProperty("x", out var px)) x = px.GetInt32();
-                        if (pt.TryGetProperty("y", out var py)) y = py.GetInt32();
-                        corners.Add((x, y));
-                    }
-                }
-                if (corners.Count >= 4)
-                    result.Add((fi, corners));
+                int x = pt.TryGetProperty("x", out var px) ? px.GetInt32() : pt.TryGetProperty("X", out var pX) ? pX.GetInt32() : 0;
+                int y = pt.TryGetProperty("y", out var py) ? py.GetInt32() : pt.TryGetProperty("Y", out var pY) ? pY.GetInt32() : 0;
+                result.Add((x, y));
             }
         }
         catch { }
         return result;
     }
 
-    private static async Task<double> GetVideoDurationAsync(string videoPath, CancellationToken ct)
+    /// <summary>
+    /// Parse ShotAwareTrackingService's shot-segmented TrackingDataJson into per-shot quad data.
+    /// Falls back to treating a legacy flat frame array (pre-shot-aware surfaces) as one segment.
+    /// </summary>
+    private static List<PlanarShotSegment> ParsePlanarShotSegments(string trackingDataJson)
     {
+        var result = new List<PlanarShotSegment>();
         try
         {
-            using var process = new Process
+            using var doc = JsonDocument.Parse(trackingDataJson);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("shotSegments", out var segs))
             {
-                StartInfo = new ProcessStartInfo
+                foreach (var seg in segs.EnumerateArray())
                 {
-                    FileName = "ffprobe",
-                    Arguments = $"-v error -show_entries format=duration -of csv=p=0 \"{videoPath}\"",
-                    UseShellExecute = false, CreateNoWindow = true,
-                    RedirectStandardOutput = true, RedirectStandardError = true,
-                },
-            };
-            process.Start();
-            var output = await process.StandardOutput.ReadToEndAsync(ct);
-            await process.WaitForExitAsync(ct);
-            if (double.TryParse(output.Trim(), out var d)) return d;
+                    var parsed = new PlanarShotSegment
+                    {
+                        ShotIndex = seg.TryGetProperty("shotIndex", out var si) ? si.GetInt32() : 0,
+                        StartFrame = seg.TryGetProperty("startFrame", out var sf) ? sf.GetInt32() : 0,
+                        EndFrame = seg.TryGetProperty("endFrame", out var ef) ? ef.GetInt32() : 0,
+                        Status = seg.TryGetProperty("status", out var st) ? (st.GetString() ?? "Skipped") : "Skipped",
+                    };
+
+                    if (seg.TryGetProperty("frames", out var frames))
+                    {
+                        foreach (var frame in frames.EnumerateArray())
+                            AddQuadFrame(parsed.Frames, frame);
+                    }
+                    result.Add(parsed);
+                }
+                return result;
+            }
+
+            // Legacy flat-array fallback (surfaces tracked before shot-aware tracking existed).
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                var legacyFrames = new List<(int frame, List<(int x, int y)> corners)>();
+                foreach (var frame in root.EnumerateArray())
+                    AddQuadFrame(legacyFrames, frame);
+
+                if (legacyFrames.Count > 0)
+                {
+                    result.Add(new PlanarShotSegment
+                    {
+                        ShotIndex = 0,
+                        StartFrame = legacyFrames.Min(f => f.frame),
+                        EndFrame = legacyFrames.Max(f => f.frame),
+                        Status = "Tracked",
+                        Frames = legacyFrames,
+                    });
+                }
+            }
         }
         catch { }
-        return 0;
+        return result;
+    }
+
+    private static void AddQuadFrame(List<(int frame, List<(int x, int y)> corners)> into, JsonElement frame)
+    {
+        var fi = frame.TryGetProperty("frame", out var f) ? f.GetInt32() : 0;
+        var corners = new List<(int x, int y)>();
+        if (frame.TryGetProperty("corners", out var c))
+        {
+            foreach (var pt in c.EnumerateArray())
+            {
+                int x = pt.TryGetProperty("x", out var px) ? px.GetInt32() : 0;
+                int y = pt.TryGetProperty("y", out var py) ? py.GetInt32() : 0;
+                corners.Add((x, y));
+            }
+        }
+        if (corners.Count >= 4) into.Add((fi, corners));
+    }
+
+    /// <summary>One shot's tracking outcome for the Generative path (raw RLE per frame, not a fitted quad).</summary>
+    private class GenerativeShotSegment
+    {
+        public int ShotIndex { get; set; }
+        public int StartFrame { get; set; }
+        public int EndFrame { get; set; }
+        public string Status { get; set; } = "Skipped";
+        public List<(int frame, string rle)> Frames { get; set; } = new();
+    }
+
+    /// <summary>Parse ShotAwareTrackingService's shot-segmented TrackingDataJson for the Generative path.</summary>
+    private static List<GenerativeShotSegment> ParseGenerativeShotSegments(string trackingDataJson)
+    {
+        var result = new List<GenerativeShotSegment>();
+        try
+        {
+            using var doc = JsonDocument.Parse(trackingDataJson);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("shotSegments", out var segs))
+                return result;
+
+            foreach (var seg in segs.EnumerateArray())
+            {
+                var parsed = new GenerativeShotSegment
+                {
+                    ShotIndex = seg.TryGetProperty("shotIndex", out var si) ? si.GetInt32() : 0,
+                    StartFrame = seg.TryGetProperty("startFrame", out var sf) ? sf.GetInt32() : 0,
+                    EndFrame = seg.TryGetProperty("endFrame", out var ef) ? ef.GetInt32() : 0,
+                    Status = seg.TryGetProperty("status", out var st) ? (st.GetString() ?? "Skipped") : "Skipped",
+                };
+
+                if (seg.TryGetProperty("frames", out var frames))
+                {
+                    foreach (var frame in frames.EnumerateArray())
+                    {
+                        var fi = frame.TryGetProperty("frame", out var f) ? f.GetInt32() : 0;
+                        var rle = frame.TryGetProperty("rle", out var r) ? r.GetString() ?? string.Empty : string.Empty;
+                        if (!string.IsNullOrEmpty(rle)) parsed.Frames.Add((fi, rle));
+                    }
+                }
+                result.Add(parsed);
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Interactive Placement — Prompt-Based Path (Kling O1)
+    //
+    // No SurfaceItem, no click/quad geometry, no SAM3 shot-aware tracking — the AI model infers
+    // placement purely from a free-text prompt + the asset image. Two-phase, human-in-the-loop:
+    // ProcessPromptPreviewJob generates a preview and stops (RenderStatus "PreviewReady"); only
+    // ProcessPromptSpliceJob (enqueued by a separate user approval) commits it into the final video.
+    // ═══════════════════════════════════════════════════════════════
+
+    [AutomaticRetry(Attempts = 1, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
+    [DisableConcurrentExecution(timeoutInSeconds: 1800)]
+    public async Task ProcessPromptPreviewJob(string renderId, CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+        using var scope = _serviceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
+        var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
+        var kling = scope.ServiceProvider.GetRequiredService<KlingPromptEditService>();
+        var chunker = scope.ServiceProvider.GetRequiredService<VideoChunkingService>();
+        var platformSettings = scope.ServiceProvider.GetRequiredService<IPlatformSettingsService>();
+
+        var render = await db.Renders.FindAsync(new object[] { renderId }, cancellationToken);
+        if (render == null) return;
+
+        try
+        {
+            // Phase 1: Validate (5% → 10%)
+            render.Progress = 5; render.RenderStatus = "Processing";
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 5, "Validating");
+
+            if (string.IsNullOrEmpty(render.SceneId))
+                throw new InvalidOperationException("ProcessPromptPreviewJob requires a SceneId.");
+            if (string.IsNullOrEmpty(render.PromptText))
+                throw new InvalidOperationException("ProcessPromptPreviewJob requires PromptText.");
+
+            var content = await db.ContentItems.FindAsync(new object[] { render.ContentId }, cancellationToken);
+            var scene = await db.SceneItems.FindAsync(new object[] { render.SceneId }, cancellationToken);
+            var asset = await db.CreativeAssets.FindAsync(new object[] { render.AssetId }, cancellationToken);
+            if (content == null || scene == null || asset == null)
+                throw new InvalidOperationException("Content, scene, or asset not found.");
+
+            // Re-validate duration server-side — belt-and-suspenders alongside the controller's
+            // own check, same pattern as the existing jobs re-checking File.Exists.
+            if (scene.DurationSeconds < KlingPromptEditService.MinPromptEditDurationSeconds ||
+                scene.DurationSeconds > KlingPromptEditService.MaxPromptEditDurationSeconds)
+                throw new InvalidOperationException(
+                    $"Scene duration {scene.DurationSeconds:F1}s is outside the allowed " +
+                    $"{KlingPromptEditService.MinPromptEditDurationSeconds}-{KlingPromptEditService.MaxPromptEditDurationSeconds}s window for AI-generated placement.");
+
+            var assetPath = ResolveAssetPath(asset.StorageKey);
+            if (!File.Exists(assetPath))
+                throw new InvalidOperationException("Asset file not found.");
+
+            var videoBaseUrl = await platformSettings.GetAsync("sam3_video_base_url", "http://localhost:57220");
+            var assetFileName = Path.GetFileName(assetPath);
+            var assetUrl = $"{videoBaseUrl}/api/assets/file/{assetFileName}";
+
+            render.Progress = 10;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 10, "Extracting scene clip");
+
+            // ── Extract the scene's own clip (10% → 20%) — no shot chunking, one clip, one call ──
+            var workDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "tmp-renders", renderId);
+            Directory.CreateDirectory(workDir);
+            var sceneClipPath = Path.Combine(workDir, "scene_src.mp4");
+            await chunker.ExtractSceneClipAsync(scene, content, sceneClipPath, cancellationToken,
+                maxDimension: KlingPromptEditService.MaxPromptEditResolutionPx);
+            var sceneClipUrl = $"{videoBaseUrl}/api/content/file/tmp-renders/{renderId}/scene_src.mp4";
+
+            render.Progress = 20;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 20, "Generating with Kling O1");
+
+            // ── Call Kling O1 (20% → 85%) — single call, no per-shot loop, no SAM3 tracking ──
+            var previewPath = await kling.EditWithPromptAsync(
+                sceneClipUrl, assetUrl, render.PromptText, renderId, ct: cancellationToken);
+
+            if (previewPath == null)
+                throw new InvalidOperationException("Kling O1 did not return a generated video.");
+
+            render.Progress = 85;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 85, "Saving preview");
+
+            // ── Stop for preview (85% → 90%) — the job ends here. No splice, no Finished status. ──
+            var rendersDir = Path.Combine(Directory.GetCurrentDirectory(), "renders");
+            Directory.CreateDirectory(rendersDir);
+            var previewDestPath = Path.Combine(rendersDir, $"BIT_Preview_{renderId}.mp4");
+            File.Copy(previewPath, previewDestPath, overwrite: true);
+
+            render.PreviewStorageKey = $"/api/renders/{renderId}/preview";
+            render.RenderStatus = "PreviewReady";
+            render.Progress = 90;
+            render.ProcessingDurationMs = (int)sw.ElapsedMilliseconds;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 90, "Preview ready — awaiting approval");
+
+            await eventLog.LogEventAsync("RenderEngine", "PROMPT_PREVIEW_COMPLETE", "Info",
+                $"Prompt preview {renderId}: scene {scene.Id} in {sw.Elapsed.TotalSeconds:F1}s");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PromptPreview] Render {RenderId} FAILED", renderId);
+            render.RenderStatus = "Failed";
+            render.LastErrorMessage = ex.Message;
+            await db.SaveChangesAsync(cancellationToken);
+            await eventLog.LogEventAsync("RenderEngine", "PROMPT_PREVIEW_FAILED", "Warning",
+                $"Render {renderId} failed: {ex.Message}");
+            // A guard-check failure can throw before any progress push above ever fires — without
+            // this, a connected client has no live signal that the job died and is stuck showing
+            // whatever phase it last saw (e.g. "Generating...") indefinitely until a manual refresh.
+            await _hubContext.Clients.All.RenderProgress(renderId, render.Progress, "Failed");
+            throw;
+        }
+    }
+
+    [AutomaticRetry(Attempts = 1, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
+    [DisableConcurrentExecution(timeoutInSeconds: 1800)]
+    public async Task ProcessPromptSpliceJob(string renderId, CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+        using var scope = _serviceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
+        var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
+
+        var render = await db.Renders.FindAsync(new object[] { renderId }, cancellationToken);
+        if (render == null) return;
+
+        try
+        {
+            // ApproveSpliceAsync always flips status to "Processing" before enqueueing this job
+            // (closing the double-click race window), so "Processing" — not "PreviewReady" — is
+            // the correct expected state here.
+            if (render.RenderStatus != "Processing")
+                throw new InvalidOperationException(
+                    $"Render '{renderId}' is not awaiting approval (status: '{render.RenderStatus}').");
+            if (string.IsNullOrEmpty(render.SceneId))
+                throw new InvalidOperationException("ProcessPromptSpliceJob requires a SceneId.");
+
+            var content = await db.ContentItems.FindAsync(new object[] { render.ContentId }, cancellationToken);
+            var scene = await db.SceneItems.FindAsync(new object[] { render.SceneId }, cancellationToken);
+            if (content == null || scene == null)
+                throw new InvalidOperationException("Content or scene not found.");
+
+            var videoPath = ResolveVideoPath(content.StorageKey);
+            if (videoPath == null || !File.Exists(videoPath))
+                throw new InvalidOperationException("Source video file not found.");
+
+            var previewPath = Path.Combine(Directory.GetCurrentDirectory(), "renders", $"BIT_Preview_{renderId}.mp4");
+            if (!File.Exists(previewPath))
+                throw new InvalidOperationException("Approved preview clip not found on disk.");
+
+            render.Progress = 90; render.RenderStatus = "Processing";
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 90, "Preparing final splice");
+
+            var fps = content.FrameRate > 0 ? content.FrameRate : 30;
+            var (videoWidth, videoHeight) = VideoProbe.GetDimensions(videoPath);
+
+            var workDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "tmp-renders", renderId);
+            Directory.CreateDirectory(workDir);
+
+            // ── Normalize the Kling clip to match the source's resolution/fps (90% → 95%) ──
+            // Kling O1's output resolution/fps won't match the source; ffmpeg concat with -c copy
+            // (used below) requires matching stream parameters across every segment.
+            var normalizedPath = Path.Combine(workDir, "preview_normalized.mp4");
+            await RunFfmpegAsync(
+                $"-y -hide_banner -loglevel error -i \"{previewPath.Replace("\\", "/")}\" " +
+                $"-vf \"scale={videoWidth}:{videoHeight},setsar=1\" -r {fps:F3} " +
+                $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -an " +
+                $"\"{normalizedPath.Replace("\\", "/")}\"",
+                cancellationToken);
+
+            render.Progress = 95;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 95, "Splicing into full video");
+
+            // ── Splice the normalized clip into the full source in place of the original scene span (95% → 98%) ──
+            var outputPath = Path.Combine(Directory.GetCurrentDirectory(), "renders", $"BIT_Render_{renderId}.mp4");
+            await SpliceSceneReplacementAsync(videoPath, normalizedPath, scene, fps, videoWidth, videoHeight, workDir, outputPath, cancellationToken);
+
+            render.Progress = 100;
+            render.RenderStatus = "Finished";
+            render.CompositingEngine = "kling-o1-edit";
+            render.QualityTier = "AI";
+            render.StorageKey = $"/api/renders/{renderId}/download";
+            render.ProcessingDurationMs += (int)sw.ElapsedMilliseconds;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 100, "Complete");
+
+            await eventLog.LogEventAsync("RenderEngine", "PROMPT_SPLICE_COMPLETE", "Info",
+                $"Prompt splice {renderId}: scene {scene.Id} in {sw.Elapsed.TotalSeconds:F1}s");
+
+            try { Directory.Delete(workDir, true); } catch { }
+            try { File.Delete(previewPath); } catch { }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[PromptSplice] Render {RenderId} FAILED", renderId);
+            render.RenderStatus = "Failed";
+            render.LastErrorMessage = ex.Message;
+            await db.SaveChangesAsync(cancellationToken);
+            await eventLog.LogEventAsync("RenderEngine", "PROMPT_SPLICE_FAILED", "Warning",
+                $"Render {renderId} failed: {ex.Message}");
+            // See the matching comment in ProcessPromptPreviewJob's catch block — a guard-check
+            // failure here throws before the first progress push, so without this the approving
+            // client never learns the splice died.
+            await _hubContext.Clients.All.RenderProgress(renderId, render.Progress, "Failed");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Splice a single normalized clip into the full source video in place of one scene's frame
+    /// span: [0, sceneStart) + clip + (sceneEnd, videoEnd]. Deliberately not routed through
+    /// VideoChunkingService.SpliceChunksAsync — that method tiles a video into consecutive
+    /// shot-aligned chunks, which doesn't fit "replace exactly one scene, keep everything else
+    /// untouched" (this flow has no shots/tracking data to chunk against).
+    ///
+    /// v1 limitation: all three segments are re-encoded audio-free (-an). ffmpeg's concat demuxer
+    /// with -c copy requires every segment to share identical stream layouts, and the Kling clip's
+    /// audio (if any) can't be guaranteed to match the source's codec/sample rate — muting
+    /// uniformly is the reliable choice for a first version. Audio preservation for prompt-edited
+    /// scenes is a documented follow-up, not silently half-implemented here.
+    /// </summary>
+    private static async Task SpliceSceneReplacementAsync(
+        string sourceVideoPath, string normalizedClipPath, SceneItem scene, double fps,
+        int videoWidth, int videoHeight, string workDir, string outputPath, CancellationToken ct)
+    {
+        var sceneStart = scene.StartFrame / fps;
+        var sceneEnd = scene.EndFrame / fps;
+        var totalDuration = VideoProbe.GetDurationSeconds(sourceVideoPath);
+
+        var hasBefore = sceneStart > 0.05;
+        var hasAfter = totalDuration > 0 && sceneEnd < totalDuration - 0.05;
+
+        var beforePath = Path.Combine(workDir, "splice_before.mp4");
+        var afterPath = Path.Combine(workDir, "splice_after.mp4");
+
+        if (hasBefore)
+        {
+            await RunFfmpegAsync(
+                $"-y -hide_banner -loglevel error -i \"{sourceVideoPath.Replace("\\", "/")}\" -t {sceneStart:F3} " +
+                $"-vf \"scale={videoWidth}:{videoHeight},setsar=1\" -r {fps:F3} " +
+                $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -an " +
+                $"\"{beforePath.Replace("\\", "/")}\"",
+                ct);
+        }
+
+        if (hasAfter)
+        {
+            await RunFfmpegAsync(
+                $"-y -hide_banner -loglevel error -ss {sceneEnd:F3} -i \"{sourceVideoPath.Replace("\\", "/")}\" " +
+                $"-vf \"scale={videoWidth}:{videoHeight},setsar=1\" -r {fps:F3} " +
+                $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -an " +
+                $"\"{afterPath.Replace("\\", "/")}\"",
+                ct);
+        }
+
+        var concatListPath = Path.Combine(workDir, "concat_scene_splice.txt");
+        var lines = new List<string>();
+        if (hasBefore) lines.Add($"file '{beforePath.Replace("\\", "/")}'");
+        lines.Add($"file '{normalizedClipPath.Replace("\\", "/")}'");
+        if (hasAfter) lines.Add($"file '{afterPath.Replace("\\", "/")}'");
+        await File.WriteAllLinesAsync(concatListPath, lines, ct);
+
+        await RunFfmpegAsync(
+            $"-y -hide_banner -loglevel error -f concat -safe 0 -i \"{concatListPath.Replace("\\", "/")}\" " +
+            $"-c copy \"{outputPath.Replace("\\", "/")}\"",
+            ct);
+
+        try { File.Delete(concatListPath); } catch { }
     }
 }

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 using Hangfire;
@@ -10,6 +11,14 @@ using Afrobotics.Bit.Api.Data;
 using Afrobotics.Bit.Api.Hubs;
 using Afrobotics.Bit.Api.Repositories;
 using Afrobotics.Bit.Api.Services;
+
+// Many services shell out to ffmpeg/ffprobe with decimal args built via string interpolation
+// (e.g. "-ss {value:F3}"), which uses the current thread culture unless told otherwise. On a
+// host whose locale uses ',' as the decimal separator (e.g. en-ZA), that produces invalid
+// ffmpeg syntax ("2,000" instead of "2.000") and every such command silently fails. Force
+// invariant culture process-wide — this is a backend API with no locale-dependent UI text.
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,7 +41,10 @@ builder.Services.AddControllers()
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
     ?? "Host=localhost;Database=afrobotics_bit;Username=postgres;Password=Password@1";
 builder.Services.AddDbContext<PostgresDbContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseNpgsql(connectionString, npgsql =>
+        // Default (30s) is too short for batched saves of many large rows at once (e.g.
+        // persisting SAM3 embeddings for every shot in a video with many camera cuts).
+        npgsql.CommandTimeout(120)));
 
 // Add CORS Policy for Vue.js Frontend client interaction
 builder.Services.AddCors(options =>
@@ -115,24 +127,23 @@ builder.Services.AddScoped<GeminiDetectionService>();
 builder.Services.AddScoped<GeminiPlacementService>();
 builder.Services.AddScoped<FalAiSam2Service>();
 builder.Services.AddScoped<FalAiSam3Service>();
+builder.Services.AddScoped<FalAiImageEmbedService>();
+builder.Services.AddScoped<ShotClusteringService>();
+builder.Services.AddScoped<ShotDetectionPipeline>();
 builder.Services.AddScoped<ReplicateSurfaceDetectionService>();
 builder.Services.AddScoped<GoogleVisionDetectionService>();
 builder.Services.AddScoped<YoloSurfaceDetectionService>();
 builder.Services.AddScoped<GroundingDinoDetectionService>();
-builder.Services.AddScoped<BasicSurfaceDetectionService>();
 builder.Services.AddScoped<GoogleVisionBrandAnalysisService>();
 builder.Services.AddScoped<GeminiBrandAnalysisService>();
-builder.Services.AddScoped<BasicBrandAnalysisService>();
 builder.Services.AddScoped<OpenCvCompositingService>();
-builder.Services.AddScoped<BasicCompositingService>();
 builder.Services.AddScoped<PikaswapsCompositingService>();
 builder.Services.AddScoped<PlanarWarpCompositingService>();
 builder.Services.AddScoped<VideoChunkingService>();
-builder.Services.AddScoped<PointTrackingService>();
+builder.Services.AddScoped<KlingPromptEditService>();
 
 // ── Phase 3: Surface tracking engine ──
 builder.Services.AddScoped<Sam3TrackingService>();
-builder.Services.AddScoped<BasicTrackingService>();
 
 builder.Services.AddScoped<IEngineFactory, EngineFactory>();
 builder.Services.AddScoped<SurfaceDetectionPipeline>();
@@ -142,6 +153,10 @@ builder.Services.AddScoped<ISurfaceDetectionService>(sp => sp.GetRequiredService
 builder.Services.AddScoped<IBrandAnalysisService>(sp => sp.GetRequiredService<IEngineFactory>().GetBrandAnalysisEngine());
 builder.Services.AddScoped<ICompositingService>(sp => sp.GetRequiredService<IEngineFactory>().GetCompositingEngine());
 builder.Services.AddScoped<ISurfaceTrackingService>(sp => sp.GetRequiredService<IEngineFactory>().GetTrackingEngine());
+
+// Shot-aware tracking: tracks a placement across every shot/cut within its scene, standardizing
+// both Planar and Generative paths on fal-ai/sam-3/video-rle via the resolved ISurfaceTrackingService.
+builder.Services.AddScoped<IShotAwareTrackingService, ShotAwareTrackingService>();
 
 // Brand-safety check pipeline (MReq 4)
 builder.Services.AddScoped<IBrandSafetyCheckService, BrandSafetyCheckService>();
@@ -164,7 +179,6 @@ builder.Services.AddScoped<IPlatformSettingsService, PlatformSettingsService>();
 // Hangfire job services
 builder.Services.AddScoped<RenderJobService>();
 builder.Services.AddScoped<SceneDetectionJobService>();
-builder.Services.AddScoped<SurfaceTrackingJobService>();
 
 // ── SignalR — real-time push for pipeline progress, eliminating polling ──
 builder.Services.AddSignalR();
@@ -213,6 +227,11 @@ RecurringJob.AddOrUpdate<Afrobotics.Bit.Api.Controllers.ContentController>("clea
 
 RecurringJob.AddOrUpdate<Afrobotics.Bit.Api.Controllers.UsageController>("archive-usage-records",
     c => c.ArchiveUsageRecords(), Cron.Weekly);
+
+// Reaps Hangfire jobs orphaned by a non-graceful server restart (stuck "Processing" forever
+// otherwise) — see JobsController.ReapOrphanedJobsAsync for details.
+RecurringJob.AddOrUpdate<Afrobotics.Bit.Api.Controllers.JobsController>("reap-orphaned-jobs",
+    c => c.ReapOrphanedJobsAsync(), "*/2 * * * *");
 
 // Apply EF Core migrations on startup & seed initial data if database is empty
 using (var scope = app.Services.CreateScope())

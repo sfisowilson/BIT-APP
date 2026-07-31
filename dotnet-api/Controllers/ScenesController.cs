@@ -32,14 +32,16 @@ namespace Afrobotics.Bit.Api.Controllers
         private readonly IContentService _contentService;
         private readonly ISurfaceDetectionService _surfaceDetection;
         private readonly IEventLogService _eventLog;
+        private readonly VideoChunkingService _chunker;
         private static readonly Regex DurationRegex = new(@"^(\d{2}):([0-5]\d):([0-5]\d)$", RegexOptions.Compiled);
 
-        public ScenesController(PostgresDbContext context, IContentService contentService, ISurfaceDetectionService surfaceDetection, IEventLogService eventLog)
+        public ScenesController(PostgresDbContext context, IContentService contentService, ISurfaceDetectionService surfaceDetection, IEventLogService eventLog, VideoChunkingService chunker)
         {
             _context = context;
             _contentService = contentService;
             _surfaceDetection = surfaceDetection;
             _eventLog = eventLog;
+            _chunker = chunker;
         }
 
         /// <summary>MReq 2: AI scene modification with contextual response based on actual scene data.</summary>
@@ -82,6 +84,7 @@ namespace Afrobotics.Bit.Api.Controllers
             if (body.TryGetProperty("aiStatus", out var aiStatus)) scene.AiStatus = aiStatus.GetString();
             if (body.TryGetProperty("aiOutputDescription", out var aiDesc)) scene.AiOutputDescription = aiDesc.GetString();
             if (body.TryGetProperty("aiModelUsed", out var aiModel)) scene.AiModelUsed = aiModel.GetString();
+            if (body.TryGetProperty("qaStatus", out var qaStatus)) scene.QaStatus = qaStatus.GetString() ?? scene.QaStatus;
 
             await _context.SaveChangesAsync();
             return Ok(new { success = true, id = scene.Id });
@@ -89,7 +92,7 @@ namespace Afrobotics.Bit.Api.Controllers
 
         /// <summary>MReq 1: Queue scene-cut detection + surface detection as a Hangfire background job.</summary>
         [HttpPost("video/ai-split-analyze")]
-        public IActionResult AiSplitAnalyze([FromBody] JsonElement body)
+        public async Task<IActionResult> AiSplitAnalyze([FromBody] JsonElement body)
         {
             var contentId = body.TryGetProperty("contentId", out var cid) ? cid.GetString() : null;
             string videoTitle = body.TryGetProperty("videoTitle", out var vt) && vt.ValueKind != JsonValueKind.Null
@@ -99,7 +102,7 @@ namespace Afrobotics.Bit.Api.Controllers
             if (string.IsNullOrEmpty(contentId))
                 return BadRequest(new { error = "contentId is required." });
 
-            var content = _context.ContentItems.Find(contentId);
+            var content = await _context.ContentItems.FindAsync(contentId);
             if (content == null)
                 return NotFound(new { error = "Content not found." });
 
@@ -107,61 +110,34 @@ namespace Afrobotics.Bit.Api.Controllers
             if (string.IsNullOrEmpty(storageKey))
                 return BadRequest(new { error = "Scene detection requires a valid video storageKey." });
 
-            // Enqueue the full pipeline as a Hangfire background job
+            // Go through TransitionStageAsync (not a direct field write) so every hop is logged
+            // to the DB event log. Content reaching this endpoint may still be in Staging (e.g.
+            // a small/fast video where the user clicks through before transcoding starts) — route
+            // through Transcoding first, same as RedetectScenes does for its own stale states.
+            if (content.IngestionStatus == PipelineStages.Staging)
+            {
+                content = await _contentService.TransitionStageAsync(contentId, PipelineStages.Transcoding);
+            }
+            if (content.IngestionStatus != PipelineStages.SceneDetecting)
+            {
+                content = await _contentService.TransitionStageAsync(contentId, PipelineStages.SceneDetecting);
+            }
+
+            // Enqueue the Hangfire job only after the transition succeeds — enqueuing first risks
+            // a dangling, untracked job if the transition then throws (as PipelineStages enforces).
             var jobId = BackgroundJob.Enqueue<SceneDetectionJobService>(
                 s => s.RunDetectionPipeline(contentId, videoTitle, CancellationToken.None));
 
             content.DetectionJobId = jobId;
             content.DetectionProgress = 0;
-            content.IngestionStatus = PipelineStages.SceneDetecting;
             content.SceneDetectingStartedAt = DateTime.UtcNow;
-            _context.SaveChanges();
+            await _context.SaveChangesAsync();
 
             return Ok(new
             {
                 jobId,
                 contentId,
                 message = "Scene detection queued. Poll GET /api/content/{id}/detection-status for progress."
-            });
-        }
-
-        /// <summary>
-        /// Scenes-only detection: FFmpeg scene cuts + thumbnails. No Gemini, no surfaces.
-        /// Much cheaper — user can then trigger per-scene surface detection.
-        /// </summary>
-        [HttpPost("video/detect-scenes")]
-        public IActionResult DetectScenesOnly([FromBody] JsonElement body)
-        {
-            var contentId = body.TryGetProperty("contentId", out var cid) ? cid.GetString() : null;
-            string videoTitle2 = body.TryGetProperty("videoTitle", out var vt2) && vt2.ValueKind != JsonValueKind.Null
-                ? vt2.GetString()!
-                : "untitled";
-
-            if (string.IsNullOrEmpty(contentId))
-                return BadRequest(new { error = "contentId is required." });
-
-            var content = _context.ContentItems.Find(contentId);
-            if (content == null)
-                return NotFound(new { error = "Content not found." });
-
-            var storageKey = content.StorageKey;
-            if (string.IsNullOrEmpty(storageKey))
-                return BadRequest(new { error = "Scene detection requires a valid video storageKey." });
-
-            var jobId = BackgroundJob.Enqueue<SceneDetectionJobService>(
-                s => s.RunScenesOnlyPipeline(contentId, videoTitle2, CancellationToken.None));
-
-            content.DetectionJobId = jobId;
-            content.DetectionProgress = 0;
-            content.IngestionStatus = PipelineStages.SceneDetecting;
-            content.SceneDetectingStartedAt = DateTime.UtcNow;
-            _context.SaveChanges();
-
-            return Ok(new
-            {
-                jobId,
-                contentId,
-                message = "Scene-only detection queued (no surfaces). Poll GET /api/content/{id}/detection-status."
             });
         }
 
@@ -190,6 +166,35 @@ namespace Afrobotics.Bit.Api.Controllers
                 sceneId,
                 message = $"Surface detection queued for scene #{scene.SceneIndex}."
             });
+        }
+
+        /// <summary>
+        /// List the shots (camera cuts) that make up a scene, ordered by ShotIndex.
+        /// A scene can span multiple shots — used to render cut markers on the editor's
+        /// timeline and as the basis for shot-aware tracking/compositing.
+        /// </summary>
+        [HttpGet("scenes/{sceneId}/shots")]
+        public async Task<IActionResult> GetShotsForScene(string sceneId)
+        {
+            var scene = await _context.SceneItems.FindAsync(sceneId);
+            if (scene == null)
+                return NotFound(new { error = "Scene not found." });
+
+            var shots = await _context.Shots
+                .Where(s => s.SceneId == sceneId)
+                .OrderBy(s => s.ShotIndex)
+                .Select(s => new DTOs.ShotDto
+                {
+                    Id = s.Id,
+                    ShotIndex = s.ShotIndex,
+                    StartFrame = s.StartFrame,
+                    EndFrame = s.EndFrame,
+                    KeyframeTimestamp = s.KeyframeTimestamp,
+                    KeyframeUrl = s.KeyframePath != null ? $"/api/content/file/{s.KeyframePath}" : null
+                })
+                .ToListAsync();
+
+            return Ok(shots);
         }
 
         /// <summary>Poll for detection job progress. Returns 0-100 and current ingestion status.</summary>
@@ -447,61 +452,22 @@ namespace Afrobotics.Bit.Api.Controllers
             if (content == null)
                 return NotFound(new { error = "Source content not found." });
 
-            var storageKey = content.StorageKey;
-            if (string.IsNullOrEmpty(storageKey) || !storageKey.StartsWith("/api/content/file/"))
-                return BadRequest(new { error = "Scene clip export requires a locally uploaded video file." });
-
-            var fileName = storageKey.Replace("/api/content/file/", "");
             var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
-            var sourcePath = Path.Combine(uploadsDir, fileName);
-            var fullSourcePath = Path.GetFullPath(sourcePath);
-
-            // Directory traversal guard
-            if (!fullSourcePath.StartsWith(Path.GetFullPath(uploadsDir)))
-                return BadRequest(new { error = "Invalid file path." });
-
-            if (!System.IO.File.Exists(fullSourcePath))
-                return NotFound(new { error = "Source video file not found." });
-
-            // Calculate frame range and duration
-            var fps = content.FrameRate > 0 && content.FrameRate <= 240 ? content.FrameRate : 50;
-            var startTime = (double)scene.StartFrame / fps;
-            var duration = (double)(scene.EndFrame - scene.StartFrame) / fps;
-
             var tempDir = Path.Combine(uploadsDir, "clips");
-            Directory.CreateDirectory(tempDir);
             var outputFileName = $"scene_{id}_{DateTime.UtcNow:yyyyMMddHHmmss}.mp4";
             var outputPath = Path.Combine(tempDir, outputFileName);
 
             try
             {
-                using var process = new Process
-                {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = "ffmpeg",
-                        Arguments = $"-hide_banner -loglevel error -ss {startTime:F3} -i \"{fullSourcePath}\" " +
-                                    $"-t {duration:F3} -c:v libx264 -preset fast -crf 23 " +
-                                    $"-c:a aac -b:a 128k -pix_fmt yuv420p -movflags +faststart " +
-                                    $"\"{outputPath}\" -y",
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    }
-                };
-
-                process.Start();
-                var stderr = await process.StandardError.ReadToEndAsync();
-                await process.WaitForExitAsync();
-
-                if (process.ExitCode != 0)
-                {
-                    Debug.WriteLine($"[SceneClip] FFmpeg failed for scene {id}: {stderr}");
-                    return StatusCode(500, new { error = "Failed to generate scene clip. FFmpeg encoding error." });
-                }
+                await _chunker.ExtractSceneClipAsync(scene, content, outputPath);
 
                 var fileStream = new FileStream(outputPath, FileMode.Open, FileAccess.Read, FileShare.Read);
                 return File(fileStream, "video/mp4", $"scene_{scene.SceneIndex}_{content.Title}.mp4");
+            }
+            catch (InvalidOperationException ex)
+            {
+                Debug.WriteLine($"[SceneClip] Failed for scene {id}: {ex.Message}");
+                return BadRequest(new { error = ex.Message });
             }
             catch (Exception ex)
             {

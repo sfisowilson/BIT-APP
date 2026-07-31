@@ -50,7 +50,7 @@ BIT is an AI-powered video inventory platform. Three tiers:
 - DTOs at every API boundary — never expose EF entities
 - Every service has an interface: `I*Service` → `*Service`
 - Controllers thin, business logic in services, data access in repositories
-- `server.ts` is LEGACY scaffolding — never extend it
+- No "basic"/no-op fallback engines — misconfiguration throws a clear error instead of silently degrading
 
 ### Pipeline states
 ```
@@ -61,9 +61,10 @@ Failed ←── Failed ←────── Failed
 
 ### AI engine settings
 ```
-engine_detection      → "yolo" | "replicate" | "google" | "basic"
-engine_brand_analysis → "gemini" | "google" | "basic"
-engine_compositing    → "opencv" | "basic"
+engine_detection      → "yolo" | "replicate" | "google" | "gemini" | "grounding-dino"
+engine_brand_analysis → "gemini" | "google"
+engine_compositing    → "opencv" | "pikaswaps" | "planar-warp"
+engine_tracking       → "sam3"
 ```
 
 ### URL routes

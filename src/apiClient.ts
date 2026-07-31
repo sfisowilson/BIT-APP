@@ -5,7 +5,7 @@
  * so relative URLs work in both dev and production.
  */
 
-import type { DetectionJob, JobsListResponse } from './types';
+import type { DetectionJob, JobsListResponse, ShotItem, InvoiceSummary } from './types';
 
 const TOKEN_KEY = 'bit_token';
 const USER_KEY = 'bit_user';
@@ -261,18 +261,24 @@ export async function redetectScenes(
   return r.json();
 }
 
-/** Queue scenes-only detection (FFmpeg cuts + thumbnails, no surface detection). */
-export async function detectScenesOnly(
+/**
+ * Queue the full shot-aware detection pipeline: FFmpeg shot-cut detection → SAM3 keyframe
+ * embedding → clustering shots into scenes (a scene may span multiple cuts) → surface
+ * detection per clustered scene. This is the pipeline that makes "AI Split Analyze" actually
+ * produce meaningful scenes with surfaces, as opposed to detectScenesOnly's raw 1:1 FFmpeg
+ * cuts with no surfaces.
+ */
+export async function aiSplitAnalyze(
   contentId: string,
   videoTitle: string,
 ): Promise<{ jobId: string; contentId: string; message: string }> {
-  const r = await fetchWithAuth('/api/video/detect-scenes', {
+  const r = await fetchWithAuth('/api/video/ai-split-analyze', {
     method: 'POST',
     body: JSON.stringify({ contentId, videoTitle }),
   });
   if (!r.ok) {
     const data = await r.json();
-    throw new Error(data.error || 'Failed to enqueue scenes-only detection.');
+    throw new Error(data.error || 'Failed to enqueue AI split/analyze.');
   }
   return r.json();
 }
@@ -285,6 +291,53 @@ export async function detectSurfacesForScene(
   if (!r.ok) {
     const data = await r.json();
     throw new Error(data.error || 'Failed to enqueue surface detection.');
+  }
+  return r.json();
+}
+
+/** List the shots (camera cuts) making up a scene, ordered by shotIndex. A scene can span multiple shots. */
+export async function fetchShotsForScene(sceneId: string): Promise<ShotItem[]> {
+  const r = await fetchWithAuth(`/api/scenes/${sceneId}/shots`);
+  if (!r.ok) throw new Error('Failed to fetch shots for scene.');
+  return r.json();
+}
+
+/** Delete a single scene and its child surfaces/ad-slots/approvals. Fails if any surface is Approved. */
+export async function deleteScene(sceneId: string): Promise<{ success: boolean; id: string; message: string }> {
+  const r = await fetchWithAuth(`/api/scenes/${sceneId}`, { method: 'DELETE' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to delete scene.');
+  }
+  return r.json();
+}
+
+/** Delete all scenes (and their child surfaces/ad-slots/approvals) for a content item. Fails if any surface is Approved. */
+export async function deleteAllScenes(contentId: string): Promise<{ success: boolean; contentId: string; message: string }> {
+  const r = await fetchWithAuth(`/api/content/${contentId}/scenes`, { method: 'DELETE' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to delete all scenes.');
+  }
+  return r.json();
+}
+
+/** Delete a single surface and its child ad-slots/approvals. Fails if the surface is Approved. */
+export async function deleteSurface(surfaceId: string): Promise<{ success: boolean; id: string; message: string }> {
+  const r = await fetchWithAuth(`/api/surfaces/${surfaceId}`, { method: 'DELETE' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to delete surface.');
+  }
+  return r.json();
+}
+
+/** Delete all surfaces for a scene. Fails if any surface is Approved. */
+export async function deleteAllSurfaces(sceneId: string): Promise<{ success: boolean; deletedCount: number; message: string }> {
+  const r = await fetchWithAuth(`/api/scenes/${sceneId}/surfaces`, { method: 'DELETE' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to delete all surfaces.');
   }
   return r.json();
 }
@@ -455,15 +508,47 @@ export async function fetchStatsSummary(): Promise<StatsSummary> {
   return r.json();
 }
 
+export interface CampaignSummary {
+  hasApprovedPlacements: boolean;
+}
+
+export async function fetchCampaignSummary(campaignId: string): Promise<CampaignSummary> {
+  const r = await fetchWithAuth(`/api/campaigns/${campaignId}/summary`);
+  return r.json();
+}
+
+/** Real, backend-calculated campaign invoice (exposure seconds × viability multiplier + render
+ * processing costs + VAT) — see dotnet-api/Services/InvoiceService.cs. */
+export async function fetchCampaignInvoice(campaignId: string): Promise<InvoiceSummary> {
+  const r = await fetchWithAuth(`/api/campaigns/${campaignId}/invoice`);
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to load invoice.' }));
+    throw new Error(err.error || 'Failed to load invoice.');
+  }
+  return r.json();
+}
+
 // ─── Interactive Placement API ─────────────────────────────────────────
 
 import type {
   SegmentPreviewRequest,
   SegmentPreviewResponse,
   InteractiveRenderRequest,
+  CreateSurfaceFromClickRequest,
+  CreateSurfaceFromQuadRequest,
+  CreateSurfaceResponse,
+  RenderItem,
+  CreatePromptRenderRequest,
 } from './types';
 
-export type { SegmentPreviewRequest, SegmentPreviewResponse, InteractiveRenderRequest };
+export type {
+  SegmentPreviewRequest,
+  SegmentPreviewResponse,
+  InteractiveRenderRequest,
+  CreateSurfaceFromClickRequest,
+  CreateSurfaceFromQuadRequest,
+  CreateSurfaceResponse,
+};
 
 /**
  * Preview-segment a clicked point on a video frame using SAM3 video-rle.
@@ -493,6 +578,81 @@ export async function confirmInteractivePlacement(dto: InteractiveRenderRequest)
   if (!r.ok) {
     const err = await r.json().catch(() => ({ error: 'Failed to dispatch render.' }));
     throw new Error(err.error || 'Failed to dispatch render.');
+  }
+  return r.json();
+}
+
+/**
+ * Dispatch a prompt-based AI placement preview (the "AI Placement Assistant → Generate New"
+ * flow). No surfaceId required — the AI model infers placement purely from promptText plus the
+ * asset image. Returns the render immediately in "Queued" status; poll renderList for
+ * renderStatus "PreviewReady" before offering approvePromptSplice/rejectPromptPlacement.
+ */
+export async function submitPromptPlacement(dto: CreatePromptRenderRequest): Promise<RenderItem> {
+  const r = await fetchWithAuth('/api/renders/prompt-preview', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to dispatch prompt placement.' }));
+    throw new Error(err.error || 'Failed to dispatch prompt placement.');
+  }
+  return r.json();
+}
+
+/** Approve a PreviewReady prompt-placement render — splices it into the full source video. */
+export async function approvePromptSplice(renderId: string): Promise<RenderItem> {
+  const r = await fetchWithAuth(`/api/renders/${renderId}/approve-splice`, {
+    method: 'POST',
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to approve placement.' }));
+    throw new Error(err.error || 'Failed to approve placement.');
+  }
+  return r.json();
+}
+
+/** Reject a PreviewReady prompt-placement render — no splice, no final video produced. */
+export async function rejectPromptPlacement(renderId: string, reason?: string): Promise<{ success: boolean }> {
+  const r = await fetchWithAuth(`/api/renders/${renderId}/reject-prompt`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to reject placement.' }));
+    throw new Error(err.error || 'Failed to reject placement.');
+  }
+  return r.json();
+}
+
+/**
+ * Persist a SurfaceItem from an interactive "Insert Product" click (SAM3 mask).
+ * Must be called before confirmInteractivePlacement — the render dispatch requires a real surfaceId.
+ */
+export async function createSurfaceFromClick(dto: CreateSurfaceFromClickRequest): Promise<CreateSurfaceResponse> {
+  const r = await fetchWithAuth('/api/surfaces/from-click', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to create surface.' }));
+    throw new Error(err.error || 'Failed to create surface.');
+  }
+  return r.json();
+}
+
+/**
+ * Persist a SurfaceItem from an interactive "Place Signage" 4-corner quad.
+ * Must be called before confirmInteractivePlacement — the render dispatch requires a real surfaceId.
+ */
+export async function createSurfaceFromQuad(dto: CreateSurfaceFromQuadRequest): Promise<CreateSurfaceResponse> {
+  const r = await fetchWithAuth('/api/surfaces/from-quad', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to create surface.' }));
+    throw new Error(err.error || 'Failed to create surface.');
   }
   return r.json();
 }

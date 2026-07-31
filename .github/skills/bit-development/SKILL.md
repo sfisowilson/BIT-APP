@@ -85,8 +85,7 @@ BIT-APP/
 │   ├── detector.py             # YoloSurfaceDetector with ByteTrack
 │   ├── requirements.txt        # fastapi, ultralytics, opencv-python, numpy
 │   └── yolo11n.pt              # YOLOv11 nano model weights
-├── server.ts                   # Express dev server (API proxy or fallback)
-├── vite.config.ts              # Vite config with Tailwind plugin & API proxy
+├── vite.config.ts              # Vite config with Tailwind plugin & API proxy (proxies /api directly to the .NET backend)
 ├── docs/                       # DESIGN_DOCUMENT.md, PRESENTATION_GUIDE.md
 ├── governance/                 # ⛔ Living governance rules (MUST consult first)
 │   ├── README.md               # Governance overview
@@ -109,10 +108,10 @@ BIT-APP/
 
 ### What this means:
 
-- **Never add hardcoded data** to `server.ts` or any other file. The `server.ts` in-memory database is legacy scaffolding only — do not extend it.
+- **Never add hardcoded data** to any file. There is no in-memory scaffolding in this project — the .NET API + PostgreSQL is the only backend.
 - **Never create stub services** that return fake data. Every service must have a real implementation.
 - **Never use `placeholder`, `TODO`, `FIXME` as a substitute for real logic.** Implement it properly.
-- **Never add `Basic*Service` fallbacks** that return hardcoded results. The `BasicSurfaceDetectionService`, `BasicBrandAnalysisService`, and `BasicCompositingService` exist only as admin-configurable fallbacks for when no AI engine is configured — do not create new ones.
+- **Never add "basic"/no-op fallback engines.** Every `ISurfaceDetectionService`/`IBrandAnalysisService`/`ICompositingService`/`ISurfaceTrackingService` implementation must be a real, working engine. If a Platform Setting picks an unconfigured/unknown engine, `EngineFactory` throws a clear configuration error — it does not silently degrade to a no-op.
 - **Always use the real API.** Frontend code must call the .NET backend via `apiClient.ts`. Python services must run real YOLO inference. .NET services must use real database queries and real external API calls.
 
 ### What to do instead:
@@ -147,12 +146,13 @@ Controller → Service (interface) → Repository (interface) → EF Core → Po
 AI engines are admin-configurable at runtime via Platform Settings. Each engine implements a common interface:
 
 ```
-ISurfaceDetectionService  → Basic / Yolo / Replicate / GoogleVision
-IBrandAnalysisService     → Basic / Gemini / GoogleVision
-ICompositingService       → Basic / OpenCv
+ISurfaceDetectionService  → Yolo / Replicate / GoogleVision / Gemini / GroundingDino
+IBrandAnalysisService     → Gemini / GoogleVision
+ICompositingService       → OpenCv / Pikaswaps / PlanarWarp
+ISurfaceTrackingService   → Sam3
 ```
 
-Registered in `Program.cs` with a factory pattern that reads `engine_*` settings. **Always register new engines through this pattern — never hardcode engine selection.**
+Registered in `Program.cs` with a factory pattern that reads `engine_*` settings. **Always register new engines through this pattern — never hardcode engine selection.** There is no "basic"/no-op fallback — an unconfigured or unrecognized engine setting makes `EngineFactory` throw a clear error instead of silently degrading.
 
 ### 3. Content Pipeline (State Machine)
 

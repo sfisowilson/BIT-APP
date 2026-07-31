@@ -489,14 +489,25 @@ namespace Afrobotics.Bit.Api.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<string>("PreviewStorageKey")
+                        .HasColumnType("text");
+
                     b.Property<int>("ProcessingDurationMs")
                         .HasColumnType("integer");
 
                     b.Property<int>("Progress")
                         .HasColumnType("integer");
 
+                    b.Property<string>("PromptText")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<string>("QualityTier")
                         .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("RenderMode")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
@@ -504,12 +515,14 @@ namespace Afrobotics.Bit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("SceneId")
+                        .HasColumnType("text");
+
                     b.Property<string>("StorageKey")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("SurfaceId")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
@@ -517,6 +530,8 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.HasIndex("CampaignId");
 
                     b.HasIndex("ContentId");
+
+                    b.HasIndex("SceneId");
 
                     b.HasIndex("SurfaceId");
 
@@ -613,6 +628,51 @@ namespace Afrobotics.Bit.Api.Migrations
                     b.ToTable("SceneItems");
                 });
 
+            modelBuilder.Entity("Afrobotics.Bit.Api.Models.ShotItem", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContentId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EndFrame")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("KeyframeEmbeddingJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("KeyframePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<double>("KeyframeTimestamp")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("SceneId")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ShotIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StartFrame")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContentId");
+
+                    b.HasIndex("SceneId");
+
+                    b.HasIndex("ShotIndex");
+
+                    b.ToTable("Shots");
+                });
+
             modelBuilder.Entity("Afrobotics.Bit.Api.Models.SurfaceItem", b =>
                 {
                     b.Property<string>("Id")
@@ -667,13 +727,16 @@ namespace Afrobotics.Bit.Api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("TrackedBoundariesJson")
-                        .HasMaxLength(100000)
-                        .HasColumnType("character varying(100000)");
-
                     b.Property<string>("TrackingDataJson")
-                        .HasMaxLength(100000)
-                        .HasColumnType("character varying(100000)");
+                        .HasColumnType("text");
+
+                    b.Property<string>("TrackingPointsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TrackingStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<double>("ViabilityScore")
                         .HasColumnType("double precision");
@@ -809,11 +872,15 @@ namespace Afrobotics.Bit.Api.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Afrobotics.Bit.Api.Models.SceneItem", null)
+                        .WithMany()
+                        .HasForeignKey("SceneId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Afrobotics.Bit.Api.Models.SurfaceItem", null)
                         .WithMany()
                         .HasForeignKey("SurfaceId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Afrobotics.Bit.Api.Models.SceneItem", b =>
@@ -823,6 +890,14 @@ namespace Afrobotics.Bit.Api.Migrations
                         .HasForeignKey("ContentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Afrobotics.Bit.Api.Models.ShotItem", b =>
+                {
+                    b.HasOne("Afrobotics.Bit.Api.Models.SceneItem", null)
+                        .WithMany()
+                        .HasForeignKey("SceneId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("Afrobotics.Bit.Api.Models.SurfaceItem", b =>

@@ -93,7 +93,6 @@ public class PlatformSettingsService : IPlatformSettingsService
         ["gd_track_min_frames"]      = "Engine:GdTrackMinFrames",
         // ── Phase 3: Surface tracking ──
         ["engine_tracking"]           = "Engine:Tracking",
-        ["sam3_tracking_endpoint"]    = "Engine:Sam3TrackingEndpoint",
     };
 
     public PlatformSettingsService(PostgresDbContext context, IConfiguration config, ILogger<PlatformSettingsService> logger)

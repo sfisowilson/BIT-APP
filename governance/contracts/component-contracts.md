@@ -104,19 +104,33 @@ interface CampaignSidebarProps {
 **File:** `src/components/CampaignDashboard.tsx`
 **Route:** `/c/:campaignId`
 
-Props: (read from App.tsx usage — no standalone interface file)
-
 ```typescript
-// Used as: <CampaignDashboard statsSummary={statsSummary} contentCount={contentList.length} ... />
 interface CampaignDashboardProps {
-  statsSummary: StatsSummary | null;
-  contentCount: number;
-  sceneCount: number;
-  surfaceCount: number;
-  renderCount: number;
-  campaignName: string;
+  campaign: CampaignItem;
+  assets: CreativeAsset[];
+  contentList: ContentItem[];
+  renders: RenderItem[];
+  hasApprovedPlacements?: boolean;  // from GET /api/campaigns/{id}/summary — drives the "Placements" pipeline step
+  onNavigate: (view: SidebarView) => void;
 }
 ```
+
+The "Recent Renders" widget shows a "▶ Watch"/"✕ Close" toggle and a "⬇ Download" link for any render where `hasPlayableFile(r)` is true (`renderStatus` is `Finished` or `NeedsReview` and `storageKey` starts with `/api/`). Watch renders an inline `<video src={r.storageKey} controls autoPlay>` player; Download uses `<a href={r.storageKey} download>`. Both reuse the same `GET /api/renders/{id}/download` endpoint — `Content-Disposition: attachment` only forces a download on top-level navigation (the `<a download>` case), not on a `<video src>` resource fetch, so no backend change was needed to support both behaviors from one URL.
+
+---
+
+## `InvoicePanel`
+
+**File:** `src/components/InvoicePanel.tsx`
+**Rendered in:** `App.tsx`'s `activeView === 'reports'` view, below the campaign stats grid.
+
+```typescript
+interface InvoicePanelProps {
+  campaignId: string;
+}
+```
+
+Self-fetching (owns its own loading/error state) — calls `fetchCampaignInvoice(campaignId)` on mount and whenever `campaignId` changes, and on a manual "Refresh" button. Renders the returned `InvoiceSummary`'s line items table plus subtotal/render-processing-fees/VAT/total footer. Read-only report view; never mutates pipeline state.
 
 ---
 
@@ -140,38 +154,69 @@ interface CampaignSelectorProps {
 **File:** `src/components/EditorTab.tsx`
 **Route:** `/c/:campaignId/placements`
 
-Props: (read from App.tsx usage)
+Props: (condensed — see `EditorTabProps` in the file for the full ~30-field interface, e.g. AI-suggestion and render-tracking props)
 ```typescript
 interface EditorTabProps {
-  scenesForVideo: SceneItem[];
+  contentList: ContentItem[];
+  selectedVideo: string;
+  setSelectedVideo: (v: string) => void;
   selectedSceneId: string;
   setSelectedSceneId: (v: string) => void;
-  surfaceList: SurfaceItem[];
-  selectedSurfaceId: string | null;
-  setSelectedSurfaceId: (v: string | null) => void;
-  handleApproveSurface?: (surfaceId: string) => void;
-  selectedVideo: string;
+  scenesForVideo: SceneItem[];
+  surfacesForScene: SurfaceItem[];
+  selectedSurfaceId: string;
+  setSelectedSurfaceId: (v: string) => void;
+  handleSurfaceDecision: (decision: "Approved" | "Rejected") => void;
+  currentSurface: SurfaceItem | undefined;
+  assetList: CreativeAsset[];
+  campaignList: CampaignItem[];
+  selectedCampaignId?: string;
+  surfaceAssetPairs: Record<string, string>; // surfaceId -> assetId
+  onPlaceAsset: (surfaceId: string, assetId: string) => void;
+  onSubmitPlacement: (surfaceId: string, assetId: string, campaignId: string) => Promise<boolean>;
+  renderList?: RenderItem[];
+  onRetryRender?: (renderId: string) => Promise<void>;
+  onDetectSurfacesForScene?: (sceneId: string, contentId: string) => Promise<void>;
+  onDeleteScene?: (sceneId: string) => Promise<void>; // DELETE /api/scenes/{id} — blocked server-side if any surface is Approved
+  onDeleteAllScenes?: (contentId: string) => Promise<void>; // DELETE /api/content/{contentId}/scenes — blocked server-side if any surface is Approved
+  // AI Placement Assistant — "Generate New" mode (prompt-based AI video placement, no surface required)
+  onSubmitPromptPlacement?: (dto: CreatePromptRenderRequest) => Promise<void>;
+  onApprovePromptSplice?: (renderId: string) => Promise<void>;
+  onRejectPromptPlacement?: (renderId: string) => Promise<void>;
+  activePromptRender?: RenderItem | null;
 }
 ```
+
+Owns the interactive-placement UI state (not passed as props): `interactionMode` ('product'|'signage'), `interactiveMask`/`interactiveQuad` (from `SurfaceClickOverlay`), `interactiveAssetId`, and `shotsForScene` (fetched via `fetchShotsForScene` whenever `selectedSceneId` changes, passed down to `SurfaceClickOverlay` as the `shots` prop). "Approve & Render" first calls `createSurfaceFromClick`/`createSurfaceFromQuad` to obtain a real `surfaceId`, then `confirmInteractivePlacement`.
+
+The "AI Placement Assistant" card also owns `assistantMode` ('match'|'generate', default 'match'), a toggle in the card header. `'match'` renders the existing Gemini-based surface/asset auto-pairing body unchanged (`suggestPlacements` → `onPlaceAsset`, never generates video). `'generate'` renders `<PromptGeneratePanel>` (see below) — a structurally separate flow that never touches `interactionMode`, `SurfaceClickOverlay`, or surface geometry at all.
 
 ---
 
-## `ComposerTab`
+## `PromptGeneratePanel`
 
-**File:** `src/components/ComposerTab.tsx`
-**Route:** `/c/:campaignId/renders`
+**File:** `src/components/PromptGeneratePanel.tsx`
 
-Props: (read from App.tsx usage)
+Rendered inside `EditorTab`'s "AI Placement Assistant" card when `assistantMode === 'generate'`. Implements the "Generate New" flow: free-text prompt + single asset reference → Kling O1 video edit → preview → approve (splice into full video) or reject.
+
 ```typescript
-interface ComposerTabProps {
-  renderList: RenderItem[];
-  campaignList: CampaignItem[];
-  contentList: ContentItem[];
-  surfaceList: SurfaceItem[];
-  assetList: CreativeAsset[];
-  handleDispatchRender?: (dto: { contentId: string; surfaceId: string; campaignId: string; assetId: string; exportPreset: string }) => Promise<void>;
+interface PromptGeneratePanelProps {
+  currentScene: SceneItem | undefined;
+  campaignAssets: CreativeAsset[];
+  contentId: string;
+  campaignId?: string;
+  activePromptRender?: RenderItem | null;
+  onSubmit: (dto: CreatePromptRenderRequest) => Promise<void>;
+  onApprove: (renderId: string) => Promise<void>;
+  onReject: (renderId: string) => Promise<void>;
 }
 ```
+
+Gates on `currentScene.durationSeconds ∈ [MIN_PROMPT_EDIT_DURATION_SECONDS, MAX_PROMPT_EDIT_DURATION_SECONDS]` (`src/types.ts`, mirrors `KlingPromptEditService`'s backend constants) — out-of-range scenes show a warning instead of the form. Renders one of three bodies based on `activePromptRender?.renderStatus`: the submit form (default/`Failed`), a `Queued`/`Processing` disabled-form state, or — once `PreviewReady` — a `<video src="/api/renders/{id}/preview" controls>` player with "Approve & Splice"/"Reject & Retry" buttons.
+
+---
+
+`ComposerTab` was removed (dead/unrouted — never rendered from `App.tsx`). Render dispatch and asset↔surface placement both live in `EditorTab` (see above): the legacy AI-detected-surface flow via `onSubmitPlacement`, and the interactive click/draw flow via `SurfaceClickOverlay` + "Approve & Render". Both now dispatch through `POST /api/renders/interactive`.
 
 ---
 
@@ -382,6 +427,7 @@ interface SurfaceClickOverlayProps {
   frameRate: number;
   mode: 'product' | 'signage';
   assetUrl?: string;
+  shots?: ShotItem[]; // shots making up the current scene; renders a "Shot N / M" cut-awareness badge
   onMaskReceived?: (polygon: MaskPolygon) => void;
   onQuadConfirmed?: (corners: [QuadPoint, QuadPoint, QuadPoint, QuadPoint]) => void;
   onCancel?: () => void;

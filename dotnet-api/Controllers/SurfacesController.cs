@@ -3,9 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
-using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -121,6 +119,109 @@ namespace Afrobotics.Bit.Api.Controllers
             }
         }
 
+        /// <summary>
+        /// Persist a SurfaceItem from an interactive "Insert Product" click (SAM3 preview-segment mask).
+        /// Returns the real SurfaceId to use when dispatching a Generative interactive render —
+        /// closes the gap where the editor previously sent surfaceId: '' expecting server-side creation.
+        /// </summary>
+        [HttpPost("surfaces/from-click")]
+        public async Task<IActionResult> CreateFromClick([FromBody] CreateSurfaceFromClickRequest request)
+        {
+            try
+            {
+                var surface = await _surfaceService.CreateFromClickAsync(request);
+                await _eventLog.LogEventAsync("Surface", "CREATED_FROM_CLICK", "Info",
+                    $"Surface '{surface.Id}' created from click at frame {request.FrameIndex} (scene {surface.SceneId}).");
+                return Ok(new CreateSurfaceResponse { SurfaceId = surface.Id, SceneId = surface.SceneId });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Surface", "CREATE_FROM_CLICK_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Persist a SurfaceItem from an interactive "Place Signage" 4-corner quad.
+        /// Returns the real SurfaceId to use when dispatching a Planar interactive render.
+        /// </summary>
+        [HttpPost("surfaces/from-quad")]
+        public async Task<IActionResult> CreateFromQuad([FromBody] CreateSurfaceFromQuadRequest request)
+        {
+            try
+            {
+                var surface = await _surfaceService.CreateFromQuadAsync(request);
+                await _eventLog.LogEventAsync("Surface", "CREATED_FROM_QUAD", "Info",
+                    $"Surface '{surface.Id}' created from quad at frame {request.FrameIndex} (scene {surface.SceneId}).");
+                return Ok(new CreateSurfaceResponse { SurfaceId = surface.Id, SceneId = surface.SceneId });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Surface", "CREATE_FROM_QUAD_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>Delete a single surface and all its child ad slots and approvals.</summary>
+        [HttpDelete("surfaces/{id}")]
+        public async Task<IActionResult> DeleteSurface(string id)
+        {
+            var surface = await _context.SurfaceItems.FindAsync(id);
+            if (surface == null)
+                return NotFound(new { error = "Surface not found." });
+
+            if (surface.Status == "Approved")
+            {
+                return BadRequest(new
+                {
+                    error = "Cannot delete surface: it is approved. Exclude or reject it before deleting."
+                });
+            }
+
+            // EF Core cascade handles: SurfaceItem → AdSlots → Approvals, and RenderItem.SurfaceId → null
+            _context.SurfaceItems.Remove(surface);
+            await _context.SaveChangesAsync();
+
+            await _eventLog.LogEventAsync("Surface", "DELETED", "Info", $"Surface '{id}' deleted.");
+            return Ok(new { success = true, id, message = "Surface and all child entities deleted." });
+        }
+
+        /// <summary>Delete all surfaces for a scene.</summary>
+        [HttpDelete("scenes/{sceneId}/surfaces")]
+        public async Task<IActionResult> DeleteAllSurfaces(string sceneId)
+        {
+            var surfaces = await _context.SurfaceItems.Where(sf => sf.SceneId == sceneId).ToListAsync();
+            if (surfaces.Count == 0)
+                return Ok(new { success = true, deletedCount = 0, message = "No surfaces to delete." });
+
+            var hasApproved = surfaces.Any(sf => sf.Status == "Approved");
+            if (hasApproved)
+            {
+                return BadRequest(new
+                {
+                    error = "Cannot delete surfaces: approved surface(s) exist. " +
+                            "Exclude or reject approved surfaces first."
+                });
+            }
+
+            _context.SurfaceItems.RemoveRange(surfaces);
+            await _context.SaveChangesAsync();
+
+            await _eventLog.LogEventAsync("Surface", "DELETED_ALL", "Info",
+                $"Deleted {surfaces.Count} surfaces for scene '{sceneId}'.");
+            return Ok(new { success = true, deletedCount = surfaces.Count, message = "All surfaces deleted." });
+        }
+
         private string? ResolveVideoPath(string storageKey)
         {
             if (string.IsNullOrEmpty(storageKey)) return null;
@@ -132,8 +233,9 @@ namespace Afrobotics.Bit.Api.Controllers
         }
 
         /// <summary>
-        /// Approve a surface for ad placement. If adjustedBoundaryJson is provided,
-        /// the operator-adjusted boundary is saved and a tracking Hangfire job is enqueued.
+        /// Approve a surface for ad placement. If adjustedBoundaryJson is provided, the
+        /// operator-adjusted boundary is saved as the new seed — actual tracking now happens
+        /// per-shot inside the render job itself (ShotAwareTrackingService), not at approval time.
         /// </summary>
         [HttpPost("surfaces/{id}/approve")]
         public async Task<IActionResult> ApproveSurface(string id, [FromBody] ApprovalDto dto)
@@ -147,10 +249,6 @@ namespace Afrobotics.Bit.Api.Controllers
                     if (surface != null)
                     {
                         surface.BoundaryCoordinatesJson = dto.AdjustedBoundaryJson;
-
-                        // Enqueue tracking job — tracks the adjusted boundary through all frames
-                        var jobId = BackgroundJob.Enqueue<SurfaceTrackingJobService>(
-                            s => s.TrackSurfaceAsync(id, CancellationToken.None));
                         _context.SaveChanges();
                     }
                 }
@@ -170,28 +268,6 @@ namespace Afrobotics.Bit.Api.Controllers
                     $"Surface {id}: {ex.GetType().Name} — {ex.Message}");
                 return StatusCode(500, new { error = ex.Message });
             }
-        }
-
-        /// <summary>
-        /// Manually trigger per-frame surface tracking for an existing surface.
-        /// Enqueues a Hangfire background job and returns the job ID for polling.
-        /// </summary>
-        [HttpPost("surfaces/{id}/track")]
-        public async Task<IActionResult> TrackSurface(string id)
-        {
-            var surface = await _context.SurfaceItems.FindAsync(id);
-            if (surface == null)
-                return NotFound(new { error = "Surface not found." });
-
-            var jobId = BackgroundJob.Enqueue<SurfaceTrackingJobService>(
-                s => s.TrackSurfaceAsync(id, CancellationToken.None));
-
-            return Ok(new
-            {
-                jobId,
-                surfaceId = id,
-                message = $"Tracking job enqueued for surface '{surface.SurfaceType}' ({id})."
-            });
         }
     }
 }

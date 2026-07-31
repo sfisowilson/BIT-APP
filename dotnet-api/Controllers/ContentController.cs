@@ -10,6 +10,7 @@ using Hangfire;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Afrobotics.Bit.Api.Data;
@@ -28,15 +29,17 @@ namespace Afrobotics.Bit.Api.Controllers
         private readonly IHostEnvironment _env;
         private readonly IConfiguration _config;
         private readonly PostgresDbContext _db;
+        private readonly IEventLogService _eventLog;
         // Supported broadcast containers and codecs for validation
         private static readonly HashSet<string> SupportedContainers = new(StringComparer.OrdinalIgnoreCase)
             { ".mp4", ".mov", ".mxf", ".avi", ".mkv", ".webm" };
         private static readonly HashSet<string> SupportedVideoCodecs = new(StringComparer.OrdinalIgnoreCase)
             { "h264", "h265", "hevc", "prores", "dnxhd", "dnxhr", "mpeg2video", "mpeg4", "vp9", "av1", "mjpeg", "mjp2" };
 
-        public ContentController(IContentService contentService, IHostEnvironment env, IConfiguration config, PostgresDbContext db)
+        public ContentController(IContentService contentService, IHostEnvironment env, IConfiguration config, PostgresDbContext db, IEventLogService eventLog)
         {
             _contentService = contentService;
+            _eventLog = eventLog;
             _env = env;
             _config = config;
             _db = db;
@@ -137,30 +140,17 @@ namespace Afrobotics.Bit.Api.Controllers
 
                 if (savedFilePath != null)
                 {
-                    bool ffprobeOk = false;
                     try
                     {
                         (actualDuration, actualFps, actualResolution, actualWidth, actualHeight) = ExtractVideoMetadata(savedFilePath);
-                        ffprobeOk = true;
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine($"[Upload] Combined ffprobe failed: {ex.Message}. Retrying individually.");
+                        await _eventLog.LogEventAsync("ContentUpload", "FFPROBE_METADATA_FAILED", "Error",
+                            $"ffprobe metadata extraction failed for '{title}' ({Path.GetFileName(savedFilePath)}): " +
+                            $"{ex.GetType().Name} — {ex.Message}. Falling back to browser-supplied/default values " +
+                            $"({actualWidth}x{actualHeight} @ {actualFps}fps) — these are likely WRONG.");
                     }
-
-                    if (!ffprobeOk)
-                    {
-                        try { var (fw, fh) = ExtractDimensionsOnly(savedFilePath); actualWidth = fw; actualHeight = fh; actualResolution = $"{fw}x{fh}"; }
-                        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Upload] Dims ffprobe failed: {ex.Message}"); }
-
-                        try { var ffps = ExtractFpsOnly(savedFilePath); if (ffps > 0) actualFps = ffps; }
-                        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Upload] FPS ffprobe failed: {ex.Message}"); }
-
-                        try { var fdur = ExtractDurationOnly(savedFilePath); if (!string.IsNullOrEmpty(fdur)) actualDuration = fdur; }
-                        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[Upload] Duration ffprobe failed: {ex.Message}"); }
-                    }
-
-                    System.Diagnostics.Debug.WriteLine($"[Upload] Final metadata: {actualWidth}x{actualHeight} @ {actualFps}fps, {actualDuration}");
                 }
 
                 var dto = new IngestVideoDto
@@ -448,6 +438,12 @@ namespace Afrobotics.Bit.Api.Controllers
                 _ => "application/octet-stream"
             };
 
+            // No caching — files under tmp-renders/ are overwritten in place on every retry (same
+            // renderId, same path), and an intermediary (e.g. the fal.ai-facing tunnel) caching a
+            // prior response by URL would silently serve stale bytes to fal.ai on the next attempt.
+            Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+            Response.Headers.Pragma = "no-cache";
+
             var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             return File(stream, contentType, enableRangeProcessing: true);
         }
@@ -702,6 +698,18 @@ namespace Afrobotics.Bit.Api.Controllers
             if (content == null)
                 return NotFound(new { error = "Content not found." });
 
+            // Guard: block if any surfaces are approved (matches DeleteScene's single-scene guard)
+            var sceneIds = await _db.SceneItems.Where(s => s.ContentId == contentId).Select(s => s.Id).ToListAsync();
+            var hasApproved = await _db.SurfaceItems.AnyAsync(sf => sceneIds.Contains(sf.SceneId) && sf.Status == "Approved");
+            if (hasApproved)
+            {
+                return BadRequest(new
+                {
+                    error = "Cannot delete scenes: approved surface(s) exist. " +
+                            "Exclude or reject approved surfaces before deleting all scenes."
+                });
+            }
+
             try
             {
                 await SceneDetectionJobService.DeleteExistingScenes(_db, contentId, CancellationToken.None);
@@ -769,53 +777,24 @@ namespace Afrobotics.Bit.Api.Controllers
         /// Extract actual duration, frame rate, resolution, width, and height from a video file using FFprobe.
         /// Returns (duration "HH:MM:SS", fps, resolution "WxH", width, height).
         /// </summary>
+        /// <summary>
+        /// Extract video metadata via ffprobe. Delegates to the single-field helpers below
+        /// rather than requesting all fields in one combined query — ffprobe's `-show_entries
+        /// stream=a,b,c,d` does NOT preserve the requested field order in `-of csv` output; it
+        /// returns fields in its own internal order. A prior version of this method assumed
+        /// positional order matched the request and silently mis-mapped every value (duration
+        /// read as width, width read as an unparseable fraction and defaulted to 1920, etc.) —
+        /// corrupting every uploaded video's stored width/height/fps/duration with no error.
+        /// </summary>
         private static (string duration, int fps, string resolution, int width, int height) ExtractVideoMetadata(string filePath)
         {
-            var ffprobePath = ResolveFfprobePath();
-
-            var args = $"-v error -select_streams v:0 -show_entries stream=duration,r_frame_rate,width,height -of csv=p=0 \"{filePath}\"";
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo(ffprobePath, args)
-                {
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-            process.Start();
-            var output = process.StandardOutput.ReadToEnd().Trim();
-            process.WaitForExit(5000);
-
-            // Output format: duration,fps,width,height  e.g. "125.360000,25/1,1920,1080"
-            var parts = output.Split(',');
-            var durationSeconds = parts.Length > 0 && double.TryParse(parts[0], out var d) ? d : 300;
-            var fpsStr = parts.Length > 1 ? parts[1] : "25/1";
-            var width = parts.Length > 2 && int.TryParse(parts[2], out var w) ? w : 1920;
-            var height = parts.Length > 3 && int.TryParse(parts[3], out var h) ? h : 1080;
-
-            // Parse FPS as a fraction (e.g. "25/1" or "30000/1001")
-            var fps = 25;
-            if (fpsStr.Contains('/'))
-            {
-                var frac = fpsStr.Split('/');
-                if (frac.Length == 2 && double.TryParse(frac[0], out var num) && double.TryParse(frac[1], out var den) && den > 0)
-                    fps = (int)Math.Round(num / den);
-            }
-            else
-            {
-                int.TryParse(fpsStr, out fps);
-            }
+            var (width, height) = ExtractDimensionsOnly(filePath);
+            var fps = ExtractFpsOnly(filePath);
             if (fps <= 0) fps = 25;
-
-            // Format duration as HH:MM:SS
-            var ts = TimeSpan.FromSeconds(durationSeconds);
-            var durationFormatted = $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
-
+            var duration = ExtractDurationOnly(filePath) ?? "00:05:00";
             var resolution = $"{width}x{height}";
 
-            return (durationFormatted, fps, resolution, width, height);
+            return (duration, fps, resolution, width, height);
         }
 
         /// <summary>Extract just width/height from a video file.</summary>

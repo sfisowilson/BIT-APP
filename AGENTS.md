@@ -59,7 +59,7 @@ governance/scripts/validate-contracts.ps1
 ## Critical Anti-Patterns
 
 - **NO mock/stub/fake/placeholder code** — real implementations only
-- **Never extend `server.ts`** — it's legacy scaffolding, not a real backend
+- **No "basic"/no-op fallback engines** — every AI engine must be a real, working implementation; misconfiguration should throw a clear error, not silently degrade
 - **Never guess endpoints, DB columns, or component props** — read the contracts
 - **No silent exception swallowing** — no empty catch blocks, no `// FIXME` placeholders
 

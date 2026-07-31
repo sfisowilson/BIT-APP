@@ -282,11 +282,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Engine</label>
                   <select
-                    value={settings['engine_detection'] || 'basic'}
+                    value={settings['engine_detection'] || 'replicate'}
                     onChange={e => updateField('engine_detection', e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   >
-                    <option value="basic">Basic — throws (forces config)</option>
                     <option value="yolo">YOLO — Real-time object detection (local)</option>
                     <option value="grounding-dino">Grounding DINO v2 — Open-vocabulary (local)</option>
                     <option value="gemini">Gemini 3 Flash — Multimodal (cloud)</option>
@@ -416,11 +415,10 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Engine</label>
                 <select
-                  value={settings['engine_brand_analysis'] || 'basic'}
+                  value={settings['engine_brand_analysis'] || 'gemini'}
                   onChange={e => updateField('engine_brand_analysis', e.target.value)}
                   className="w-full max-w-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 >
-                  <option value="basic">Basic — No analysis (skip)</option>
                   <option value="google">Google — Cloud Vision (logo + text)</option>
                   <option value="gemini">Gemini 3 Flash — Multimodal analysis</option>
                 </select>
@@ -433,13 +431,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
               <div>
                 <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Engine</label>
                 <select
-                  value={settings['engine_compositing'] || 'basic'}
+                  value={settings['engine_compositing'] || 'opencv'}
                   onChange={e => updateField('engine_compositing', e.target.value)}
                   className="w-full max-w-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                 >
-                  <option value="basic">Basic — Placeholder (returns asset only)</option>
-                  <option value="opencv">OpenCV — FFmpeg overlay + blend</option>
+                  <option value="opencv">OpenCV — FFmpeg overlay + blend (single-frame preview)</option>
+                  <option value="planar-warp">Planar Warp — Deterministic homography (flat signage, pixel-perfect)</option>
+                  <option value="pikaswaps">Pikaswaps — fal.ai text-driven AI swap (3D products)</option>
                 </select>
+                <p className="text-[9px] text-slate-400 mt-1">
+                  Interactive placements (click-to-place in the Editor) route to Planar Warp or Pikaswaps automatically based on placement type — this setting only affects the legacy single-frame compositing preview.
+                </p>
               </div>
             </div>
 
@@ -448,24 +450,25 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
               <div className="flex items-center gap-2 mb-3">
                 <Video className="h-4 w-4 text-purple-500" />
                 <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Surface Tracking Engine</h4>
-                <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-[8px] font-bold uppercase">New</span>
               </div>
-              <p className="text-[9px] text-slate-400 mb-3">Tracks operator-adjusted surface boundaries through every frame of a scene using SAM 3 video mode. Triggered automatically when a surface is approved with an adjusted boundary.</p>
+              <p className="text-[9px] text-slate-400 mb-3">Tracks a placed surface across every shot/cut in its scene using SAM 3 video-rle, re-anchoring with a text prompt at each cut. Runs automatically inside the render job when a Planar or Generative interactive placement is dispatched.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono mb-1">Engine</label>
                   <select
-                    value={settings['engine_tracking'] || 'basic'}
+                    value={settings['engine_tracking'] || 'sam3'}
                     onChange={e => updateField('engine_tracking', e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   >
-                    <option value="basic">Basic — Throws (forces config)</option>
-                    <option value="sam3">SAM 3 — Fal.ai video tracking</option>
+                    <option value="sam3">SAM 3 — Fal.ai video-rle tracking</option>
                   </select>
                 </div>
-                {renderField('sam3_tracking_endpoint', 'SAM 3 Video Endpoint', 'https://fal.run/fal-ai/sam-3/video')}
                 {renderField('falai_sam3_endpoint', 'SAM 3 Image Endpoint', 'https://fal.run/fal-ai/sam-3/image')}
+                {renderField('sam3_video_base_url', 'Public Video Base URL', 'https://your-tunnel.example.com')}
               </div>
+              <p className="text-[9px] text-slate-400 mt-2">
+                Public Video Base URL must be reachable by fal.ai's servers — it's prefixed onto video/clip paths so SAM 3 can download them. In local dev this is a tunnel URL (e.g. cloudflared/ngrok); update it whenever the tunnel restarts and gets a new address.
+              </p>
             </div>
           </div>
         )}

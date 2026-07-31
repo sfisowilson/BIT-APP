@@ -145,24 +145,44 @@ BIT (Brand Inserts Technology) is a **three-tier, multi-service platform** for A
 | `YoloSurfaceDetectionService` | `ISurfaceDetectionService` | YOLO-based surface detection |
 | `ReplicateSurfaceDetectionService` | `ISurfaceDetectionService` | Replicate API surface detection |
 | `GoogleVisionDetectionService` | `ISurfaceDetectionService` | Google Vision surface detection |
-| `BasicSurfaceDetectionService` | `ISurfaceDetectionService` | Fallback (no external API) |
 | `GeminiBrandAnalysisService` | `IBrandAnalysisService` | Gemini brand analysis |
 | `GoogleVisionBrandAnalysisService` | `IBrandAnalysisService` | Google Vision brand analysis |
-| `BasicBrandAnalysisService` | `IBrandAnalysisService` | Fallback brand analysis |
-| `OpenCvCompositingService` | `ICompositingService` | OpenCV compositing |
-| `BasicCompositingService` | `ICompositingService` | Fallback compositing |
+| `OpenCvCompositingService` | `ICompositingService` | OpenCV compositing (single-frame preview only) |
+| `PikaswapsCompositingService` | `ICompositingService` | fal.ai pikaswaps — text-driven video object/region swap. Real entry point is `CompositeWithPromptAsync`, not `CompositeAsync` (a stub — see interface note below). |
+| `PlanarWarpCompositingService` | `ICompositingService` | Deterministic ffmpeg homography warp for flat signage. Real entry points are `CompositeFrameAsync`/`RelightFrameAsync`/`EncodeToMp4Async`, called directly by `RenderJobService` rather than through `ICompositingService.CompositeAsync` (also a stub). |
+| `Sam3TrackingService` | `ISurfaceTrackingService` | fal.ai SAM3 — single-frame `PreviewSegmentAsync` and per-shot `SegmentVideoRleAsync` (both `sam-3/video-rle`, box/point/text prompt) used by `ShotAwareTrackingService`. |
+| `ShotAwareTrackingService` | `IShotAwareTrackingService` | Tracks a Planar quad or Generative mask across every shot in a scene, re-anchoring with a text prompt at each cut. See §3.7. |
+| `FalAiImageEmbedService` | (concrete) | fal.ai `sam-3/image/embed` — SAM3 image embeddings, used only for shot-keyframe similarity clustering |
+| `ShotDetectionPipeline` | (concrete) | FFmpeg shot-cut detection + keyframe extraction + embedding, per content item |
+| `ShotClusteringService` | (concrete) | Groups shots into `SceneItem`s by embedding cosine similarity — see §3.7 |
+| `VideoChunkingService` | (concrete) | Splits video into ≤4.75s chunks for pikaswaps (`SplitIntoChunksAsync`) or shot-boundary-respecting chunks (`SplitByShotBoundariesAsync`); splices results back (`SpliceChunksAsync`) |
 
 ### 3.3 AI Engine Swappability (Factory Pattern)
 
 Registered in `Program.cs` — admin-configurable via Platform Settings at runtime:
 
 ```
-engine_detection  → "yolo" | "replicate" | "google" | "basic"
-engine_brand_analysis → "gemini" | "google" | "basic"
-engine_compositing → "opencv" | "basic"
+engine_detection      → "yolo" | "replicate" | "google" | "gemini" | "grounding-dino"
+engine_brand_analysis → "gemini" | "google"
+engine_compositing    → "opencv" | "pikaswaps" | "planar-warp"
+engine_tracking       → "sam3"
+```
+No "basic"/no-op fallback exists for any category — a missing or unrecognized engine setting makes `EngineFactory` throw a clear configuration error.
+
+Engine changes require app restart. Defaults to `"basic"` if setting is missing. fal.ai-backed engines (`Sam3TrackingService`, `PikaswapsCompositingService`, `FalAiImageEmbedService`, `FalAiSam2Service`, `FalAiSam3Service`) read their API key from the DB-backed `falai_api_key` Platform Setting (Admin Settings UI), not `appsettings.json` — they degrade gracefully (log + fallback/empty result) if unset.
+
+### 3.7 Shot Detection & Shot-Aware Tracking
+
+A `SceneItem` is not a single camera cut — it is a **temporally-contiguous group of one or more shots**. This is what makes "consistent brand placement across every cut in a scene" possible:
+
+```
+ContentItem → ShotDetectionPipeline (FFmpeg cut detection + keyframe + SAM3 embed)
+            → ShotItem[] (unassigned)
+            → ShotClusteringService (cosine similarity ≥ 0.85, contiguity-enforced)
+            → SceneItem (1..N shots grouped)
 ```
 
-Engine changes require app restart. Defaults to `"basic"` if setting is missing.
+For interactive placement, `ShotAwareTrackingService` (used by both `RenderJobService.ProcessPlanarRenderJob` and `ProcessGenerativeRenderJob`) tracks the seed shot continuously via a SAM3 `sam-3/video-rle` box prompt, then re-anchors every subsequent shot in the scene with a **text** prompt (Gemini-generated surface description) — a cut changes the surface's screen position but not its semantic identity. A shot where nothing clears the detection threshold is marked `Skipped`: the source video passes through unmodified for that shot's frames rather than failing the whole render. See `governance/plans/shot-aware-consistency.md` for the full design.
 
 ### 3.4 React Frontend Components (20 components)
 
@@ -171,8 +191,8 @@ Engine changes require app restart. Defaults to `"basic"` if setting is missing.
 | `App` | `App.tsx` | Root: routing, auth state, tab composition |
 | `CampaignsTab` | `CampaignsTab.tsx` | Campaign list & management |
 | `IngestionTab` | `IngestionTab.tsx` | Video upload & pipeline monitoring |
-| `EditorTab` | `EditorTab.tsx` | Scene QA & surface review |
-| `ComposerTab` | `ComposerTab.tsx` | Compositing & render submission |
+| `EditorTab` | `EditorTab.tsx` | Scene QA, surface review, and asset placement (both the AI-detected-surface dropdown flow and the interactive click/draw-to-place flow via `SurfaceClickOverlay`) — this is where render dispatch happens; both flows dispatch through `POST /api/renders/interactive` |
+| `SurfaceClickOverlay` | `SurfaceClickOverlay.tsx` | Click-to-segment ("Insert Product") and draw-to-place ("Place Signage") interactions on the video player, embedded in `EditorTab` |
 | `TelemetryTab` | `TelemetryTab.tsx` | System logs & alarms |
 | `AdminConsoleTab` | `AdminConsoleTab.tsx` | User management, settings, role requests |
 | `AnalyticsTab` | `AnalyticsTab.tsx` | BI dashboard & reports |

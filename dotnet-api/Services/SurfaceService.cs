@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using Afrobotics.Bit.Api.Data;
 using Afrobotics.Bit.Api.DTOs;
 using Afrobotics.Bit.Api.Models;
 using Afrobotics.Bit.Api.Repositories;
@@ -11,17 +15,21 @@ namespace Afrobotics.Bit.Api.Services
     {
         Task<IEnumerable<SurfaceItem>> GetSurfacesAsync(string sceneId);
         Task<SurfaceItem> ApproveSurfaceAsync(string id, ApprovalDto dto, string approverEmail);
+        Task<SurfaceItem> CreateFromClickAsync(CreateSurfaceFromClickRequest dto);
+        Task<SurfaceItem> CreateFromQuadAsync(CreateSurfaceFromQuadRequest dto);
     }
 
     public class SurfaceService : ISurfaceService
     {
         private readonly ISurfaceRepository _surfaceRepository;
         private readonly IEmailService _email;
+        private readonly PostgresDbContext _context;
 
-        public SurfaceService(ISurfaceRepository surfaceRepository, IEmailService email)
+        public SurfaceService(ISurfaceRepository surfaceRepository, IEmailService email, PostgresDbContext context)
         {
             _surfaceRepository = surfaceRepository;
             _email = email;
+            _context = context;
         }
 
         public async Task<IEnumerable<SurfaceItem>> GetSurfacesAsync(string sceneId)
@@ -105,6 +113,111 @@ namespace Afrobotics.Bit.Api.Services
             await _surfaceRepository.UpdateAsync(surface);
             await _surfaceRepository.SaveChangesAsync();
             return surface;
+        }
+
+        public async Task<SurfaceItem> CreateFromClickAsync(CreateSurfaceFromClickRequest dto)
+        {
+            var scene = await ResolveSceneAsync(dto.ContentId, dto.FrameIndex);
+
+            var surface = new SurfaceItem
+            {
+                Id = "sf-" + Guid.NewGuid().ToString()[..8],
+                SceneId = scene.Id,
+                SurfaceType = string.IsNullOrWhiteSpace(dto.SurfaceType) ? "Product Surface" : dto.SurfaceType,
+                BoundaryCoordinatesJson = dto.MaskPolygonJson,
+                EstimatedDepth = 0,
+                OrientationVectorJson = "{\"yaw\":0,\"pitch\":0,\"roll\":0}",
+                ConfidenceScore = 0.8,
+                ViabilityScore = 0.8,
+                Status = "Approved", // interactive placements are pre-approved by the click action itself
+                DetectedAtFrame = dto.FrameIndex,
+                AssetType = "Generative",
+                Source = "Manual"
+            };
+
+            await _surfaceRepository.AddAsync(surface);
+            await _surfaceRepository.SaveChangesAsync();
+            return surface;
+        }
+
+        public async Task<SurfaceItem> CreateFromQuadAsync(CreateSurfaceFromQuadRequest dto)
+        {
+            ValidateQuad(dto.QuadCornersJson);
+            var scene = await ResolveSceneAsync(dto.ContentId, dto.FrameIndex);
+
+            var surface = new SurfaceItem
+            {
+                Id = "sf-" + Guid.NewGuid().ToString()[..8],
+                SceneId = scene.Id,
+                SurfaceType = string.IsNullOrWhiteSpace(dto.SurfaceType) ? "Signage Surface" : dto.SurfaceType,
+                BoundaryCoordinatesJson = dto.QuadCornersJson,
+                EstimatedDepth = 0,
+                OrientationVectorJson = "{\"yaw\":0,\"pitch\":0,\"roll\":0}",
+                ConfidenceScore = 0.8,
+                ViabilityScore = 0.8,
+                Status = "Approved", // interactive placements are pre-approved by the draw action itself
+                DetectedAtFrame = dto.FrameIndex,
+                AssetType = "Planar",
+                Source = "Manual"
+            };
+
+            await _surfaceRepository.AddAsync(surface);
+            await _surfaceRepository.SaveChangesAsync();
+            return surface;
+        }
+
+        /// <summary>
+        /// Rejects a degenerate quad (duplicate/near-duplicate corners, or too few points) before
+        /// it's persisted — a degenerate quad produces an invalid perspective transform in
+        /// PlanarWarpCompositingService. Defense in depth alongside the same check on the
+        /// frontend (SurfaceClickOverlay), since any client could call this endpoint directly.
+        /// </summary>
+        private static void ValidateQuad(string quadCornersJson)
+        {
+            List<(double x, double y)> points;
+            try
+            {
+                using var doc = JsonDocument.Parse(quadCornersJson);
+                points = doc.RootElement.EnumerateArray()
+                    .Select(p => (p.GetProperty("x").GetDouble(), p.GetProperty("y").GetDouble()))
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                throw new ArgumentException($"Invalid quad corners JSON: {ex.Message}");
+            }
+
+            if (points.Count != 4)
+                throw new ArgumentException($"Quad must have exactly 4 corners, got {points.Count}.");
+
+            const double minCornerDistance = 10;
+            for (int i = 0; i < points.Count; i++)
+            {
+                for (int j = i + 1; j < points.Count; j++)
+                {
+                    var dist = Math.Sqrt(Math.Pow(points[i].x - points[j].x, 2) + Math.Pow(points[i].y - points[j].y, 2));
+                    if (dist < minCornerDistance)
+                        throw new ArgumentException(
+                            $"Quad corners {i} and {j} are too close together ({dist:F1}px) — this would produce an invalid placement.");
+                }
+            }
+        }
+
+        /// <summary>Resolves the scene containing the given frame — a surface always belongs to exactly one scene.</summary>
+        private async Task<SceneItem> ResolveSceneAsync(string contentId, int frameIndex)
+        {
+            if (string.IsNullOrEmpty(contentId))
+                throw new ArgumentException("ContentId is required.");
+
+            var scene = await _context.SceneItems
+                .Where(s => s.ContentId == contentId && s.StartFrame <= frameIndex && frameIndex <= s.EndFrame)
+                .OrderBy(s => s.SceneIndex)
+                .FirstOrDefaultAsync();
+
+            if (scene == null)
+                throw new ArgumentException($"No scene found for content '{contentId}' at frame {frameIndex}.");
+
+            return scene;
         }
     }
 }

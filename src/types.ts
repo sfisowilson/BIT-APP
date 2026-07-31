@@ -55,6 +55,7 @@ export interface SurfaceItemResponse {
   exclusionReason?: string;
   placementImageUrl?: string;
   detectedAtFrame?: number;
+  trackingPointsJson?: string;  // Serialized JSON array of {frame,x,y} — see SurfaceItem.trackingPoints
 }
 
 /** Parsed surface with deserialized coordinates and orientation */
@@ -70,15 +71,11 @@ export interface SurfaceItem {
   status: "Candidate" | "Approved" | "Excluded" | "Pending";
   exclusionReason?: string;
   placementImageUrl?: string;
-  trackedBoundaries?: TrackedBoundary[];  // per-frame tracking data
   detectedAtFrame?: number;              // frame where detected, for video seek
-}
-
-/** Per-frame boundary from surface tracking engine */
-export interface TrackedBoundary {
-  frame: number;
-  boundary: { x: number; y: number }[];
-  driftConfidence: number;  // 0.0–1.0
+  /** Flat, frame-ordered list of {frame,x,y} centroid points from shot-aware tracking — lets the
+   * Placement Workbench draw a single moving point following the surface during scene playback.
+   * Empty until a render has actually run for this surface (tracking only happens during render). */
+  trackingPoints: { frame: number; x: number; y: number }[];
 }
 
 /** Parse a SurfaceItemResponse from the API into a SurfaceItem with proper types */
@@ -98,7 +95,12 @@ export function parseSurfaceItem(raw: SurfaceItemResponse): SurfaceItem {
   try {
     orientation = JSON.parse(raw.orientationVectorJson || '{}');
   } catch { /* keep default */ }
-  
+
+  let trackingPoints: { frame: number; x: number; y: number }[] = [];
+  try {
+    if (raw.trackingPointsJson) trackingPoints = JSON.parse(raw.trackingPointsJson);
+  } catch { /* keep default */ }
+
   return {
     id: raw.id,
     sceneId: raw.sceneId,
@@ -112,6 +114,7 @@ export function parseSurfaceItem(raw: SurfaceItemResponse): SurfaceItem {
     exclusionReason: raw.exclusionReason,
     placementImageUrl: raw.placementImageUrl,
     detectedAtFrame: raw.detectedAtFrame,
+    trackingPoints,
   };
 }
 
@@ -178,16 +181,43 @@ export type BrandCategory = typeof BRAND_CATEGORIES[number];
 export interface RenderItem {
   id: string;
   contentId: string;
-  surfaceId: string;
+  /** Null for RenderMode "PromptEdit" — those have no click/quad-detected boundary. */
+  surfaceId?: string | null;
   campaignId: string;
   assetId: string;
   exportPreset: string;
   storageKey: string;
-  renderStatus: "Queued" | "Processing" | "Finished" | "Failed";
+  renderStatus: "Queued" | "Processing" | "Finished" | "Failed" | "NeedsReview" | "PreviewReady" | "Rejected";
   progress: number;
   processingDurationMs: number;
   lastErrorMessage?: string;
   createdAt: string;
+  /** Scene this render targets. Set for "PromptEdit" renders; Interactive renders derive their scene via surfaceId instead. */
+  sceneId?: string | null;
+  /** User's free-text placement instruction for a "PromptEdit" render. */
+  promptText?: string | null;
+  /** Download path for the not-yet-approved AI-generated preview clip, set once renderStatus reaches "PreviewReady". */
+  previewStorageKey?: string | null;
+  /** Undefined/"Interactive" (click/quad placement) vs "PromptEdit" (free-text AI video generation). */
+  renderMode?: "Interactive" | "PromptEdit" | null;
+}
+
+/** fal-ai/kling-video/o1/video-to-video/edit's real, hard input-duration constraints — mirrored
+ * from KlingPromptEditService.MinPromptEditDurationSeconds/MaxPromptEditDurationSeconds on the
+ * backend (dotnet-api/Services/KlingPromptEditService.cs). Keep both sides in sync manually. */
+export const MIN_PROMPT_EDIT_DURATION_SECONDS = 3.0;
+export const MAX_PROMPT_EDIT_DURATION_SECONDS = 10.05;
+
+/** Request to dispatch a prompt-based AI placement preview (the "AI Placement Assistant →
+ * Generate New" flow). No surfaceId — the AI model infers placement purely from promptText
+ * plus the asset image. */
+export interface CreatePromptRenderRequest {
+  contentId: string;
+  sceneId: string;
+  campaignId: string;
+  assetId: string;
+  promptText: string;
+  exportPreset?: string;
 }
 
 export interface EventLog {
@@ -198,6 +228,34 @@ export interface EventLog {
   module: string;
   user: string;
   description: string;
+}
+
+/** Mirrors dotnet-api/DTOs/InvoiceDtos.cs — one billable line item, one per Finished render. */
+export interface InvoiceLineItem {
+  id: string;
+  description: string;
+  surfaceType: string;
+  durationSeconds: number;
+  viabilityScore: number;
+  unitRate: number;
+  amount: number;
+}
+
+/** Mirrors dotnet-api/DTOs/InvoiceDtos.cs's InvoiceSummaryDto — the real, backend-calculated
+ * campaign invoice (exposure seconds × viability multiplier + render processing costs + VAT),
+ * returned by GET /api/campaigns/{id}/invoice. */
+export interface InvoiceSummary {
+  invoiceNumber: string;
+  campaignId: string;
+  campaignName: string;
+  clientName: string;
+  invoiceDate: string;
+  lineItems: InvoiceLineItem[];
+  subtotal: number;
+  renderProcessingFees: number;
+  taxAmount: number;
+  totalAmount: number;
+  currency: string;
 }
 
 export interface AlarmItem {
@@ -259,17 +317,6 @@ export interface SchemaEntity {
   fields: string[];
 }
 
-export interface DaySchedule {
-  day: number;
-  phase: 'Phase 1: UI & REST API' | 'Phase 2: AI Engine & QA';
-  title: string;
-  description: string;
-  mreqs: string[];
-  activities: string[];
-  risk: string;
-  milestone: boolean;
-}
-
 export const DATABASE_SCHEMA: SchemaEntity[] = [
   {
     name: 'Content',
@@ -309,219 +356,6 @@ export const DATABASE_SCHEMA: SchemaEntity[] = [
   }
 ];
 
-export const TIMELINE_DATA: DaySchedule[] = [
-  {
-    day: 1,
-    phase: 'Phase 1: UI & REST API',
-    title: 'PostgreSQL Relational Models & JWT Security',
-    description: 'Set up the database cluster, run DDL migrations for all core entities, and implement secure token authentication (JWT) over HTTPS with strict role authorization check routines.',
-    mreqs: ['MReq 8 (Security)', 'MReq 9 (Roles)', 'MReq 25 (Data models)'],
-    activities: [
-      'Spin up PostgreSQL database instance and execute SQL migrations to create all schemas.',
-      'Configure table constraints, indexes, and primary keys for all 11 core entities.',
-      'Build C# Token Identity Service (JWT over HTTPS) with verification middleware.',
-      'Scaffold endpoint authorization guards (Admin, Advertiser, Editor policies).'
-    ],
-    risk: 'Poor validation structure can lead to database injection. Mitigated by applying strongly-typed contract validation on all entry models.',
-    milestone: false
-  },
-  {
-    day: 2,
-    phase: 'Phase 1: UI & REST API',
-    title: 'Vue.js Project Scaffold & Backend API Controllers',
-    description: 'Scaffold the frontend web shell using Vue.js and Tailwind CSS, and create the C# REST controller stubs in ASP.NET Core matching standard API routes.',
-    mreqs: ['MReq 8 (Security)', 'MReq 18 (Admin portal)'],
-    activities: [
-      'Establish the Vue.js project shell with modern, high-contrast Tailwind styling.',
-      'Set up global stores for session management, dashboard active tabs, and alerts.',
-      'Develop the C# API Controllers (Campaign, Content, Surface, User) with path stubs.',
-      'Integrate base cross-origin resource sharing (CORS) rules.'
-    ],
-    risk: 'Contract mismatch between C# models and Vue API payloads. Mitigated by setting up shared JSON schema contracts before writing code.',
-    milestone: false
-  },
-  {
-    day: 3,
-    phase: 'Phase 1: UI & REST API',
-    title: 'Campaign Management & Cloud Object Staging',
-    description: 'Develop advertiser campaign panels in Vue, asset library interfaces, and implement the C# S3/Blob storage proxies for asset staging.',
-    mreqs: ['MReq 10 (Campaigns)', 'MReq 13 (S3/Blob Storage)'],
-    activities: [
-      'Build Vue.js campaign creations wizard supporting strict naming structures (e.g. UZ01EP12_COKE).',
-      'Create Asset Library dashboard with multi-file drag-and-drop triggers.',
-      'Implement C# upload gateways validating sizes, dimensions, and categories.',
-      'Connect uploads to secure cloud-hosted Object Storage and reference keys in PostgreSQL.'
-    ],
-    risk: 'Direct client-to-cloud uploads risk exposing API keys. Mitigated by proxying all requests securely through C# server-side tokens.',
-    milestone: false
-  },
-  {
-    day: 4,
-    phase: 'Phase 1: UI & REST API',
-    title: 'Content Ingestion Portal & Metadata Analyzers',
-    description: 'Build the video upload panel for Content Owners and develop C# FFmpeg wrapper routines to extract original stream metadata without duration alteration.',
-    mreqs: ['MReq 1 (Content Ingestion)', 'MReq 13 (S3/Blob Storage)'],
-    activities: [
-      'Build Content Owner upload view supporting professional broadcast formats (MP4, MOV, MXF, AVI).',
-      'Integrate server-side FFmpeg metadata probe to extract duration, frame rates, and codec details.',
-      'Add strict constraints preventing video duration edits or visual morphing of source clips.',
-      'Set up scene cut indices staging tables in database.'
-    ],
-    risk: 'Extremely large video files stalling HTTP request pipelines. Mitigated by implementing chuck-based, resumable video streaming uploads.',
-    milestone: false
-  },
-  {
-    day: 5,
-    phase: 'Phase 1: UI & REST API',
-    title: 'Editor Workbench & Quality Approval Handover',
-    description: 'Complete the visual Editor workbench, integrated approval state machines, notification gateway triggers, and central administrative portal.',
-    mreqs: ['MReq 11 (Workflow)', 'MReq 12 (Notifications)', 'MReq 15 (SMS/SMTP)', 'MReq 18 (Admin UI)'],
-    activities: [
-      'Design and build the interactive Editor panel for approving/rejecting recommended slots.',
-      'Implement permanent, non-negotiable approval workflows with mandatory reasons logs.',
-      'Deploy C# SMTP and SMS queues triggered on task updates.',
-      'Integrate live system health charts (DB size, storage keys, API call count) on Admin portal.'
-    ],
-    risk: 'Unapproved placements leaking into output rendering. Mitigated by database-level locks preventing renders unless AdSlot status is explicitly "Approved".',
-    milestone: true
-  },
-  {
-    day: 6,
-    phase: 'Phase 2: AI Engine & QA',
-    title: 'AI Interface Abstractions & Physical Scene Cutting',
-    description: 'Code the Object-Oriented C# interfaces that enable decoupled AI engine models, and integrate the background scene-cut detection pipeline.',
-    mreqs: ['MReq 1 (Ingestion)', 'MReq 25 (Database models)'],
-    activities: [
-      'Develop and export standard C# Interfaces (ISurfaceDetectionEngine, IMotionTracker, ICompositingEngine).',
-      'Integrate background physical scene-cut parsing via server-side FFmpeg.',
-      'Generate scene index bounding frames and store records securely in PostgreSQL Scene table.',
-      'Connect Scene table records to the frontend Video Player.'
-    ],
-    risk: 'Heavy CPU loads during scene-cut parsing crashing the API. Mitigated by isolating scene-cutting to an asynchronous, background worker thread queue.',
-    milestone: false
-  },
-  {
-    day: 7,
-    phase: 'Phase 2: AI Engine & QA',
-    title: 'Computer-Vision Surface Detection & Competitive Separation',
-    description: 'Wrap SAM 2 (Segment Anything) and YOLO models inside C# service classes, and implement brand recognition to enforce competitive advertising separation.',
-    mreqs: ['MReq 2 (Scene Analysis)', 'MReq 3 (Placement recommendation)'],
-    activities: [
-      'Implement concrete "Sam2SurfaceDetector" and "YoloSurfaceDetector" services implementing ISurfaceDetectionEngine.',
-      'Construct depth estimation and 3D coordinate mapping solvers.',
-      'Develop the Competitive Separation Algorithm: analyze in-scene text and logos to avoid positioning ads next to competitive brands.',
-      'Expose identified surfaces coordinates to API controllers.'
-    ],
-    risk: 'High false-positive rate on non-viable reflective surfaces. Mitigated by introducing texture and reflection heuristic filters to discard windows.',
-    milestone: false
-  },
-  {
-    day: 8,
-    phase: 'Phase 2: AI Engine & QA',
-    title: 'Locked Brand-Safety Enforcement Layer',
-    description: 'Deploy rigid, non-bypassable filters directly inside the detection engine to guarantee advertisements are never placed on faces, children, government vehicles, or religious symbols.',
-    mreqs: ['MReq 4 (Brand-Safety)', 'MReq 11 (Approvals)'],
-    activities: [
-      'Incorporate mandatory deep-learning object classifiers for human face and children detection.',
-      'Hardcode permanent block lists preventing placements on government, emergency, or religious spaces.',
-      'Ensure the rules engine cannot be bypassed by any user level, including Administrators.',
-      'Enforce mandatory double-pass human approval checks.'
-    ],
-    risk: 'Sponsors or sales staff attempting to bypass brand filters. Mitigated by hardcoding rule checks directly inside the backend SQL and pipeline layers.',
-    milestone: false
-  },
-  {
-    day: 9,
-    phase: 'Phase 2: AI Engine & QA',
-    title: 'Planar Motion Tracking & Stabilization',
-    description: 'Integrate OpenCV tracking wrappers to keep inserted brand assets locked onto surfaces frame-to-frame without visual drifting.',
-    mreqs: ['MReq 5 (Motion Tracking)'],
-    activities: [
-      'Deploy the OpenCV-based planar point tracker, implementing the IMotionTracker interface.',
-      'Develop fallback point-interpolation routines for handling occlusions or fast panning.',
-      'Add a re-validation drift scoring engine (rejecting slots with >2% drift).',
-      'Expose tracking completion status and confidence ratings.'
-    ],
-    risk: 'Tracking drift over fast-moving action footage. Mitigated by deploying bidirectional tracking algorithms that calculate motion backward and forward.',
-    milestone: false
-  },
-  {
-    day: 10,
-    phase: 'Phase 2: AI Engine & QA',
-    title: 'Compositing Engine & VFX Light-Matching',
-    description: 'Deploy advanced perspective warp engines (Homography solve) and filters to simulate realistic scene lighting, shadows, and camera noise.',
-    mreqs: ['MReq 6 (Compositing)'],
-    activities: [
-      'Implement C# matrix solvers to wrap/warp 2D images or video overlays into 3D perspective frames.',
-      'Develop ambient light match algorithms, calculating surrounding luminance, contrast, and color values.',
-      'Integrate synthetic video grain, camera noise, motion blur, and soft-shadow projection filters.',
-      'Optimize asset scaling pipelines.'
-    ],
-    risk: 'Flat, unrealistic placements looking like "stickers". Mitigated by analyzing surrounding pixels to blend high-frequency color components.',
-    milestone: false
-  },
-  {
-    day: 11,
-    phase: 'Phase 2: AI Engine & QA',
-    title: 'GPU Render Dispatchers & Multi-Format Transcoders',
-    description: 'Connect compositing models with virtualized GPU servers, manage asynchronous job batching queues, and establish preset export transcoders.',
-    mreqs: ['MReq 7 (Rendering)', 'MReq 14 (GPU service)', 'MReq 23 (Throughput)'],
-    activities: [
-      'Build C# batch rendering queues integrating with cloud GPU instances (RunPod / EC2 GPU).',
-      'Configure task dispatchers returning unique rendering progress percentages.',
-      'Deploy standard FFmpeg transcoding pipelines supporting high-quality Broadcast-ProRes and web-ready MP4 H.264 profiles.',
-      'Ensure rendered files are pushed directly back to secure Object Storage.'
-    ],
-    risk: 'GPU rendering nodes running out of video memory (VRAM) under batch pressure. Mitigated by implementing adaptive queue rate limiting.',
-    milestone: true
-  },
-  {
-    day: 12,
-    phase: 'Phase 2: AI Engine & QA',
-    title: 'BI Reporting, Monitoring Alarms & Audit Logging',
-    description: 'Expose performance analytics on the Vue dashboard, connect logging services, set up system alerts, and establish audited usage transfers.',
-    mreqs: ['MReq 16 (DSP)', 'MReq 19 (Statistics)', 'MReq 20 (Events)', 'MReq 21 (Alarms)', 'MReq 22 (Usage support)'],
-    activities: [
-      'Aggregate database metrics (impressions, slot counts, exposure times) and populate Vue BI Dashboard.',
-      'Implement central Event Log recording all system errors, API status and user adjustments.',
-      'Build the Alarms module: automatically broadcast high-priority SMS/Email alerts if storage or GPU interfaces fail.',
-      'Write daily usage compliance logs to secure CSV files and transfer them to isolated archive servers.'
-    ],
-    risk: 'Telemetry logging degrading overall system throughput. Mitigated by processing all logging and analytic writes as asynchronous fire-and-forget tasks.',
-    milestone: false
-  },
-  {
-    day: 13,
-    phase: 'Phase 2: AI Engine & QA',
-    title: 'Platform Redundancy & Mid-Render Failover Tests',
-    description: 'Verify system load-balancing, evaluate database cluster locks, and execute failover recovery tests by manually crashing render nodes.',
-    mreqs: ['MReq 17 (Redundancy)'],
-    activities: [
-      'Deploy redundant containers fronted by load balancers and execute server-crash drills.',
-      'Verify that database connection pools dynamically redirect traffic during failover.',
-      'Crash a render node during active compositing and verify that the queue system detects the silence, recovers original metadata, and re-allocates task.',
-      'Validate that zero files or campaigns are corrupted during hard reboots.'
-    ],
-    risk: 'Race conditions on concurrent jobs during failover. Mitigated by implementing atomic transaction database blocks and unique queue task locks.',
-    milestone: false
-  },
-  {
-    day: 14,
-    phase: 'Phase 2: AI Engine & QA',
-    title: 'Platform Sizing, Visual Quality Check, & Master Sign-Off',
-    description: 'Execute end-to-end load tests across 100+ standard videos, audit visual drift and light matching quality, measure daily volume capacities, and sign-off.',
-    mreqs: ['MReq 23 (Throughput)', 'MReq 24 (Daily capacity)'],
-    activities: [
-      'Run stress tests auditing processing volumes against daily minutes goals per node.',
-      'Perform human-in-the-loop quality evaluations of final renders to certify perspective and blending.',
-      'Analyze unit rendering financial costs to guarantee operational profitability.',
-      'Prepare user guides, secure config handovers, and execute official Release Sign-off.'
-    ],
-    risk: 'Late-stage defects discovered during deployment. Mitigated by enforcing strict continuous integration linting and automatic pipeline tests.',
-    milestone: true
-  }
-];
-
 // ─── Job Management Types ─────────────────────────────────────────────
 
 /** A detection job as returned by GET /api/jobs */
@@ -542,6 +376,16 @@ export interface DetectionJob {
 export interface JobsListResponse {
   data: DetectionJob[];
   count: number;
+}
+
+/** A single shot (camera cut) within a scene — a scene can span multiple shots. */
+export interface ShotItem {
+  id: string;
+  shotIndex: number;
+  startFrame: number;
+  endFrame: number;
+  keyframeTimestamp: number;
+  keyframeUrl: string | null;
 }
 
 // ─── Interactive Placement Types ─────────────────────────────────────
@@ -575,6 +419,28 @@ export interface InteractiveRenderRequest {
   assetId: string;
   assetType: 'Generative' | 'Planar';
   exportPreset?: string;
+}
+
+/** Request to persist a SurfaceItem from an interactive "Insert Product" click (SAM3 mask) */
+export interface CreateSurfaceFromClickRequest {
+  contentId: string;
+  frameIndex: number;
+  maskPolygonJson: string;
+  surfaceType?: string;
+}
+
+/** Request to persist a SurfaceItem from an interactive "Place Signage" 4-corner quad */
+export interface CreateSurfaceFromQuadRequest {
+  contentId: string;
+  frameIndex: number;
+  quadCornersJson: string;
+  surfaceType?: string;
+}
+
+/** Response from surfaces/from-click and surfaces/from-quad */
+export interface CreateSurfaceResponse {
+  surfaceId: string;
+  sceneId: string;
 }
 
 /** Asset type classification — drives compositing engine selection */

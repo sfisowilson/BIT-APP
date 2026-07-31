@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Security.Claims;
 using System.Text.Json;
@@ -86,7 +87,10 @@ public class UserProfileController : ControllerBase
 
         var muted = Array.Empty<string>();
         try { muted = JsonSerializer.Deserialize<string[]>(user.MutedNotifications) ?? Array.Empty<string>(); }
-        catch { }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[UserProfile] Failed to deserialize muted notifications: {ex.Message}");
+        }
 
         return Ok(new { mutedNotifications = muted });
     }

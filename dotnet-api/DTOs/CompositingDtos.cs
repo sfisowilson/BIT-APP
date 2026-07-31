@@ -30,4 +30,25 @@ namespace Afrobotics.Bit.Api.DTOs
         public string AssetType { get; set; } = "Generative"; // "Generative" or "Planar"
         public string ExportPreset { get; set; } = "Web-Ready MP4";
     }
+
+    /// <summary>
+    /// Request to dispatch a prompt-based AI placement preview — the "AI Placement Assistant →
+    /// Generate New" flow. No pre-existing SurfaceItem; the AI model infers placement purely
+    /// from PromptText plus the asset image. Scene must fall within Kling O1's allowed duration
+    /// window (KlingPromptEditService.MinPromptEditDurationSeconds/MaxPromptEditDurationSeconds).
+    /// </summary>
+    public class CreatePromptRenderDto
+    {
+        public string ContentId { get; set; } = string.Empty;
+        public string SceneId { get; set; } = string.Empty;
+        public string CampaignId { get; set; } = string.Empty;
+        public string AssetId { get; set; } = string.Empty;
+        public string PromptText { get; set; } = string.Empty;
+        public string ExportPreset { get; set; } = "Web-Ready MP4";
+    }
+
+    public class RejectPromptRenderDto
+    {
+        public string? Reason { get; set; }
+    }
 }

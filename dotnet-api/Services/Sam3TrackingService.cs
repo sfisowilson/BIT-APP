@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -13,13 +14,9 @@ using Microsoft.Extensions.Logging;
 namespace Afrobotics.Bit.Api.Services;
 
 /// <summary>
-/// Calls Fal.ai SAM 3 Video mode for full-scene surface tracking.
-///
-/// Flow: POST submit → poll status → GET result → download segmented video.
-/// The segmented video is then composited with the brand asset by RenderJobService.
-///
-/// Endpoint: https://fal.run/fal-ai/sam-3/video
-/// Queue:    https://queue.fal.run/fal-ai/sam-3/video/requests/{id}
+/// Calls Fal.ai SAM 3 for surface segmentation and tracking: single-frame click preview
+/// (<see cref="PreviewSegmentAsync"/>) and per-shot video-rle segmentation
+/// (<see cref="SegmentVideoRleAsync"/>), the foundation for <see cref="ShotAwareTrackingService"/>.
 /// Activated when engine_tracking = "sam3".
 /// </summary>
 public class Sam3TrackingService : ISurfaceTrackingService
@@ -29,10 +26,8 @@ public class Sam3TrackingService : ISurfaceTrackingService
     private readonly IEventLogService _eventLog;
     private readonly HttpClient _http;
 
-    private const string DefaultEndpoint = "https://fal.run/fal-ai/sam-3/video";
-    private const string DefaultQueueBase = "https://queue.fal.run/fal-ai/sam-3/video/requests";
-    private static readonly TimeSpan MaxPollTime = TimeSpan.FromMinutes(25);
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(10);
+    private const string DefaultRleEndpoint = "https://fal.run/fal-ai/sam-3/video-rle";
+    private const string DefaultRleQueueBase = "https://queue.fal.run/fal-ai/sam-3/video-rle/requests";
 
     public Sam3TrackingService(IPlatformSettingsService settings, ILogger<Sam3TrackingService> logger, IEventLogService eventLog)
     {
@@ -42,71 +37,123 @@ public class Sam3TrackingService : ISurfaceTrackingService
         _http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
     }
 
-    public async Task<List<FrameBoundary>> TrackAsync(
-        string surfaceId,
+    /// <summary>
+    /// Preview-segment a clicked point on a single video frame using SAM3 video-rle.
+    /// Seeds a single-frame window (frameIndex..frameIndex) with a point_prompt and decodes
+    /// the returned RLE mask into a polygon for SVG overlay rendering.
+    /// </summary>
+    public async Task<SegmentPreviewResult?> PreviewSegmentAsync(
+        string contentId, string videoPath, int frameIndex, int x, int y, CancellationToken cancellationToken = default)
+    {
+        await _eventLog.LogEventAsync("SAM3", "PREVIEW_START", "Info",
+            $"Preview segment: content={contentId}, frame={frameIndex}, point=({x},{y})");
+
+        var frames = await SegmentVideoRleAsync(
+            videoPath, frameIndex, frameIndex,
+            seedPoint: (x, y),
+            promptFrame: frameIndex,
+            cancellationToken: cancellationToken);
+
+        var frame = frames.FirstOrDefault(f => f.FrameIndex == frameIndex) ?? frames.FirstOrDefault();
+        var obj = frame?.Objects.OrderByDescending(o => o.Confidence).FirstOrDefault();
+        if (obj == null || string.IsNullOrEmpty(obj.Rle))
+        {
+            await _eventLog.LogEventAsync("SAM3", "PREVIEW_NO_MASK", "Warning",
+                $"SAM3 video-rle returned no mask for point ({x},{y}) at frame {frameIndex}");
+            return null;
+        }
+
+        // Mask dimensions are the source video's native pixel size.
+        var (videoWidth, videoHeight) = VideoProbe.GetDimensions(videoPath);
+        var mask = RleDecoder.Decode(obj.Rle, videoWidth, videoHeight);
+        var polygon = RleDecoder.MaskToPolygon(mask);
+        if (polygon.Count < 3) return null;
+
+        var bounds = RleDecoder.PolygonBounds(polygon);
+        await _eventLog.LogEventAsync("SAM3", "PREVIEW_COMPLETE", "Info",
+            $"Preview result: polygonPoints={polygon.Count}, trackId={obj.TrackId}, " +
+            $"bounds=({bounds.xMin},{bounds.yMin})-({bounds.xMax},{bounds.yMax})");
+
+        return new SegmentPreviewResult
+        {
+            MaskPolygon = polygon,
+            Confidence = obj.Confidence,
+            TrackId = obj.TrackId,
+            SurfaceType = string.Empty,
+            FrameIndex = frameIndex,
+            Bounds = bounds,
+        };
+    }
+
+    /// <summary>
+    /// Segment a frame range via fal-ai/sam-3/video-rle. See <see cref="ISurfaceTrackingService.SegmentVideoRleAsync"/>.
+    /// </summary>
+    public async Task<List<RleFrameResult>> SegmentVideoRleAsync(
         string videoPath,
         int startFrame,
         int endFrame,
-        string seedBoundaryJson,
+        (int xMin, int yMin, int xMax, int yMax)? seedBox = null,
+        (int x, int y)? seedPoint = null,
+        string? textPrompt = null,
         int promptFrame = -1,
-        string? sam3Prompt = null,
-        CancellationToken ct = default)
+        double detectionThreshold = 0.5,
+        CancellationToken cancellationToken = default)
     {
         var apiKey = await _settings.GetAsync("falai_api_key");
         if (string.IsNullOrEmpty(apiKey))
         {
             await _eventLog.LogEventAsync("SAM3", "NO_API_KEY", "Error", "falai_api_key not configured.");
-            return new List<FrameBoundary>();
+            return new List<RleFrameResult>();
         }
 
-        var endpoint = await _settings.GetAsync("sam3_tracking_endpoint", DefaultEndpoint);
-        var queueBase = await _settings.GetAsync("sam3_queue_base_url", DefaultQueueBase);
+        var endpoint = await _settings.GetAsync("falai_sam3_rle_endpoint", DefaultRleEndpoint);
+        var queueBase = await _settings.GetAsync("falai_sam3_rle_queue_base_url", DefaultRleQueueBase);
+        string? clipPath = null;
 
         try
         {
-            var seedPoints = ParseSeedBoundary(seedBoundaryJson);
-            if (seedPoints == null)
-            {
-                await _eventLog.LogEventAsync("SAM3", "INVALID_SEED", "Error",
-                    $"Seed boundary parse failed. JSON: {Truncate(seedBoundaryJson, 200)}");
-                return new List<FrameBoundary>();
-            }
-
-            var videoFileName = Path.GetFileName(videoPath);
-            var videoBaseUrl = await _settings.GetAsync("sam3_video_base_url", "http://localhost:57220");
-            var videoUrl = $"{videoBaseUrl}/api/content/file/{videoFileName}";
-
-            var xs = seedPoints.Select(p => p[0]).ToList();
-            var ys = seedPoints.Select(p => p[1]).ToList();
             var pf = promptFrame >= 0 ? promptFrame : startFrame;
 
-            // Use box_prompts — single bounding box from polygon vertices
-            var boxPrompts = new[]
-            {
-                new
-                {
-                    frame_index = pf,
-                    x_min = (int)xs.Min(),
-                    y_min = (int)ys.Min(),
-                    x_max = (int)xs.Max(),
-                    y_max = (int)ys.Max(),
-                    object_id = 0
-                }
-            };
+            // Trim to just the requested frame range before submitting — passing the whole
+            // source video (which can be tens of minutes long) makes fal.ai process far more
+            // than needed and routinely times out the poll loop for what should be a short call.
+            var fps = VideoProbe.GetFrameRate(videoPath);
+            var clipDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "tmp-sam3");
+            Directory.CreateDirectory(clipDir);
+            var clipFileName = $"{Guid.NewGuid():N}.mp4";
+            clipPath = Path.Combine(clipDir, clipFileName);
 
-            await _eventLog.LogEventAsync("SAM3", "TRACKING_START", "Info",
-                $"Surface {surfaceId}: video={videoUrl}, frames={startFrame}-{endFrame}, promptFrame={pf}, " +
-                $"1box, hasPrompt={sam3Prompt != null}, threshold=0.3");
+            var startSec = startFrame / fps;
+            var durationSec = (endFrame - startFrame + 1) / fps;
+            await RunFfmpegTrimAsync(videoPath, clipPath, startSec, durationSec, cancellationToken);
+
+            // Prompts must be re-based to the trimmed clip's own frame numbering (it starts at 0).
+            var clipPf = Math.Max(0, pf - startFrame);
+
+            var videoBaseUrl = await _settings.GetAsync("sam3_video_base_url", "http://localhost:57220");
+            var videoUrl = $"{videoBaseUrl}/api/content/file/tmp-sam3/{clipFileName}";
+
+            var boxPrompts = seedBox.HasValue
+                ? new object[] { new { frame_index = clipPf, x_min = seedBox.Value.xMin, y_min = seedBox.Value.yMin, x_max = seedBox.Value.xMax, y_max = seedBox.Value.yMax, object_id = 0 } }
+                : Array.Empty<object>();
+
+            var pointPrompts = seedPoint.HasValue
+                ? new object[] { new { x = seedPoint.Value.x, y = seedPoint.Value.y, label = 1, object_id = 0, frame_index = clipPf } }
+                : Array.Empty<object>();
+
+            await _eventLog.LogEventAsync("SAM3", "RLE_SEGMENT_START", "Info",
+                $"video={videoUrl}, frames={startFrame}-{endFrame} (clip {durationSec:F2}s), promptFrame={pf} (clip-relative {clipPf}), " +
+                $"hasBox={seedBox.HasValue}, hasPoint={seedPoint.HasValue}, hasText={!string.IsNullOrEmpty(textPrompt)}, " +
+                $"threshold={detectionThreshold}");
 
             var payload = new
             {
                 video_url = videoUrl,
-                prompt = sam3Prompt,              // Gemini-generated description
-                point_prompts = Array.Empty<object>(),  // Empty — not compatible with box_prompts on same frame
-                box_prompts = boxPrompts,         // Bounding box from polygon coordinates
-                apply_mask = true,                // Use masked video as luma mask for compositing
-                video_output_type = "X264 (.mp4)",
-                detection_threshold = 0.3,        // Lowered for flat surfaces
+                prompt = textPrompt ?? string.Empty,
+                point_prompts = pointPrompts,
+                box_prompts = boxPrompts,
+                apply_mask = false, // we need raw per-frame RLE data, not a baked video
+                detection_threshold = detectionThreshold,
             };
 
             var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
@@ -115,320 +162,131 @@ public class Sam3TrackingService : ISurfaceTrackingService
             });
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            _http.DefaultRequestHeaders.Clear();
-            _http.DefaultRequestHeaders.Add("Authorization", $"Key {apiKey}");
-
-            _logger.LogInformation(
-                "[SAM3 Track] Surface {SurfaceId} frames {Start}-{End} promptFrame={PromptFrame} hasPrompt={HasPrompt}",
-                surfaceId, startFrame, endFrame, pf, sam3Prompt != null);
-
-            // ── Step 1: Submit ──
-            var submitResponse = await _http.PostAsync(endpoint, content, ct);
-            var submitJson = await submitResponse.Content.ReadAsStringAsync(ct);
-
-            if (!submitResponse.IsSuccessStatusCode)
-            {
-                await _eventLog.LogEventAsync("SAM3", "HTTP_ERROR", "Error",
-                    $"HTTP {(int)submitResponse.StatusCode} from submit: {Truncate(submitJson, 500)}");
-                return new List<FrameBoundary>();
-            }
-
-            await _eventLog.LogEventAsync("SAM3", "SUBMITTED", "Info",
-                $"Submit response: {Truncate(submitJson, 500)}");
-
-            // ── Step 2: Check for sync response (video returned immediately) ──
-            Sam3File? videoFile = null;
-            string? requestId = null;
-
-            using var submitDoc = JsonDocument.Parse(submitJson);
-            var submitRoot = submitDoc.RootElement;
-
-            // Try to get request_id (async mode)
-            if (submitRoot.TryGetProperty("request_id", out var rid))
-                requestId = rid.GetString();
-
-            // Try to get video directly (sync mode)
-            if (submitRoot.TryGetProperty("video", out var vid))
-            {
-                videoFile = JsonSerializer.Deserialize<Sam3File>(vid.GetRawText(), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            }
-
-            // ── Step 3: Poll if async ──
-            if (videoFile == null && !string.IsNullOrEmpty(requestId))
-            {
-                videoFile = await PollForResultAsync(queueBase, requestId, surfaceId, ct);
-            }
-
-            // ── Step 4: Download and save SAM3 segmented video ──
-            if (videoFile?.Url == null)
-            {
-                await _eventLog.LogEventAsync("SAM3", "NO_VIDEO", "Error",
-                    $"SAM3 did not return a video URL. request_id={requestId}, submit response: {Truncate(submitJson, 300)}");
-                return new List<FrameBoundary>();
-            }
-
-            await _eventLog.LogEventAsync("SAM3", "DOWNLOADING_VIDEO", "Info",
-                $"Downloading SAM3 segmented video: {videoFile.Url}");
-            var videoBytes = await _http.GetByteArrayAsync(videoFile.Url, ct);
-            var outputDir = Path.Combine(Path.GetTempPath(), "bit-sam3");
-            Directory.CreateDirectory(outputDir);
-            var outputPath = Path.Combine(outputDir, $"sam3_{surfaceId}.mp4");
-            await File.WriteAllBytesAsync(outputPath, videoBytes, ct);
-
-            await _eventLog.LogEventAsync("SAM3", "TRACKING_COMPLETE", "Info",
-                $"Surface {surfaceId}: SAM3 video saved to {outputPath} ({videoBytes.Length} bytes)");
-
-            return new List<FrameBoundary>
-            {
-                new FrameBoundary
-                {
-                    Frame = startFrame,
-                    BoundaryCoordinatesJson = JsonSerializer.Serialize(new { sam3_video = outputPath }),
-                    DriftConfidence = 1.0,
-                }
-            };
-        }
-        catch (TaskCanceledException)
-        {
-            await _eventLog.LogEventAsync("SAM3", "TIMEOUT", "Error",
-                $"SAM3 timed out after 30 min for surface {surfaceId}.");
-            return new List<FrameBoundary>();
-        }
-        catch (Exception ex)
-        {
-            await _eventLog.LogEventAsync("SAM3", "EXCEPTION", "Error",
-                $"SAM3 failed: {ex.GetType().Name} — {ex.Message}");
-            return new List<FrameBoundary>();
-        }
-    }
-
-    // ── Polling ──
-
-    private async Task<Sam3File?> PollForResultAsync(string queueBase, string requestId, string surfaceId, CancellationToken ct)
-    {
-        var statusUrl = $"{queueBase}/{requestId}/status";
-        var resultUrl = $"{queueBase}/{requestId}";
-        var deadline = DateTime.UtcNow.Add(MaxPollTime);
-
-        await _eventLog.LogEventAsync("SAM3", "POLLING_START", "Info",
-            $"Polling {statusUrl} for request {requestId}");
-
-        while (DateTime.UtcNow < deadline)
-        {
-            ct.ThrowIfCancellationRequested();
-
-            try
-            {
-                var statusResp = await _http.GetAsync(statusUrl, ct);
-                var statusJson = await statusResp.Content.ReadAsStringAsync(ct);
-
-                if (!statusResp.IsSuccessStatusCode)
-                {
-                    await _eventLog.LogEventAsync("SAM3", "POLL_ERROR", "Warning",
-                        $"Status check HTTP {(int)statusResp.StatusCode}: {Truncate(statusJson, 200)}");
-                    await Task.Delay(PollInterval, ct);
-                    continue;
-                }
-
-                using var doc = JsonDocument.Parse(statusJson);
-                var root = doc.RootElement;
-                var status = "UNKNOWN";
-                if (root.TryGetProperty("status", out var s))
-                    status = s.GetString() ?? "UNKNOWN";
-
-                if (status == "COMPLETED")
-                {
-                    await _eventLog.LogEventAsync("SAM3", "POLLING_COMPLETE", "Info",
-                        $"Request {requestId} completed. Fetching result.");
-                    break;
-                }
-
-                if (status == "FAILED")
-                {
-                    var error = "Unknown error";
-                    if (root.TryGetProperty("error", out var err))
-                        error = err.GetString() ?? error;
-                    await _eventLog.LogEventAsync("SAM3", "REQUEST_FAILED", "Error",
-                        $"Request {requestId} failed: {error}");
-                    return null;
-                }
-
-                await _eventLog.LogEventAsync("SAM3", "POLL_STATUS", "Info",
-                    $"Request {requestId}: {status}");
-            }
-            catch (Exception ex)
-            {
-                await _eventLog.LogEventAsync("SAM3", "POLL_EXCEPTION", "Warning",
-                    $"Poll error: {ex.Message}. Retrying...");
-            }
-
-            await Task.Delay(PollInterval, ct);
-        }
-
-        // ── Fetch result ──
-        var resultResp = await _http.GetAsync(resultUrl, ct);
-        var resultJson = await resultResp.Content.ReadAsStringAsync(ct);
-
-        if (!resultResp.IsSuccessStatusCode)
-        {
-            await _eventLog.LogEventAsync("SAM3", "RESULT_ERROR", "Error",
-                $"Result fetch HTTP {(int)resultResp.StatusCode}: {Truncate(resultJson, 300)}");
-            return null;
-        }
-
-        await _eventLog.LogEventAsync("SAM3", "RESULT_RECEIVED", "Info",
-            $"Result: {Truncate(resultJson, 500)}");
-
-        try
-        {
-            var result = JsonSerializer.Deserialize<Sam3ResultResponse>(resultJson, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-            });
-            return result?.Video;
-        }
-        catch (Exception ex)
-        {
-            await _eventLog.LogEventAsync("SAM3", "PARSE_ERROR", "Error",
-                $"Failed to parse result: {ex.Message}");
-            return null;
-        }
-    }
-
-    // ── Seed boundary parsing ──
-
-    /// <summary>
-    /// Preview-segment a clicked point on a single video frame using SAM3 video-rle.
-    /// Calls fal-ai/sam-3/video-rle with a single point_prompt, decodes the RLE mask,
-    /// and returns a polygon for SVG overlay rendering.
-    /// </summary>
-    public async Task<SegmentPreviewResult?> PreviewSegmentAsync(
-        string contentId, string videoPath, int frameIndex, int x, int y, CancellationToken cancellationToken = default)
-    {
-        var apiKey = await _settings.GetAsync("falai_api_key");
-        if (string.IsNullOrEmpty(apiKey))
-        {
-            await _eventLog.LogEventAsync("SAM3", "NO_API_KEY", "Error", "falai_api_key not configured.");
-            return null;
-        }
-
-        var videoBaseUrl = await _settings.GetAsync("sam3_video_base_url", "http://localhost:57220");
-        var videoFileName = System.IO.Path.GetFileName(videoPath);
-        var videoUrl = $"{videoBaseUrl}/api/content/file/{videoFileName}";
-
-        var rleEndpoint = "https://queue.fal.run/fal-ai/sam-3/video-rle";
-
-        try
-        {
-            await _eventLog.LogEventAsync("SAM3", "PREVIEW_START", "Info",
-                $"Preview segment: content={contentId}, frame={frameIndex}, point=({x},{y})");
-
-            var payload = new
-            {
-                video_url = videoUrl,
-                point_prompts = new[]
-                {
-                    new { frame_index = frameIndex, x, y, label = 1 }
-                },
-                box_prompts = Array.Empty<object>(),
-                apply_mask = false,           // We want raw RLE data, not a rendered video
-                detection_threshold = 0.5,     // Tighter threshold for point-click precision
-            };
-
-            var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            });
-            var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+            await _eventLog.LogEventAsync("SAM3", "RLE_REQUEST_PAYLOAD", "Info", Truncate(json, 1500));
 
             _http.DefaultRequestHeaders.Clear();
             _http.DefaultRequestHeaders.Add("Authorization", $"Key {apiKey}");
 
-            // ── Submit ──
-            var submitResponse = await _http.PostAsync(rleEndpoint, content, cancellationToken);
+            var submitResponse = await _http.PostAsync(endpoint, content, cancellationToken);
             var submitJson = await submitResponse.Content.ReadAsStringAsync(cancellationToken);
 
             if (!submitResponse.IsSuccessStatusCode)
             {
-                await _eventLog.LogEventAsync("SAM3", "PREVIEW_SUBMIT_ERROR", "Error",
-                    $"HTTP {(int)submitResponse.StatusCode}: {Truncate(submitJson, 300)}");
-                return null;
+                await _eventLog.LogEventAsync("SAM3", "RLE_HTTP_ERROR", "Error",
+                    $"HTTP {(int)submitResponse.StatusCode} from submit: {Truncate(submitJson, 500)}");
+                return new List<RleFrameResult>();
             }
 
-            // ── Extract request_id ──
-            string? requestId = null;
-            using (var submitDoc = JsonDocument.Parse(submitJson))
+            // `endpoint` (falai_sam3_rle_endpoint, default fal.run/...) is fal's SYNCHRONOUS host —
+            // for calls that finish within its timeout it returns the completed result body directly,
+            // not a request_id. Try parsing submitJson as a result first (covers both the nested
+            // frames[] shape and the flat rle[]/metadata[] shape); only fall back to the async
+            // queue.fal.run poll/fetch flow if that yields nothing and a request_id is present
+            // (queueBase, e.g. when the sync host redirects a slow call into the queue).
+            var frames = ParseFramesFromResultJson(submitJson);
+
+            if (frames == null || frames.Count == 0)
             {
-                if (submitDoc.RootElement.TryGetProperty("request_id", out var rid))
-                    requestId = rid.GetString();
+                string? requestId = null;
+                using (var submitDoc = JsonDocument.Parse(submitJson))
+                {
+                    if (submitDoc.RootElement.TryGetProperty("request_id", out var rid))
+                        requestId = rid.GetString();
+                }
+
+                if (!string.IsNullOrEmpty(requestId))
+                {
+                    await PollForRleResultAsync(queueBase, requestId, cancellationToken);
+                    frames = await FetchRleFramesAsync(queueBase, requestId, cancellationToken);
+                }
             }
 
-            if (string.IsNullOrEmpty(requestId))
+            if (frames == null || frames.Count == 0)
             {
-                await _eventLog.LogEventAsync("SAM3", "PREVIEW_NO_REQUEST_ID", "Error", "No request_id in response.");
-                return null;
+                await _eventLog.LogEventAsync("SAM3", "RLE_NO_FRAMES", "Warning",
+                    $"SAM3 video-rle returned no frame data for {videoUrl} [{startFrame}-{endFrame}]. " +
+                    $"Raw response: {Truncate(submitJson, 800)}");
+                return new List<RleFrameResult>();
             }
 
-            // ── Poll for result ──
-            var rleQueueBase = "https://queue.fal.run/fal-ai/sam-3/video-rle/requests";
-            var rleVideoFile = await PollForRleResultAsync(rleQueueBase, requestId, cancellationToken);
-
-            if (rleVideoFile == null)
+            // frame_index in the response is relative to the trimmed clip — re-base to absolute
+            // frame numbers so callers never need to know a clip was involved.
+            var result = frames.Select(f => new RleFrameResult
             {
-                await _eventLog.LogEventAsync("SAM3", "PREVIEW_NO_FRAMES", "Warning",
-                    $"SAM3 video-rle returned no frame data for request {requestId}.");
-                return null;
-            }
+                FrameIndex = f.FrameIndex + startFrame,
+                Objects = (f.Objects ?? new List<Sam3RleObjectMask>())
+                    .Select(o => new RleObjectResult { TrackId = o.TrackId, Rle = o.Rle ?? string.Empty, Confidence = o.Confidence })
+                    .ToList(),
+            }).ToList();
 
-            // ── Parse SAM3VideoObjectFrame from the result ──
-            var frames = await FetchRleFramesAsync(rleQueueBase, requestId, cancellationToken);
-            if (frames == null || frames.Count == 0) return null;
+            await _eventLog.LogEventAsync("SAM3", "RLE_SEGMENT_COMPLETE", "Info",
+                $"Segmented {result.Count} frames, {result.Sum(f => f.Objects.Count)} total object-masks.");
 
-            // Find the best mask in the prompt frame (frame_index matching the prompt frame)
-            var promptFrameData = frames.FirstOrDefault(f => f.FrameIndex == frameIndex);
-            if (promptFrameData == null)
-            {
-                // Fall back to the first frame with objects
-                promptFrameData = frames.FirstOrDefault(f => f.Objects?.Count > 0);
-            }
-
-            if (promptFrameData?.Objects == null || promptFrameData.Objects.Count == 0)
-                return null;
-
-            // Pick the object with the highest confidence (if multiple)
-            var bestMask = promptFrameData.Objects
-                .OrderByDescending(o => o.Confidence)
-                .First();
-
-            // Decode RLE → polygon
-            var decoded = RleDecoder.Decode(bestMask.Rle ?? "", rleVideoFile.Width, rleVideoFile.Height);
-            var polygon = RleDecoder.MaskToPolygon(decoded);
-            var bounds = RleDecoder.PolygonBounds(polygon);
-
-            await _eventLog.LogEventAsync("SAM3", "PREVIEW_COMPLETE", "Info",
-                $"Preview result: trackId={bestMask.TrackId}, confidence={bestMask.Confidence:F2}, " +
-                $"polygonPoints={polygon.Count}, bounds=({bounds.xMin},{bounds.yMin})-({bounds.xMax},{bounds.yMax})");
-
-            return new SegmentPreviewResult
-            {
-                MaskPolygon = polygon,
-                Confidence = bestMask.Confidence,
-                TrackId = bestMask.TrackId,
-                SurfaceType = string.Empty, // SAM3 doesn't provide type — could be inferred by Gemini later
-                FrameIndex = promptFrameData.FrameIndex,
-                Bounds = bounds
-            };
+            return result;
         }
         catch (OperationCanceledException)
         {
-            await _eventLog.LogEventAsync("SAM3", "PREVIEW_CANCELLED", "Warning", "Preview cancelled.");
-            return null;
+            await _eventLog.LogEventAsync("SAM3", "RLE_CANCELLED", "Warning", "Segmentation cancelled.");
+            return new List<RleFrameResult>();
         }
         catch (Exception ex)
         {
-            await _eventLog.LogEventAsync("SAM3", "PREVIEW_EXCEPTION", "Error",
-                $"Preview failed: {ex.GetType().Name} — {ex.Message}");
-            return null;
+            await _eventLog.LogEventAsync("SAM3", "RLE_EXCEPTION", "Error",
+                $"SAM3 video-rle failed: {ex.GetType().Name} — {ex.Message}");
+            return new List<RleFrameResult>();
+        }
+        finally
+        {
+            if (clipPath != null)
+            {
+                try { if (File.Exists(clipPath)) File.Delete(clipPath); } catch { }
+            }
+        }
+    }
+
+    private static async Task RunFfmpegTrimAsync(string sourcePath, string outputPath, double startSeconds, double durationSeconds, CancellationToken ct)
+    {
+        // Two-pass seek for frame accuracy: a single -ss before -i is a fast, keyframe-snapped
+        // seek that can land seconds away from the requested timestamp — catastrophic for the
+        // single-frame click-preview case (a ~0.03s clip), and a silent content-offset bug for
+        // longer clips too, since callers re-base prompt frame numbers assuming the clip's
+        // frame 0 is exactly startSeconds. Coarse pre-seek before -i for speed, small accurate
+        // seek after -i for precision — matches the pattern already used elsewhere (e.g.
+        // SurfaceDetectionPipeline.ExtractKeyFrameAsync).
+        var preSeek = Math.Max(0, startSeconds - 2);
+        var postSeek = startSeconds - preSeek;
+        // A -t of exactly one frame's duration (e.g. 1/30s) sits right at the encoder's
+        // rounding boundary — libx264 can silently emit zero frames (a valid-looking, empty
+        // container) instead of one, which fal.ai then rejects with "could not decode frames".
+        // Reproduced directly: a 0.033s request produced a 262-byte file with no video stream.
+        // A few extra frames of headroom costs nothing (callers only care about clip-relative
+        // frame 0) and reliably avoids the boundary.
+        var duration = Math.Max(durationSeconds, 4.0 / 30);
+
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = "ffmpeg",
+                Arguments = $"-y -hide_banner -loglevel error " +
+                    $"-ss {preSeek:F3} -noaccurate_seek -i \"{sourcePath.Replace("\\", "/")}\" " +
+                    $"-ss {postSeek:F3} -t {duration:F3} -c:v libx264 -preset ultrafast -pix_fmt yuv420p -an \"{outputPath.Replace("\\", "/")}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            },
+        };
+        process.Start();
+
+        var readStdout = process.StandardOutput.ReadToEndAsync(ct);
+        var readStderr = process.StandardError.ReadToEndAsync(ct);
+        await process.WaitForExitAsync(ct);
+        await Task.WhenAll(readStdout, readStderr);
+
+        if (process.ExitCode != 0 || !File.Exists(outputPath))
+        {
+            throw new InvalidOperationException($"Failed to trim video clip for SAM3 (exit {process.ExitCode}): {Truncate(await readStderr, 300)}");
         }
     }
 
@@ -436,7 +294,7 @@ public class Sam3TrackingService : ISurfaceTrackingService
     {
         var statusUrl = $"{queueBase}/{requestId}/status";
         var resultUrl = $"{queueBase}/{requestId}";
-        var deadline = DateTime.UtcNow.Add(TimeSpan.FromMinutes(5)); // Shorter timeout for preview
+        var deadline = DateTime.UtcNow.Add(TimeSpan.FromMinutes(5));
 
         while (DateTime.UtcNow < deadline)
         {
@@ -445,106 +303,172 @@ public class Sam3TrackingService : ISurfaceTrackingService
             {
                 var statusResp = await _http.GetAsync(statusUrl, ct);
                 var statusJson = await statusResp.Content.ReadAsStringAsync(ct);
-                using var doc = JsonDocument.Parse(statusJson);
-                var status = "UNKNOWN";
-                if (doc.RootElement.TryGetProperty("status", out var s))
-                    status = s.GetString() ?? "UNKNOWN";
+
+                if (!statusResp.IsSuccessStatusCode)
+                {
+                    await _eventLog.LogEventAsync("SAM3", "RLE_POLL_ERROR", "Warning",
+                        $"Status HTTP {(int)statusResp.StatusCode}: {Truncate(statusJson, 200)}");
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    continue;
+                }
+
+                string status;
+                try
+                {
+                    using var doc = JsonDocument.Parse(statusJson);
+                    status = doc.RootElement.TryGetProperty("status", out var s)
+                        ? (s.GetString() ?? "UNKNOWN") : "UNKNOWN";
+                }
+                catch (JsonException jex)
+                {
+                    await _eventLog.LogEventAsync("SAM3", "RLE_POLL_PARSE", "Error",
+                        $"Failed to parse status JSON: {jex.Message}. Body: {Truncate(statusJson, 300)}");
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    continue;
+                }
 
                 if (status == "COMPLETED") break;
-                if (status == "FAILED") return null;
+                if (status == "FAILED")
+                {
+                    await _eventLog.LogEventAsync("SAM3", "RLE_REQUEST_FAILED", "Error",
+                        $"RLE request {requestId} failed.");
+                    return null;
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("SAM3", "RLE_POLL_EXCEPTION", "Warning",
+                    $"Poll error for {requestId}: {ex.Message}. Retrying...");
+            }
             await Task.Delay(TimeSpan.FromSeconds(5), ct);
         }
 
-        var resultResp = await _http.GetAsync(resultUrl, ct);
-        var resultJson = await resultResp.Content.ReadAsStringAsync(ct);
-        if (!resultResp.IsSuccessStatusCode) return null;
-
+        // ── Fetch result ──
         try
         {
+            var resultResp = await _http.GetAsync(resultUrl, ct);
+            var resultJson = await resultResp.Content.ReadAsStringAsync(ct);
+
+            if (!resultResp.IsSuccessStatusCode)
+            {
+                await _eventLog.LogEventAsync("SAM3", "RLE_RESULT_ERROR", "Error",
+                    $"Result HTTP {(int)resultResp.StatusCode}: {Truncate(resultJson, 300)}");
+                return null;
+            }
+
             var result = JsonSerializer.Deserialize<Sam3RleResultResponse>(resultJson, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
             });
             return result?.Video;
         }
-        catch { return null; }
+        catch (JsonException jex)
+        {
+            await _eventLog.LogEventAsync("SAM3", "RLE_RESULT_PARSE", "Error",
+                $"Failed to parse RLE result for {requestId}: {jex.Message}");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            await _eventLog.LogEventAsync("SAM3", "RLE_RESULT_EXCEPTION", "Error",
+                $"Fetch result failed for {requestId}: {ex.GetType().Name} — {ex.Message}");
+            return null;
+        }
     }
 
     private async Task<List<Sam3RleFrameData>?> FetchRleFramesAsync(string queueBase, string requestId, CancellationToken ct)
     {
         var resultUrl = $"{queueBase}/{requestId}";
-        var resultResp = await _http.GetAsync(resultUrl, ct);
-        var resultJson = await resultResp.Content.ReadAsStringAsync(ct);
-        if (!resultResp.IsSuccessStatusCode) return null;
-
         try
         {
-            var result = JsonSerializer.Deserialize<Sam3RleResultResponse>(resultJson, new JsonSerializerOptions
+            var resultResp = await _http.GetAsync(resultUrl, ct);
+            var resultJson = await resultResp.Content.ReadAsStringAsync(ct);
+
+            if (!resultResp.IsSuccessStatusCode)
+            {
+                await _eventLog.LogEventAsync("SAM3", "RLE_FRAMES_ERROR", "Error",
+                    $"Frames HTTP {(int)resultResp.StatusCode}: {Truncate(resultJson, 300)}");
+                return null;
+            }
+
+            return ParseFramesFromResultJson(resultJson);
+        }
+        catch (JsonException jex)
+        {
+            await _eventLog.LogEventAsync("SAM3", "RLE_FRAMES_PARSE", "Error",
+                $"Failed to parse RLE frames for {requestId}: {jex.Message}");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            await _eventLog.LogEventAsync("SAM3", "RLE_FRAMES_EXCEPTION", "Error",
+                $"Fetch frames failed for {requestId}: {ex.GetType().Name} — {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>Parses a fal.ai SAM3 video-rle result body (from either the sync fal.run host
+    /// or the async queue.fal.run result endpoint) into per-frame/per-object data, handling
+    /// both response shapes seen in practice: nested frames[].objects[] (multi-object) and
+    /// flat rle[]/metadata[] (our single object_id: 0 requests).</summary>
+    private List<Sam3RleFrameData>? ParseFramesFromResultJson(string resultJson)
+    {
+        Sam3RleResultResponse? result;
+        try
+        {
+            result = JsonSerializer.Deserialize<Sam3RleResultResponse>(resultJson, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
             });
-            return result?.Frames;
         }
-        catch { return null; }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        if (result?.Frames != null && result.Frames.Count > 0)
+            return result.Frames;
+
+        // Single-object requests (we always use object_id: 0) come back in a flat shape —
+        // parallel top-level "rle"/"metadata" arrays, one entry per frame — rather than the
+        // nested frames[].objects[] shape used for multi-object tracking. Confirmed against
+        // a real fal.ai dashboard result: {"rle": ["", ...], "metadata": [{"index":0,"score":null,"box":null}, ...]}.
+        if (result?.Rle != null && result.Rle.Count > 0)
+        {
+            var scoreSample = result.Metadata?.Take(5).Select(m => m.Score?.ToString("F2") ?? "null");
+            _logger.LogInformation(
+                "[SAM3] Flat-shape result: {Count} frames, {NonEmpty} with a mask, sample scores=[{Scores}]",
+                result.Rle.Count, result.Rle.Count(r => !string.IsNullOrEmpty(r)),
+                scoreSample != null ? string.Join(",", scoreSample) : "n/a");
+            return FramesFromFlatRle(result.Rle, result.Metadata);
+        }
+
+        return null;
     }
 
-    private static List<List<double>>? ParseSeedBoundary(string json)
+    /// <summary>Converts the flat single-object {rle[], metadata[]} shape into the same
+    /// per-frame/per-object structure the nested shape produces, so callers never need to
+    /// know which shape fal.ai returned. Frame index is taken from metadata[i].Index when
+    /// present (falls back to the array position), matching the nested shape's frame_index
+    /// semantics (0-based, relative to the trimmed clip).</summary>
+    private static List<Sam3RleFrameData> FramesFromFlatRle(List<string> rle, List<Sam3MaskMetadata>? metadata)
     {
-        try
+        var frames = new List<Sam3RleFrameData>();
+        for (int i = 0; i < rle.Count; i++)
         {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Array) return null;
+            var meta = metadata != null && i < metadata.Count ? metadata[i] : null;
+            var frameIndex = meta?.Index ?? i;
+            var objects = string.IsNullOrEmpty(rle[i])
+                ? new List<Sam3RleObjectMask>()
+                : new List<Sam3RleObjectMask> { new() { TrackId = 0, Rle = rle[i], Confidence = meta?.Score ?? 0 } };
 
-            var result = new List<List<double>>();
-            foreach (var pt in root.EnumerateArray())
-            {
-                double x = 0, y = 0;
-                if (pt.TryGetProperty("x", out var lx) && pt.TryGetProperty("y", out var ly))
-                    { x = lx.GetDouble(); y = ly.GetDouble(); }
-                else if (pt.TryGetProperty("X", out var ux) && pt.TryGetProperty("Y", out var uy))
-                    { x = ux.GetDouble(); y = uy.GetDouble(); }
-                else if (pt.ValueKind == JsonValueKind.Array && pt.GetArrayLength() >= 2)
-                    { x = pt[0].GetDouble(); y = pt[1].GetDouble(); }
-                else continue;
-                result.Add(new List<double> { x, y });
-            }
-            return result.Count >= 4 ? result : null;
+            frames.Add(new Sam3RleFrameData { FrameIndex = frameIndex, Objects = objects });
         }
-        catch { return null; }
+        return frames;
     }
 
     private static string Truncate(string value, int maxLength)
         => value.Length <= maxLength ? value : value[..maxLength] + "...";
-
-    // ── JSON models (matching official fal.ai SAM3 schema) ──
-
-    /// <summary>Top-level response from GET /requests/{id} after completion.</summary>
-    private class Sam3ResultResponse
-    {
-        [JsonPropertyName("video")]
-        public Sam3File? Video { get; set; }
-
-        [JsonPropertyName("boundingbox_frames_zip")]
-        public Sam3File? BoundingboxFramesZip { get; set; }
-    }
-
-    private class Sam3File
-    {
-        [JsonPropertyName("url")]
-        public string? Url { get; set; }
-
-        [JsonPropertyName("content_type")]
-        public string? ContentType { get; set; }
-
-        [JsonPropertyName("file_name")]
-        public string? FileName { get; set; }
-
-        [JsonPropertyName("file_size")]
-        public long FileSize { get; set; }
-    }
 
     // ── SAM3 video-rle JSON models ──
 
@@ -555,6 +479,25 @@ public class Sam3TrackingService : ISurfaceTrackingService
 
         [JsonPropertyName("frames")]
         public List<Sam3RleFrameData>? Frames { get; set; }
+
+        // ── Flat single-object shape (object_id: 0 requests) — see FramesFromFlatRle ──
+        [JsonPropertyName("rle")]
+        public List<string>? Rle { get; set; }
+
+        [JsonPropertyName("metadata")]
+        public List<Sam3MaskMetadata>? Metadata { get; set; }
+    }
+
+    private class Sam3MaskMetadata
+    {
+        [JsonPropertyName("index")]
+        public int Index { get; set; }
+
+        [JsonPropertyName("score")]
+        public double? Score { get; set; }
+
+        [JsonPropertyName("box")]
+        public List<double>? Box { get; set; }
     }
 
     private class Sam3RleVideoFile
