@@ -964,13 +964,15 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                   })}
                 </svg>
 
-                <div className="absolute bottom-4 left-4 right-4 bg-slate-900/90 border border-slate-700 rounded-lg px-4 py-2 flex items-center justify-between text-[11px] font-mono text-slate-400 z-20 pointer-events-none">
-                  <div className="flex items-center gap-2">
-                    <Eye className="h-3 w-3 text-blue-400" />
-                    <span>Scene #{currentScene?.sceneIndex || '—'} · {surfacesForScene.length} surface{surfacesForScene.length !== 1 ? 's' : ''} · {placedSurfaceCount} placed</span>
-                  </div>
-                  <div><span>{activeVideo?.resolution || '—'} · {activeVideo?.frameRate || '—'} FPS</span></div>
+              </div>
+
+              {/* Scene info bar — kept out of the video's own box so it never overlaps the native <video controls> bar */}
+              <div className="mt-2 bg-slate-900/90 border border-slate-700 rounded-lg px-4 py-2 flex items-center justify-between text-[11px] font-mono text-slate-400">
+                <div className="flex items-center gap-2">
+                  <Eye className="h-3 w-3 text-blue-400" />
+                  <span>Scene #{currentScene?.sceneIndex || '—'} · {surfacesForScene.length} surface{surfacesForScene.length !== 1 ? 's' : ''} · {placedSurfaceCount} placed</span>
                 </div>
+                <div><span>{activeVideo?.resolution || '—'} · {activeVideo?.frameRate || '—'} FPS</span></div>
               </div>
 
               {/* ── Surface Detection Summary — quick glance at all detected surfaces ── */}
