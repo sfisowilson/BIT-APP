@@ -206,8 +206,17 @@ public class VideoChunkingService
             scaleArg = $"-vf \"scale={targetWidth}:{targetHeight}\" ";
         }
 
-        var args = $"-hide_banner -loglevel error -ss {startTime:F3} -i \"{fullSourcePath}\" " +
-                   $"-t {duration:F3} {scaleArg}-c:v libx264 -preset fast -crf 23 " +
+        // Two-stage seek: a coarse -ss before -i (fast, keyframe-granularity input seeking) gets
+        // close to the target without decoding the whole file up to that point, then a small
+        // -ss after -i does the remaining <=2s via frame-accurate output seeking. Audio and video
+        // streams don't share the same keyframe/frame boundaries, so a single coarse seek alone
+        // can land the two streams at slightly different actual start times even though both get
+        // re-encoded — this is what produced audibly-misaligned audio in generated previews.
+        var coarseSeek = Math.Max(0, startTime - 2.0);
+        var fineSeek = startTime - coarseSeek;
+
+        var args = $"-hide_banner -loglevel error -ss {coarseSeek:F3} -i \"{fullSourcePath}\" " +
+                   $"-ss {fineSeek:F3} -t {duration:F3} {scaleArg}-c:v libx264 -preset fast -crf 23 " +
                    $"-c:a aac -b:a 128k -pix_fmt yuv420p -movflags +faststart " +
                    $"\"{outputPath}\" -y";
 

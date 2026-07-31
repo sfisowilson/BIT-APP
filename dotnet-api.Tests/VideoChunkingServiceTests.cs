@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
+using Afrobotics.Bit.Api.Models;
 using Afrobotics.Bit.Api.Services;
 
 namespace Afrobotics.Bit.Tests;
@@ -65,6 +66,118 @@ public class VideoChunkingServiceTests : IDisposable
         process.WaitForExit(30000);
         Assert.True(File.Exists(path), $"Failed to generate test video: {process.StandardError.ReadToEnd()}");
         return path;
+    }
+
+    /// <summary>Generates a test video with both a video and an audio track — plain
+    /// GenerateTestVideo has no audio, which can't exercise an audio/video seek-alignment bug.</summary>
+    private string GenerateTestVideoWithAudio(double durationSeconds, string name)
+    {
+        var path = Path.Combine(_workDir, name);
+        var durationArg = durationSeconds.ToString("F3", CultureInfo.InvariantCulture);
+        var fpsArg = Fps.ToString("F3", CultureInfo.InvariantCulture);
+        var psi = new ProcessStartInfo
+        {
+            FileName = "ffmpeg",
+            Arguments = $"-y -hide_banner -loglevel error " +
+                        $"-f lavfi -i color=c=blue:s=64x64:d={durationArg}:r={fpsArg} " +
+                        $"-f lavfi -i sine=frequency=1000:duration={durationArg} " +
+                        $"-c:v libx264 -pix_fmt yuv420p -c:a aac -shortest \"{path}\"",
+            UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardOutput = true, RedirectStandardError = true,
+        };
+        using var process = Process.Start(psi)!;
+        process.WaitForExit(30000);
+        Assert.True(File.Exists(path), $"Failed to generate test video with audio: {process.StandardError.ReadToEnd()}");
+        return path;
+    }
+
+    /// <summary>ffprobe a single stream's duration in seconds, or null if that stream type isn't present.</summary>
+    private static double? ProbeStreamDuration(string path, string streamType)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "ffprobe",
+            Arguments = $"-v error -select_streams {streamType[0]} -show_entries stream=duration " +
+                        $"-of default=noprint_wrappers=1:nokey=1 \"{path}\"",
+            UseShellExecute = false, CreateNoWindow = true,
+            RedirectStandardOutput = true, RedirectStandardError = true,
+        };
+        using var process = Process.Start(psi)!;
+        var output = process.StandardOutput.ReadToEnd().Trim();
+        process.WaitForExit(10000);
+        if (string.IsNullOrEmpty(output)) return null;
+        return double.Parse(output, CultureInfo.InvariantCulture);
+    }
+
+    private static bool FfprobeAvailable()
+    {
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo("ffprobe", "-version")
+            {
+                RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
+            });
+            p!.WaitForExit(5000);
+            return p.ExitCode == 0;
+        }
+        catch { return false; }
+    }
+
+    [Fact]
+    public async Task ExtractSceneClipAsync_SceneNotAtStartOfVideo_AudioAndVideoStreamsStayInSync()
+    {
+        if (!FfmpegAvailable() || !FfprobeAvailable()) return; // environment without ffmpeg/ffprobe — skip gracefully
+
+        var chunker = new VideoChunkingService(NullLogger<VideoChunkingService>.Instance);
+
+        // Source is long enough that the scene we're extracting starts well past frame 0 —
+        // this is what actually exercises the seek (a scene starting at t=0 wouldn't).
+        var sourcePath = GenerateTestVideoWithAudio(10.0, "source_with_audio.mp4");
+
+        // ExtractSceneClipAsync resolves ContentItem.StorageKey relative to CWD/Uploads —
+        // stage the source there so the "locally uploaded file" guard passes.
+        var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
+        Directory.CreateDirectory(uploadsDir);
+        var stagedFileName = $"test-{Guid.NewGuid():N}.mp4";
+        var stagedPath = Path.Combine(uploadsDir, stagedFileName);
+        File.Copy(sourcePath, stagedPath);
+
+        try
+        {
+            var content = new ContentItem
+            {
+                Id = "v-test", Title = "Test", Duration = "00:00:10", Resolution = "64x64",
+                Width = 64, Height = 64, FrameRate = (int)Fps, SourceChannel = "Test",
+                StorageKey = $"/api/content/file/{stagedFileName}",
+            };
+            // Scene starts 4s in (frame 40 at 10fps) and runs for 3s — well past the source's start.
+            var scene = new SceneItem
+            {
+                Id = "sc-test", ContentId = content.Id, StartFrame = 40, EndFrame = 70,
+                SceneIndex = 0, DurationSeconds = 3.0,
+            };
+
+            var outputPath = Path.Combine(_workDir, "extracted_scene.mp4");
+            await chunker.ExtractSceneClipAsync(scene, content, outputPath);
+
+            Assert.True(File.Exists(outputPath));
+
+            var videoDuration = ProbeStreamDuration(outputPath, "video");
+            var audioDuration = ProbeStreamDuration(outputPath, "audio");
+
+            Assert.NotNull(videoDuration);
+            Assert.NotNull(audioDuration);
+            // Both streams should reflect the requested 3s scene duration, and — critically for
+            // audio/video sync — agree with each other. A misaligned coarse-only seek (the bug
+            // this test guards against) tends to manifest as the two streams drifting apart.
+            Assert.Equal(3.0, videoDuration!.Value, 1);
+            Assert.Equal(3.0, audioDuration!.Value, 1);
+            Assert.Equal(videoDuration.Value, audioDuration.Value, 1);
+        }
+        finally
+        {
+            try { File.Delete(stagedPath); } catch { }
+        }
     }
 
     [Fact]
