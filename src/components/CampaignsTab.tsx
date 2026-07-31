@@ -1,8 +1,10 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Sliders, Plus, Upload, Trash2, Link2, Link2Off, Eye, Package, ArrowRightLeft, Edit3, Check, X } from 'lucide-react';
+import { Sliders, Plus, Upload, Trash2, Link2, Link2Off, Eye, Package, ArrowRightLeft, Edit3, Check, X, Search } from 'lucide-react';
 import { CampaignItem, CreativeAsset, BRAND_CATEGORIES } from '../types';
 import { FilterableSelect } from './FilterableSelect';
+import { usePaginatedData } from '../hooks/usePaginatedData';
+import { Pagination } from './Pagination';
 
 interface CampaignsTabProps {
   campaignList: CampaignItem[];
@@ -52,9 +54,60 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
   const [editFile, setEditFile] = React.useState<File | null>(null);
   const [previewAsset, setPreviewAsset] = React.useState<CreativeAsset | null>(null);
 
-  const selectedCampaign = campaignList.find(c => c.id === selectedCampaignId);
-  const campaignAssets = assetList.filter(a => a.campaignId === selectedCampaignId);
-  const unassignedAssets = assetList.filter(a => !a.campaignId);
+  // ── Campaign Database grid — self-fetched + paginated (independent of the campaignList prop,
+  // which stays a global, unpaginated first-page snapshot used elsewhere, e.g. the top-nav selector) ──
+  const {
+    data: campaignsData,
+    page: campaignsPage,
+    totalPages: campaignsTotalPages,
+    hasPreviousPage: campaignsHasPrev,
+    hasNextPage: campaignsHasNext,
+    setPage: setCampaignsPage,
+    setFilters: setCampaignsFilters,
+    refresh: refreshCampaignsGrid,
+  } = usePaginatedData<CampaignItem>('/api/campaigns', {}, { defaultPageSize: 20 });
+  const [campaignSearch, setCampaignSearch] = React.useState('');
+  React.useEffect(() => {
+    setCampaignsFilters({ search: campaignSearch || undefined });
+  }, [campaignSearch]);
+
+  // ── Campaign Assets — self-fetched + paginated, scoped to the selected campaign ──
+  const {
+    data: campaignAssets,
+    page: campaignAssetsPage,
+    totalPages: campaignAssetsTotalPages,
+    totalCount: campaignAssetsTotalCount,
+    hasPreviousPage: campaignAssetsHasPrev,
+    hasNextPage: campaignAssetsHasNext,
+    setPage: setCampaignAssetsPage,
+    setFilters: setCampaignAssetsFilters,
+    refresh: refreshCampaignAssets,
+  } = usePaginatedData<CreativeAsset>('/api/assets', { campaignId: selectedCampaignId || '__none_selected__' }, { defaultPageSize: 20 });
+  React.useEffect(() => {
+    setCampaignAssetsFilters({ campaignId: selectedCampaignId || '__none_selected__' });
+  }, [selectedCampaignId]);
+
+  // ── Unassigned Assets — self-fetched + paginated ──
+  const {
+    data: unassignedAssets,
+    page: unassignedPage,
+    totalPages: unassignedTotalPages,
+    totalCount: unassignedTotalCount,
+    hasPreviousPage: unassignedHasPrev,
+    hasNextPage: unassignedHasNext,
+    setPage: setUnassignedPage,
+    refresh: refreshUnassigned,
+  } = usePaginatedData<CreativeAsset>('/api/assets', { unassigned: true }, { defaultPageSize: 20 });
+
+  const refreshAssetLists = () => {
+    refreshCampaignsGrid();
+    refreshCampaignAssets();
+    refreshUnassigned();
+  };
+
+  // Selected campaign may have been chosen from this grid (current page) or from elsewhere
+  // (e.g. the top-nav CampaignSelector, backed by the global campaignList prop) — check both.
+  const selectedCampaign = campaignsData.find(c => c.id === selectedCampaignId) ?? campaignList.find(c => c.id === selectedCampaignId);
 
   const startEditing = (asset: CreativeAsset) => {
     setEditingAssetId(asset.id);
@@ -78,7 +131,37 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
       file: editFile || undefined
     });
     cancelEditing();
+    refreshAssetLists();
   };
+
+  const wrappedCreateAsset = async (e: React.FormEvent, campaignId?: string) => {
+    await handleCreateAsset(e, campaignId);
+    refreshAssetLists();
+  };
+
+  const wrappedAssociateAsset = async (assetId: string, campaignId: string) => {
+    await handleAssociateAsset(assetId, campaignId);
+    refreshAssetLists();
+  };
+
+  const wrappedUnassociateAsset = async (assetId: string) => {
+    await handleUnassociateAsset(assetId);
+    refreshAssetLists();
+  };
+
+  const wrappedDeleteAsset = handleDeleteAsset
+    ? async (id: string) => {
+        await handleDeleteAsset(id);
+        refreshAssetLists();
+      }
+    : undefined;
+
+  const wrappedDeleteCampaign = handleDeleteCampaign
+    ? async (id: string) => {
+        await handleDeleteCampaign(id);
+        refreshCampaignsGrid();
+      }
+    : undefined;
 
   return (
     <motion.div
@@ -113,18 +196,28 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
             Campaign Database
             <span className="ml-2 text-[10px] text-blue-500 normal-case font-normal">— click a campaign to manage its assets</span>
           </h3>
+          <div className="relative mb-3">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              value={campaignSearch}
+              onChange={(e) => setCampaignSearch(e.target.value)}
+              placeholder="Search campaigns by name or code..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-400 transition-colors"
+            />
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
-            {campaignList.map(camp => {
+            {campaignsData.map(camp => {
               const isSelected = camp.id === selectedCampaignId;
               const assetCount = assetList.filter(a => a.campaignId === camp.id).length;
               return (
-                <div 
-                  key={camp.id} 
+                <div
+                  key={camp.id}
                   onClick={() => setSelectedCampaignId(isSelected ? null : camp.id)}
                   className={`
                     cursor-pointer rounded-xl p-4 border-2 transition-all duration-200 flex flex-col justify-between
-                    ${isSelected 
-                      ? 'border-blue-500 bg-blue-50/40 shadow-md ring-1 ring-blue-200' 
+                    ${isSelected
+                      ? 'border-blue-500 bg-blue-50/40 shadow-md ring-1 ring-blue-200'
                       : 'border-slate-200/60 bg-slate-50/60 hover:border-blue-200 hover:bg-blue-50/20'
                     }
                   `}
@@ -139,10 +232,10 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                           camp.status === 'Completed' ? 'bg-slate-100 text-slate-500' :
                           'bg-amber-50 text-amber-600'
                         }`}>{camp.status}</span>
-                        {handleDeleteCampaign && (
+                        {wrappedDeleteCampaign && (
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); handleDeleteCampaign(camp.id); }}
+                            onClick={(e) => { e.stopPropagation(); wrappedDeleteCampaign(camp.id); }}
                             className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors"
                             title="Delete Campaign"
                           >
@@ -172,12 +265,19 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                 </div>
               );
             })}
-            {campaignList.length === 0 && (
+            {campaignsData.length === 0 && (
               <div className="col-span-2 text-center py-8 text-xs text-slate-400">
-                No campaigns registered yet. Create your first campaign above.
+                {campaignSearch ? `No campaigns match "${campaignSearch}".` : 'No campaigns registered yet. Create your first campaign above.'}
               </div>
             )}
           </div>
+          <Pagination
+            page={campaignsPage}
+            totalPages={campaignsTotalPages}
+            hasPreviousPage={campaignsHasPrev}
+            hasNextPage={campaignsHasNext}
+            onPageChange={setCampaignsPage}
+          />
         </div>
       </div>
       )}
@@ -218,7 +318,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                 </div>
                 <div className="bg-slate-50 rounded-lg p-2">
                   <p className="text-[10px] text-slate-500">Assets</p>
-                  <p className="text-xs font-bold text-blue-600">{campaignAssets.length}</p>
+                  <p className="text-xs font-bold text-blue-600">{campaignAssetsTotalCount}</p>
                 </div>
               </div>
             </div>
@@ -227,9 +327,9 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
             <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm">
               <h3 className="text-sm font-bold text-slate-800 font-display mb-3 flex items-center gap-2">
                 <Link2 className="h-4 w-4 text-blue-500" />
-                Campaign Assets ({campaignAssets.length})
+                Campaign Assets ({campaignAssetsTotalCount})
               </h3>
-              
+
               {campaignAssets.length === 0 ? (
                 <div className="text-center py-6 text-xs text-slate-400 space-y-2">
                   <Package className="h-8 w-8 mx-auto text-slate-300" />
@@ -310,13 +410,13 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                                 <Edit3 className="h-3 w-3" />
                               </button>
                             )}
-                            {handleDeleteAsset && (
-                              <button type="button" onClick={() => handleDeleteAsset(as.id)}
+                            {wrappedDeleteAsset && (
+                              <button type="button" onClick={() => wrappedDeleteAsset(as.id)}
                                 className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors opacity-0 group-hover:opacity-100" title="Delete">
                                 <Trash2 className="h-3 w-3" />
                               </button>
                             )}
-                            <button type="button" onClick={() => handleUnassociateAsset(as.id)}
+                            <button type="button" onClick={() => wrappedUnassociateAsset(as.id)}
                               className="p-1 rounded text-slate-400 hover:text-amber-500 hover:bg-amber-50 cursor-pointer transition-colors" title="Remove from campaign">
                               <Link2Off className="h-3.5 w-3.5" />
                             </button>
@@ -327,11 +427,18 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                   ))}
                 </div>
               )}
+              <Pagination
+                page={campaignAssetsPage}
+                totalPages={campaignAssetsTotalPages}
+                hasPreviousPage={campaignAssetsHasPrev}
+                hasNextPage={campaignAssetsHasNext}
+                onPageChange={setCampaignAssetsPage}
+              />
 
               {/* Quick Add Asset to this Campaign */}
               <div className="mt-4 pt-4 border-t border-slate-200">
                 <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-3 font-mono">Quick Add Asset to This Campaign</p>
-                <form onSubmit={(e) => handleCreateAsset(e, selectedCampaign.id)} className="space-y-3">
+                <form onSubmit={(e) => wrappedCreateAsset(e, selectedCampaign.id)} className="space-y-3">
                   <input 
                     type="text" 
                     value={newAssetName} 
@@ -391,9 +498,9 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
             <div className="border-t border-slate-100 pt-5">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 font-display flex items-center gap-2">
                 <ArrowRightLeft className="h-3.5 w-3.5 text-amber-500" />
-                Unassigned Assets ({unassignedAssets.length})
+                Unassigned Assets ({unassignedTotalCount})
               </h4>
-              
+
               {unassignedAssets.length === 0 ? (
                 <p className="text-[10px] text-slate-400 text-center py-4">All assets are assigned to campaigns.</p>
               ) : (
@@ -432,10 +539,10 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                               <Eye className="h-3 w-3" />
                             </button>
                           )}
-                          {handleDeleteAsset && (
+                          {wrappedDeleteAsset && (
                             <button
                               type="button"
-                              onClick={() => handleDeleteAsset(as.id)}
+                              onClick={() => wrappedDeleteAsset(as.id)}
                               className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 cursor-pointer transition-colors"
                               title="Delete Asset"
                             >
@@ -444,7 +551,9 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                           )}
                         </div>
                       </div>
-                      {/* Quick assign dropdown */}
+                      {/* Quick assign dropdown — sourced from the campaignList prop (global, first-page
+                          snapshot), not the paginated grid above; see NFRs for why this is a known,
+                          separate scope boundary rather than a bug in this fix. */}
                       <div className="mt-2 flex items-center gap-2">
                         <span className="text-[8px] text-slate-400 shrink-0">Assign to:</span>
                         <select
@@ -452,7 +561,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                           defaultValue=""
                           onChange={async (e) => {
                             if (e.target.value) {
-                              await handleAssociateAsset(as.id, e.target.value);
+                              await wrappedAssociateAsset(as.id, e.target.value);
                               e.target.value = '';
                             }
                           }}
@@ -467,12 +576,19 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                   ))}
                 </div>
               )}
+              <Pagination
+                page={unassignedPage}
+                totalPages={unassignedTotalPages}
+                hasPreviousPage={unassignedHasPrev}
+                hasNextPage={unassignedHasNext}
+                onPageChange={setUnassignedPage}
+              />
             </div>
 
             {/* Generic Asset Upload (no campaign context) */}
             <div className="mt-5 pt-5 border-t border-slate-100">
               <p className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-3 font-mono">Stage New Asset (Unassigned)</p>
-              <form onSubmit={(e) => handleCreateAsset(e)} className="space-y-3">
+              <form onSubmit={(e) => wrappedCreateAsset(e)} className="space-y-3">
                 <input 
                   type="text" 
                   value={newAssetName} 

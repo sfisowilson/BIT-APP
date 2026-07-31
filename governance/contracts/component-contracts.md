@@ -34,6 +34,26 @@ interface CampaignsTabProps {
 }
 ```
 
+The `campaignList`/`assetList` props are only used for cross-references that need the global unpaginated first-page snapshot: the "selected campaign" fallback lookup, per-card asset-count badges, and the "Assign to Campaign" quick-pick `<select>` in the Unassigned Assets panel (a known, documented gap for campaigns beyond page 1 — see `governance/nfrs/pagination-consistency-fix.md`). The three actual list UIs (Campaign Database grid, Campaign Assets, Unassigned Assets) each self-fetch their own paginated copy via `usePaginatedData` + `<Pagination>`, independent of these props — matching the pattern already used by `IngestionTab`'s Content catalog. All five mutation props (`handleCreateAsset`, `handleUpdateAsset`, `handleAssociateAsset`, `handleUnassociateAsset`, `handleDeleteAsset`, `handleDeleteCampaign`) are called through internal wrappers that `refresh()` the relevant paginated hook(s) afterward.
+
+---
+
+## `RendersTab`
+
+**File:** `src/components/RendersTab.tsx`
+**Route:** `/c/:campaignId/renders`
+
+```typescript
+interface RendersTabProps {
+  campaignId?: string;
+  campaignName?: string;
+  onRetryRender?: (renderId: string) => Promise<void>;
+  userRole?: 'Admin' | 'Editor' | 'Advertiser';
+}
+```
+
+Self-fetches its render list via `usePaginatedData<RenderItem>('/api/renders', { campaignId })` + `<Pagination>` (no longer takes a `renderList` prop). The three stat cards (Processing/Completed/Failed) are true campaign-wide totals fetched via 4 parallel `pageSize:1` count-only requests (Queued, Processing, Finished, Failed) — not derived from the current page — and double as clickable shortcuts that set the `renderStatus` filter.
+
 ---
 
 ## `IngestionTab`
@@ -240,16 +260,14 @@ interface TelemetryTabProps {
 **File:** `src/components/AdminConsoleTab.tsx`
 **Route:** `/admin`
 
-Props: (read from App.tsx usage)
 ```typescript
 interface AdminConsoleTabProps {
-  users: User[];
-  currentUser: UserSession | null;
-  handleCreateUser?: (dto: { fullName: string; email: string; password: string; role: string }) => Promise<void>;
-  handleUpdateUser?: (id: string, dto: { role?: string; accountStatus?: string }) => Promise<void>;
-  // ... settings, brand safety, role requests handlers
+  onTriggerLog?: (code: string, severity: 'Info' | 'Warning' | 'Major' | 'Critical', module: string, user: string, desc: string) => void;
+  currentUser: User | null;
 }
 ```
+
+Fully self-managed — fetches, creates, updates, and deletes users via its own local `fetchWithAuth` helper (not `apiClient.ts`), independent of `App.tsx`'s global state. The directory table self-fetches via `usePaginatedData<User>('/api/users', { search }, ...)` + `<Pagination>` (search is server-side, matching fullName/email/role/accountStatus). The five metric cards (Total/Admin/Editor/Advertiser/Suspended) are true directory-wide totals from 4 parallel `pageSize:1` count-only requests, refreshed alongside the main list after every create/update/delete/status-toggle mutation.
 
 ---
 

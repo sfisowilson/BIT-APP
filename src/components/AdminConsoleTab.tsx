@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
-import { 
-  Users, 
-  UserPlus, 
-  Search, 
-  Shield, 
-  Mail, 
-  UserCheck, 
-  UserX, 
-  CheckCircle, 
-  XCircle, 
-  Settings, 
-  Check, 
+import {
+  Users,
+  UserPlus,
+  Search,
+  Shield,
+  Mail,
+  UserCheck,
+  UserX,
+  CheckCircle,
+  XCircle,
+  Settings,
+  Check,
   AlertCircle,
   Trash2
 } from 'lucide-react';
@@ -19,6 +19,9 @@ import { User } from '../types';
 import { SettingsPanel } from './SettingsPanel';
 import { RoleRequestsPanel } from './RoleRequestsPanel';
 import { BrandSafetyPanel } from './BrandSafetyPanel';
+import { usePaginatedData } from '../hooks/usePaginatedData';
+import { Pagination } from './Pagination';
+import { fetchPaginated } from '../apiClient';
 
 interface AdminConsoleTabProps {
   onTriggerLog?: (code: string, severity: 'Info' | 'Warning' | 'Major' | 'Critical', module: string, user: string, desc: string) => void;
@@ -26,10 +29,50 @@ interface AdminConsoleTabProps {
 }
 
 export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, currentUser }) => {
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  // ── Paginated user directory ──
+  const {
+    data: users,
+    loading,
+    page: usersPage,
+    totalPages: usersTotalPages,
+    totalCount: totalUsersCount,
+    hasPreviousPage: usersHasPrev,
+    hasNextPage: usersHasNext,
+    setPage: setUsersPage,
+    setFilters: setUserFilters,
+    refresh: refreshUsers,
+  } = usePaginatedData<User>('/api/users', {}, { defaultPageSize: 20 });
+
   const [searchQuery, setSearchQuery] = useState<string>('');
-  
+
+  useEffect(() => {
+    setUserFilters({ search: searchQuery || undefined });
+  }, [searchQuery]);
+
+  // ── Role/status breakdown — true totals across the whole directory, not just this page ──
+  const [roleCounts, setRoleCounts] = useState({ admin: 0, editor: 0, advertiser: 0, suspended: 0 });
+  const refreshRoleCounts = useCallback(async () => {
+    const [admin, editor, advertiser, suspended] = await Promise.all([
+      fetchPaginated<User>('/api/users', { role: 'Admin', pageSize: 1 }),
+      fetchPaginated<User>('/api/users', { role: 'Editor', pageSize: 1 }),
+      fetchPaginated<User>('/api/users', { role: 'Advertiser', pageSize: 1 }),
+      fetchPaginated<User>('/api/users', { accountStatus: 'Suspended', pageSize: 1 }),
+    ]);
+    setRoleCounts({
+      admin: admin.totalCount,
+      editor: editor.totalCount,
+      advertiser: advertiser.totalCount,
+      suspended: suspended.totalCount,
+    });
+  }, []);
+
+  useEffect(() => { refreshRoleCounts(); }, [refreshRoleCounts]);
+
+  const refreshAll = () => {
+    refreshUsers();
+    refreshRoleCounts();
+  };
+
   // New user form state
   const [newFullName, setNewFullName] = useState<string>('');
   const [newEmail, setNewEmail] = useState<string>('');
@@ -59,28 +102,6 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
     };
     return fetch(url, { ...options, headers });
   };
-
-  // Load all users from REST API
-  const fetchUsers = async () => {
-    setLoading(true);
-    try {
-      const res = await fetchWithAuth('/api/users');
-      const data = await res.json();
-      if (res.ok) {
-        // Handle both flat array and paginated { items: [...] } response
-        const userList = Array.isArray(data) ? data : (data.items || []);
-        setUsers(userList);
-      }
-    } catch (err) {
-      console.error("Error loading users:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchUsers();
-  }, []);
 
   // Handle Add User submission
   const handleAddUser = async (e: React.FormEvent) => {
@@ -123,7 +144,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
       setNewRole('Editor');
       
       // Refresh user database
-      fetchUsers();
+      refreshAll();
 
       if (onTriggerLog) {
         onTriggerLog(
@@ -165,7 +186,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
         return;
       }
 
-      fetchUsers();
+      refreshAll();
       if (onTriggerLog) {
         onTriggerLog(
           "USER_STATUS_CHANGE", 
@@ -202,7 +223,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
       }
 
       setDeleteConfirmId(null);
-      fetchUsers();
+      refreshAll();
       if (onTriggerLog) {
         onTriggerLog(
           "USER_DELETED", 
@@ -243,7 +264,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
 
       setEditingUserId(null);
       setEditError(null);
-      fetchUsers();
+      refreshAll();
       if (onTriggerLog) {
         onTriggerLog(
           "USER_ROLE_CHANGE", 
@@ -268,21 +289,6 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
     setEditError(null);
     setDeleteConfirmId(null);
   };
-
-  // Filter users based on query
-  const filteredUsers = users.filter(u => 
-    u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.role.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.accountStatus.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Stats calculation
-  const totalUsersCount = users.length;
-  const adminCount = users.filter(u => u.role === 'Admin').length;
-  const editorCount = users.filter(u => u.role === 'Editor').length;
-  const advertiserCount = users.filter(u => u.role === 'Advertiser').length;
-  const suspendedCount = users.filter(u => u.accountStatus === 'Suspended').length;
 
   return (
     <motion.div
@@ -319,10 +325,10 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
           { label: "Total Users", val: totalUsersCount, sub: "Registered accounts", color: "text-slate-900" },
-          { label: "Administrators", val: adminCount, sub: "Full system control", color: "text-blue-600 font-bold" },
-          { label: "Editors / Approvers", val: editorCount, sub: "QA visual workflow", color: "text-indigo-600" },
-          { label: "Advertisers", val: advertiserCount, sub: "Campaign & assets", color: "text-emerald-600" },
-          { label: "Suspended", val: suspendedCount, sub: "Forbidden logins", color: suspendedCount > 0 ? "text-rose-600 font-bold animate-pulse" : "text-slate-400" },
+          { label: "Administrators", val: roleCounts.admin, sub: "Full system control", color: "text-blue-600 font-bold" },
+          { label: "Editors / Approvers", val: roleCounts.editor, sub: "QA visual workflow", color: "text-indigo-600" },
+          { label: "Advertisers", val: roleCounts.advertiser, sub: "Campaign & assets", color: "text-emerald-600" },
+          { label: "Suspended", val: roleCounts.suspended, sub: "Forbidden logins", color: roleCounts.suspended > 0 ? "text-rose-600 font-bold animate-pulse" : "text-slate-400" },
         ].map((m, idx) => (
           <div key={idx} className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-2xs">
             <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider font-mono">{m.label}</p>
@@ -359,7 +365,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                 <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-3"></div>
                 Loading secure directory database...
               </div>
-            ) : filteredUsers.length === 0 ? (
+            ) : users.length === 0 ? (
               <div className="p-12 text-center text-slate-400 text-xs font-mono">
                 No user profiles match your search filter criteria.
               </div>
@@ -376,7 +382,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
-                    {filteredUsers.map((item) => {
+                    {users.map((item) => {
                       const isEditing = editingUserId === item.id;
                       
                       // Role Color maps
@@ -537,6 +543,17 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {!loading && users.length > 0 && (
+              <div className="px-5 pb-4">
+                <Pagination
+                  page={usersPage}
+                  totalPages={usersTotalPages}
+                  hasPreviousPage={usersHasPrev}
+                  hasNextPage={usersHasNext}
+                  onPageChange={setUsersPage}
+                />
               </div>
             )}
           </div>

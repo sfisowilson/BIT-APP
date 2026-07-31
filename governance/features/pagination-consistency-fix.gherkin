@@ -1,0 +1,57 @@
+Feature: Pagination Consistency Across List Pages
+  As a platform user (Editor, Admin, Advertiser)
+  I want every list page to actually show all my data, not just a silently truncated first page
+  So that I can find campaigns, assets, renders, and users beyond whatever the default page size happens to catch
+
+  Background:
+    Given I am logged in
+    And the backend list endpoints (/api/campaigns, /api/assets, /api/renders, /api/users) support
+      pagination via PaginationParams (page, pageSize, sortBy, sortDescending)
+
+  Scenario: Assets view — Campaign Database grid is paginated
+    Given more than 20 campaigns exist
+    When I open the Assets view with no campaign selected
+    Then the Campaign Database grid shows page 1 of the campaign list
+    And pagination controls let me navigate to subsequent pages
+    And a search box lets me filter by campaign name/code across all pages, not just the loaded ones
+
+  Scenario: Assets view — Campaign Assets list is paginated
+    Given a selected campaign has more than 20 assets
+    When I view that campaign's asset manager
+    Then the Campaign Assets list shows page 1 of that campaign's assets
+    And pagination controls let me navigate to subsequent pages
+
+  Scenario: Assets view — Unassigned Assets list is paginated
+    Given more than 20 unassigned (no CampaignId) assets exist
+    When I view the Assets staging area with no campaign selected
+    Then the Unassigned Assets list shows page 1 of unassigned assets
+    And pagination controls let me navigate to subsequent pages
+
+  Scenario: Renders view is paginated and scoped to the selected campaign
+    Given the selected campaign has more than 20 renders
+    When I open the Renders tab
+    Then the render queue shows page 1 of that campaign's renders
+    And pagination controls let me navigate to subsequent pages
+    And a status filter lets me narrow to Processing/Finished/Failed
+    And the three summary stat cards (Processing/Completed/Failed) reflect the campaign's true totals, not just the current page
+
+  Scenario: Admin → Users directory is paginated
+    Given more than 20 users are registered
+    When an Admin opens the Users directory
+    Then the table shows page 1 of registered users
+    And pagination controls let me navigate to subsequent pages
+    And the search box queries the full user directory server-side, not just the loaded page
+    And the role-breakdown stat cards (Admin/Editor/Advertiser) reflect true totals, not just the current page
+
+  Scenario: Existing admin safety rules are unaffected by pagination
+    Given the last remaining Admin account exists
+    When another admin attempts to demote, suspend, or delete that account
+    Then the operation is still blocked
+    And this check uses the full unfiltered user set internally, not a paginated page
+
+  Scenario: Global campaign picker (top-nav CampaignSelector) is a known, separate gap
+    Given more than 20 campaigns exist
+    When I open the top navigation bar's campaign switcher
+    Then it still only searches within the first 20 campaigns loaded at app startup
+    And this is intentionally out of scope for this fix — it requires reworking App.tsx's shared
+      cross-page campaignList/assetList state, which many other views depend on for lookups

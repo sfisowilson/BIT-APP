@@ -72,6 +72,8 @@ namespace Afrobotics.Bit.Api.DTOs
         public string? Type { get; set; }
         public string? BrandCategory { get; set; }
         public string? CampaignId { get; set; }
+        /// <summary>When true and CampaignId is not set, returns only assets with no campaign (CampaignId == null).</summary>
+        public bool? Unassigned { get; set; }
         public string? Search { get; set; }
     }
 

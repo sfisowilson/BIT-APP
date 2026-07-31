@@ -2,18 +2,57 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Cpu, Download, Film, Loader2, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react';
 import type { RenderItem } from '../types';
+import { usePaginatedData } from '../hooks/usePaginatedData';
+import { Pagination } from './Pagination';
+import { fetchPaginated } from '../apiClient';
 
 interface RendersTabProps {
-  renderList: RenderItem[];
+  campaignId?: string;
   campaignName?: string;
   onRetryRender?: (renderId: string) => Promise<void>;
   userRole?: 'Admin' | 'Editor' | 'Advertiser';
 }
 
-export const RendersTab: React.FC<RendersTabProps> = ({ renderList, campaignName, onRetryRender, userRole }) => {
-  const pending = renderList.filter(r => r.renderStatus === 'Processing' || r.renderStatus === 'Queued');
-  const finished = renderList.filter(r => r.renderStatus === 'Finished');
-  const failed = renderList.filter(r => r.renderStatus === 'Failed');
+export const RendersTab: React.FC<RendersTabProps> = ({ campaignId, campaignName, onRetryRender, userRole }) => {
+  // ── Paginated render queue, scoped to the selected campaign ──
+  const {
+    data: renders,
+    page: rendersPage,
+    totalPages: rendersTotalPages,
+    totalCount: rendersTotalCount,
+    hasPreviousPage: rendersHasPrev,
+    hasNextPage: rendersHasNext,
+    setPage: setRendersPage,
+    setFilters: setRenderFilters,
+    refresh: refreshRenders,
+  } = usePaginatedData<RenderItem>('/api/renders', { campaignId }, { defaultPageSize: 20 });
+
+  const [statusFilter, setStatusFilter] = React.useState('');
+  React.useEffect(() => {
+    setRenderFilters({ campaignId, renderStatus: statusFilter || undefined });
+  }, [campaignId, statusFilter]);
+
+  // ── Status breakdown — true totals across the whole campaign, not just this page ──
+  const [statusCounts, setStatusCounts] = React.useState({ queued: 0, processing: 0, finished: 0, failed: 0 });
+  const refreshStatusCounts = React.useCallback(async () => {
+    const params = { campaignId, pageSize: 1 };
+    const [queued, processing, finished, failed] = await Promise.all([
+      fetchPaginated<RenderItem>('/api/renders', { ...params, renderStatus: 'Queued' }),
+      fetchPaginated<RenderItem>('/api/renders', { ...params, renderStatus: 'Processing' }),
+      fetchPaginated<RenderItem>('/api/renders', { ...params, renderStatus: 'Finished' }),
+      fetchPaginated<RenderItem>('/api/renders', { ...params, renderStatus: 'Failed' }),
+    ]);
+    setStatusCounts({
+      queued: queued.totalCount,
+      processing: processing.totalCount,
+      finished: finished.totalCount,
+      failed: failed.totalCount,
+    });
+  }, [campaignId]);
+
+  React.useEffect(() => { refreshStatusCounts(); }, [refreshStatusCounts]);
+
+  const pendingCount = statusCounts.queued + statusCounts.processing;
   const [retryingId, setRetryingId] = React.useState<string | null>(null);
 
   return (
@@ -27,36 +66,58 @@ export const RendersTab: React.FC<RendersTabProps> = ({ renderList, campaignName
             <h2 className="text-lg font-bold text-slate-800 font-display">Render Queue</h2>
             <p className="text-xs text-slate-500">
               {campaignName ? `Campaign: ${campaignName} · ` : ''}
-              {renderList.length} render{renderList.length !== 1 ? 's' : ''} · {finished.length} completed · {pending.length} in progress
+              {rendersTotalCount} render{rendersTotalCount !== 1 ? 's' : ''} · {statusCounts.finished} completed · {pendingCount} in progress
             </p>
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
-            <div className="text-2xl font-bold text-amber-600">{pending.length}</div>
+        {/* Stats — clickable shortcuts into the status filter */}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === 'Processing' ? '' : 'Processing')}
+            className={`bg-amber-50 border rounded-xl p-3 text-center cursor-pointer transition-all ${statusFilter === 'Processing' ? 'border-amber-400 ring-1 ring-amber-300' : 'border-amber-200 hover:border-amber-300'}`}
+          >
+            <div className="text-2xl font-bold text-amber-600">{pendingCount}</div>
             <div className="text-[10px] font-mono font-bold text-amber-500 uppercase">Processing</div>
-          </div>
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
-            <div className="text-2xl font-bold text-emerald-600">{finished.length}</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === 'Finished' ? '' : 'Finished')}
+            className={`bg-emerald-50 border rounded-xl p-3 text-center cursor-pointer transition-all ${statusFilter === 'Finished' ? 'border-emerald-400 ring-1 ring-emerald-300' : 'border-emerald-200 hover:border-emerald-300'}`}
+          >
+            <div className="text-2xl font-bold text-emerald-600">{statusCounts.finished}</div>
             <div className="text-[10px] font-mono font-bold text-emerald-500 uppercase">Completed</div>
-          </div>
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-center">
-            <div className="text-2xl font-bold text-red-500">{failed.length}</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === 'Failed' ? '' : 'Failed')}
+            className={`bg-red-50 border rounded-xl p-3 text-center cursor-pointer transition-all ${statusFilter === 'Failed' ? 'border-red-400 ring-1 ring-red-300' : 'border-red-200 hover:border-red-300'}`}
+          >
+            <div className="text-2xl font-bold text-red-500">{statusCounts.failed}</div>
             <div className="text-[10px] font-mono font-bold text-red-400 uppercase">Failed</div>
-          </div>
+          </button>
         </div>
+        {statusFilter && (
+          <div className="mb-4 flex items-center gap-2 text-[10px] text-slate-500 font-mono">
+            <span>Filtered to: <strong className="text-slate-700">{statusFilter}</strong></span>
+            <button type="button" onClick={() => setStatusFilter('')} className="text-blue-600 hover:text-blue-700 cursor-pointer font-bold">✕ Clear filter</button>
+          </div>
+        )}
 
-        {renderList.length === 0 ? (
+        {renders.length === 0 ? (
           <div className="text-center py-12">
             <Cpu className="h-12 w-12 text-slate-200 mx-auto mb-3" />
-            <h3 className="text-sm font-bold text-slate-400">No renders submitted yet</h3>
-            <p className="text-xs text-slate-400 mt-1">Go to the Editor tab, place assets on surfaces, approve, and submit for rendering.</p>
+            <h3 className="text-sm font-bold text-slate-400">
+              {statusFilter ? `No ${statusFilter.toLowerCase()} renders` : 'No renders submitted yet'}
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              {statusFilter ? 'Try clearing the filter.' : 'Go to the Editor tab, place assets on surfaces, approve, and submit for rendering.'}
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
-            {renderList.map(r => {
+            {renders.map(r => {
               const isProcessing = r.renderStatus === 'Processing' || r.renderStatus === 'Queued';
               const isFinished = r.renderStatus === 'Finished';
               const isFailed = r.renderStatus === 'Failed';
@@ -107,6 +168,8 @@ export const RendersTab: React.FC<RendersTabProps> = ({ renderList, campaignName
                               setRetryingId(r.id);
                               try {
                                 await onRetryRender(r.id);
+                                refreshRenders();
+                                refreshStatusCounts();
                               } finally {
                                 setRetryingId(null);
                               }
@@ -135,6 +198,14 @@ export const RendersTab: React.FC<RendersTabProps> = ({ renderList, campaignName
             })}
           </div>
         )}
+
+        <Pagination
+          page={rendersPage}
+          totalPages={rendersTotalPages}
+          hasPreviousPage={rendersHasPrev}
+          hasNextPage={rendersHasNext}
+          onPageChange={setRendersPage}
+        />
       </div>
     </motion.div>
   );

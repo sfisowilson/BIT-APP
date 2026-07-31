@@ -2103,7 +2103,7 @@ export default function App() {
 
                 {activeView === 'renders' && (
                   <RendersTab
-                    renderList={renderList.filter(r => selectedCampaignId && r.campaignId === selectedCampaignId)}
+                    campaignId={selectedCampaignId ?? undefined}
                     campaignName={campaignList.find(c => c.id === selectedCampaignId)?.name}
                     onRetryRender={handleRetryRender}
                     userRole={user?.role}

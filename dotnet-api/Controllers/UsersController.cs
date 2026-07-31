@@ -23,9 +23,9 @@ namespace Afrobotics.Bit.Api.Controllers
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<User>>> GetUsers()
+        public async Task<ActionResult<PaginatedResult<User>>> GetUsers([FromQuery] UserFilterParams filter)
         {
-            var users = await _userService.GetUsersAsync();
+            var users = await _userService.GetUsersAsync(filter);
             return Ok(users);
         }
 

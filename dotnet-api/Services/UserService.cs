@@ -10,7 +10,7 @@ namespace Afrobotics.Bit.Api.Services
 {
     public interface IUserService
     {
-        Task<IEnumerable<User>> GetUsersAsync();
+        Task<PaginatedResult<User>> GetUsersAsync(UserFilterParams filter);
         Task<User> CreateUserAsync(CreateUserDto dto);
         Task<User?> UpdateUserAsync(UpdateUserDto dto);
         Task<(bool Success, string? Error)> DeleteUserAsync(string id, string requestingUserId);
@@ -27,9 +27,28 @@ namespace Afrobotics.Bit.Api.Services
             _email = email;
         }
 
-        public async Task<IEnumerable<User>> GetUsersAsync()
+        public async Task<PaginatedResult<User>> GetUsersAsync(UserFilterParams filter)
         {
-            return await _userRepository.GetAllAsync();
+            var query = _userRepository.GetAllQueryable();
+
+            if (!string.IsNullOrEmpty(filter.Role))
+                query = query.Where(u => u.Role == filter.Role);
+            if (!string.IsNullOrEmpty(filter.AccountStatus))
+                query = query.Where(u => u.AccountStatus == filter.AccountStatus);
+            if (!string.IsNullOrEmpty(filter.Search))
+            {
+                var s = filter.Search;
+                query = query.Where(u =>
+                    u.FullName.Contains(s) || u.Email.Contains(s) ||
+                    u.Role.Contains(s) || u.AccountStatus.Contains(s));
+            }
+
+            if (!string.IsNullOrEmpty(filter.SortBy))
+                query = query.ApplySort(filter.SortBy, filter.SortDescending);
+            else
+                query = query.OrderByDescending(u => u.LastLoginAt);
+
+            return await query.ToPaginatedResultAsync(filter.Page, filter.PageSize);
         }
 
         public async Task<User> CreateUserAsync(CreateUserDto dto)

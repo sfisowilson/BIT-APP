@@ -40,6 +40,8 @@ namespace Afrobotics.Bit.Api.Services
                 query = query.Where(a => a.BrandCategory == filter.BrandCategory);
             if (!string.IsNullOrEmpty(filter.CampaignId))
                 query = query.Where(a => a.CampaignId == filter.CampaignId);
+            else if (filter.Unassigned == true)
+                query = query.Where(a => a.CampaignId == null);
             if (!string.IsNullOrEmpty(filter.Search))
                 query = query.Where(a => a.Name.Contains(filter.Search));
 

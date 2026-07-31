@@ -107,7 +107,7 @@
 
 | Method | Path | Request | Response |
 |---|---|---|---|
-| `GET` | `/api/assets` | Query filter | `PaginatedResult<CreativeAsset>` |
+| `GET` | `/api/assets` | Query: `AssetFilterParams { page, pageSize, type?, brandCategory?, campaignId?, unassigned?, search? }` — `unassigned=true` is ignored if `campaignId` is also set (CampaignId takes precedence) | `PaginatedResult<CreativeAsset>` |
 | `POST` | `/api/assets` | Multipart form: `name, type, brandCategory, campaignId?, file` | `CreativeAsset` |
 | `DELETE` | `/api/assets/{id}` | — | `{ success: true }` |
 
@@ -136,7 +136,7 @@
 | **Alarms** | `api/alarms` | `GET /` list, `PUT /{id}` acknowledge |
 | **Logs** | `api/logs` | `GET /` query event logs |
 | **Stats** | `api/stats` | `GET /summary` → `StatsSummary` |
-| **Users** | `api/users` | `GET /` list (Admin), `POST /` create (Admin), `PUT /{id}`, `DELETE /{id}` |
+| **Users** | `api/users` | `GET /` (Admin) Query: `UserFilterParams { page, pageSize, role?, accountStatus?, search? }` → `PaginatedResult<User>`, sorted by `LastLoginAt` desc by default. `search` matches fullName/email/role/accountStatus (substring). `POST /` create (Admin), `POST /update` (Admin), `DELETE /{id}` (Admin) — last-remaining-admin and primary-admin-account protections apply to update/delete regardless of pagination/filtering |
 | **UserProfile** | `api/profile` | `GET /`, `PUT /` own profile |
 | **AdminRoleRequests** | `api/admin/role-requests` | `GET /`, `POST /`, `POST /{id}/approve`, `POST /{id}/reject` |
 | **AdminSettings** | `api/admin/settings` | `GET /`, `PUT /` platform settings |
