@@ -162,6 +162,40 @@ public class ShotAwareTrackingServiceTests
     }
 
     [Fact]
+    public async Task TrackMaskAcrossShotsAsync_SeedShotCall_IncludesTextPromptAlongsideBox()
+    {
+        // Regression guard: a box-only prompt was observed live to consistently return zero
+        // masks for a low-texture surface (a plain wall) even though the identical text prompt
+        // found it in every other shot — SAM3 needs the semantic hint, not just the box, on the
+        // seed shot too. See ShotAwareTrackingService.TrackAcrossShotsAsync.
+        using var db = GetInMemoryDbContext();
+        db.SceneItems.Add(new SceneItem { Id = "sc-06", ContentId = "ct-06", SceneIndex = 0, StartFrame = 0, EndFrame = 29, DurationSeconds = 1 });
+        db.Set<ShotItem>().Add(new ShotItem { Id = "sh-0", ContentId = "ct-06", SceneId = "sc-06", ShotIndex = 0, StartFrame = 0, EndFrame = 29 });
+        await db.SaveChangesAsync();
+
+        var mockTracking = new Mock<ISurfaceTrackingService>();
+        mockTracking
+            .Setup(t => t.SegmentVideoRleAsync(
+                It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(),
+                It.IsAny<(int, int, int, int)?>(), It.IsAny<(int, int)?>(), It.IsAny<string?>(),
+                It.IsAny<int>(), It.IsAny<double>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<RleFrameResult> { Frame(0, 0, SomeRle) });
+
+        var service = new ShotAwareTrackingService(db, mockTracking.Object);
+        await service.TrackMaskAcrossShotsAsync(
+            "sc-06", "fake-video.mp4", (10, 10, 100, 100), seedFrame: 0,
+            sam3Prompt: "a plain wall section", surfaceType: "interior wall");
+
+        mockTracking.Verify(t => t.SegmentVideoRleAsync(
+            It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>(),
+            It.Is<(int, int, int, int)?>(b => b.HasValue),
+            It.IsAny<(int, int)?>(),
+            "a plain wall section",
+            It.IsAny<int>(), It.IsAny<double>(), It.IsAny<CancellationToken>()),
+            Times.AtLeastOnce);
+    }
+
+    [Fact]
     public async Task TrackQuadAcrossShotsAsync_ProducesFourCornerQuadPerTrackedFrame()
     {
         using var db = GetInMemoryDbContext();

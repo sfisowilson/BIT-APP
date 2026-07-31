@@ -218,9 +218,13 @@ public class ShotAwareTrackingService : IShotAwareTrackingService
                 // means only frames from the seed point forward within this shot get tracked —
                 // an acceptable tradeoff, since a seed click/quad only has meaning going forward
                 // in time anyway.
+                // Pass the same semantic text hint alongside the box (not box-only) — a box alone
+                // gives SAM3 no cue about which content inside it to segment, which measurably
+                // fails on low-texture/low-contrast surfaces (e.g. a plain wall) even though the
+                // identical text prompt reliably finds the same surface in every other shot.
                 var trimStart = Math.Clamp(seedFrame, shot.StartFrame, shot.EndFrame);
                 rleFrames = await SegmentWithThresholdFallbackAsync(videoPath, trimStart, shot.EndFrame,
-                    seedBox: seedBox, promptFrame: trimStart, ct: ct);
+                    seedBox: seedBox, textPrompt: reanchorPrompt, promptFrame: trimStart, ct: ct);
             }
             else
             {
