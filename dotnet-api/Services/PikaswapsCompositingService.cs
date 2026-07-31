@@ -104,7 +104,7 @@ public class PikaswapsCompositingService : ICompositingService
                 image_url = imageUrl,
                 modify_region = modifyRegion,
                 prompt,
-                negative_prompt = negativePrompt ?? "blurry, distorted, unrealistic, watermark, low quality, artifacts",
+                negative_prompt = negativePrompt ?? "blurry, distorted, unrealistic, watermark, low quality, artifacts, altered text, changed wording, modified logo, different branding, distorted brand colors",
                 seed = seed ?? new Random().Next(),
             };
 

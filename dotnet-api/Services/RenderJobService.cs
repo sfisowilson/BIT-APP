@@ -174,7 +174,7 @@ public class RenderJobService
             if (string.IsNullOrEmpty(modifyRegion) || string.IsNullOrEmpty(prompt))
             {
                 modifyRegion = surface.SurfaceType;
-                prompt = $"replace with a {asset.Name} advertisement, photorealistic";
+                prompt = $"replace with a {asset.Name} advertisement, photorealistic, preserving the asset's exact text, wording, logo, and colors — only adjust lighting and perspective to fit naturally";
             }
 
             await eventLog.LogEventAsync("RenderEngine", "GEMINI_PROMPT_COMPLETE", "Info",

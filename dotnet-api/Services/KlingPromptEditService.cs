@@ -45,6 +45,15 @@ public class KlingPromptEditService
     /// must be downscaled to fit before submission — see ProcessPromptPreviewJob.</summary>
     public const int MaxPromptEditResolutionPx = 2160;
 
+    /// <summary>Appended to every user-authored prompt before it reaches the model — the free-text
+    /// box is the one place a user can type arbitrary instructions, so this is the one enforcement
+    /// point that actually constrains what gets sent. Keeps brand assets legally/visually intact:
+    /// no wording, logo, or color changes, only physical compositing adjustments.</summary>
+    public const string BrandIntegrityRules =
+        "Preserve the brand asset's appearance exactly as provided — do not alter, add, or remove " +
+        "any text, wording, logo, or colors. Only wrap, reposition, and adjust lighting/shading to " +
+        "fit the scene naturally; the asset's content itself must stay completely unchanged.";
+
     public KlingPromptEditService(
         IPlatformSettingsService settings,
         ILogger<KlingPromptEditService> logger,
@@ -84,7 +93,7 @@ public class KlingPromptEditService
         }
 
         var endpoint = await _settings.GetAsync("kling_edit_endpoint", DefaultEndpoint);
-        var prompt = $"{userPromptText}, using @Image1 as the brand asset to place";
+        var prompt = $"{userPromptText}, using @Image1 as the brand asset to place. {BrandIntegrityRules}";
 
         try
         {

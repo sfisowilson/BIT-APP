@@ -679,7 +679,8 @@ Return ONLY valid JSON — no markdown, no code fences:
 Rules:
 - modify_region: describe the EXISTING object to be replaced (e.g. ""the LED perimeter board on the soccer field"")
 - prompt: describe the DESIRED result (e.g. ""replace with a Coca-Cola logo, photorealistic, matching stadium lighting"")
-- Both strings should be short (under 15 words), precise, and optimized for pikaswaps' text-driven region detection";
+- Both strings should be short (under 15 words), precise, and optimized for pikaswaps' text-driven region detection
+- prompt must NEVER instruct changing the brand asset's text, wording, logo, or colors — only describe lighting, shading, perspective, and placement adjustments that keep the asset's content exactly as provided";
 
             var payload = new
             {
