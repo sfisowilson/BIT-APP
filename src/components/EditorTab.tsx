@@ -207,6 +207,9 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   // Track video playback position as frame number. Also enforces the selected scene's
   // boundary during playback — without this, native <video controls> playback runs straight
   // past the scene into whatever comes next, with no indication the scene itself has ended.
+  // Reaching the end loops back to the scene's start and keeps playing, rather than just
+  // pausing dead at the last frame — repeated review of a scene shouldn't require hunting
+  // down the separate "Replay Scene" button every time.
   const [currentVideoFrame, setCurrentVideoFrame] = React.useState<number>(0);
   React.useEffect(() => {
     const vid = videoRef.current;
@@ -216,13 +219,13 @@ export const EditorTab: React.FC<EditorTabProps> = ({
       const frame = Math.round(vid.currentTime * fps);
       setCurrentVideoFrame(frame);
       if (currentScene && !vid.paused && frame >= currentScene.endFrame) {
-        vid.currentTime = currentScene.endFrame / fps;
-        vid.pause();
+        vid.currentTime = currentScene.startFrame / fps;
+        vid.play();
       }
     };
     vid.addEventListener('timeupdate', onTimeUpdate);
     return () => { vid.removeEventListener('timeupdate', onTimeUpdate); };
-  }, [activeVideo?.frameRate, selectedSceneId, currentScene?.endFrame]);
+  }, [activeVideo?.frameRate, selectedSceneId, currentScene?.startFrame, currentScene?.endFrame]);
 
   // Filter surfaces: only show those detected near the current video frame (±30 frames)
   const visibleSurfaces = React.useMemo(() => {
