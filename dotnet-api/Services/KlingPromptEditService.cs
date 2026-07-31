@@ -48,11 +48,17 @@ public class KlingPromptEditService
     /// <summary>Appended to every user-authored prompt before it reaches the model — the free-text
     /// box is the one place a user can type arbitrary instructions, so this is the one enforcement
     /// point that actually constrains what gets sent. Keeps brand assets legally/visually intact:
-    /// no wording, logo, or color changes, only physical compositing adjustments.</summary>
+    /// no wording, logo, or color changes, only physical compositing adjustments. Also constrains
+    /// the model's own edit scope — keyframes/regions untouched by the requested placement, and the
+    /// clip's overall length, should come back unchanged, both to avoid unrelated visual drift and
+    /// to reduce a real source of the audio/video desync fixed in ExtractSceneClipAsync (Kling
+    /// altering output duration would undo that fix's frame-accurate input).</summary>
     public const string BrandIntegrityRules =
         "Preserve the brand asset's appearance exactly as provided — do not alter, add, or remove " +
         "any text, wording, logo, or colors. Only wrap, reposition, and adjust lighting/shading to " +
-        "fit the scene naturally; the asset's content itself must stay completely unchanged.";
+        "fit the scene naturally; the asset's content itself must stay completely unchanged. Leave " +
+        "all keyframes and regions unaffected by this placement exactly as they are, and keep the " +
+        "output clip's length identical to the input — do not add, remove, or trim any frames.";
 
     public KlingPromptEditService(
         IPlatformSettingsService settings,

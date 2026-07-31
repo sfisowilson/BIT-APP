@@ -17,4 +17,12 @@ public class KlingPromptEditServiceTests
     {
         Assert.Contains(requiredTerm, KlingPromptEditService.BrandIntegrityRules);
     }
+
+    [Theory]
+    [InlineData("keyframes")]
+    [InlineData("length")]
+    public void BrandIntegrityRules_ForbidsAlteringUnaffectedFramesOrClipLength(string requiredTerm)
+    {
+        Assert.Contains(requiredTerm, KlingPromptEditService.BrandIntegrityRules);
+    }
 }
