@@ -208,6 +208,16 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
   // MReq 1: Extract metadata from uploaded video file
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
 
+  // Preview player (Content tab) — tracks real playback position so the timeline's playhead
+  // and scene-block clicks actually reflect/drive the video, instead of a fixed decorative marker.
+  const previewVideoRef = React.useRef<HTMLVideoElement | null>(null);
+  const [previewCurrentTime, setPreviewCurrentTime] = React.useState(0);
+  const [previewDuration, setPreviewDuration] = React.useState(0);
+  React.useEffect(() => {
+    setPreviewCurrentTime(0);
+    setPreviewDuration(0);
+  }, [selectedVideo]);
+
   const extractVideoMetadata = (file: File) => {
     const url = URL.createObjectURL(file);
     const video = document.createElement('video');
@@ -485,10 +495,13 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                 {isLocalFile ? (
                   /* Real video playback */
                   <video
+                    ref={previewVideoRef}
                     src={activeVideo.storageKey}
                     controls
                     className="absolute inset-0 w-full h-full object-contain"
                     preload="metadata"
+                    onTimeUpdate={e => setPreviewCurrentTime(e.currentTarget.currentTime)}
+                    onLoadedMetadata={e => setPreviewDuration(e.currentTarget.duration)}
                   >
                     Your browser does not support video playback.
                   </video>
@@ -520,63 +533,72 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                     <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-black/50 text-white backdrop-blur font-mono">
                       {activeVideo.frameRate} FPS
                     </span>
-                    {isLocalFile && (
-                      <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-600/70 text-white backdrop-blur font-mono">
-                        REAL FILE
-                      </span>
-                    )}
                   </div>
                   <PipelineIndicator status={activeVideo.ingestionStatus} />
                 </div>
+              </div>
 
-                {/* Bottom timeline bar with scene markers */}
-                <div className="absolute bottom-0 left-0 right-0 bg-slate-950/90 border-t border-slate-700/50 px-4 py-3">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <Eye className="h-3 w-3 text-blue-400" />
-                    <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">
-                      {activeVideo.title.length > 45 ? activeVideo.title.substring(0, 45) + '...' : activeVideo.title}
-                    </span>
-                    <span className="text-[9px] text-slate-500 ml-auto font-mono">{activeVideo.duration}</span>
-                  </div>
-                  {/* Timeline track */}
-                  <div className="relative h-5 bg-slate-800 rounded-md overflow-hidden border border-slate-700/50">
-                    {/* Scene blocks */}
-                    {scenesForVideo.length > 0 ? (
-                      scenesForVideo.map((scene, idx) => {
-                        const colors = ['bg-blue-500/60', 'bg-emerald-500/60', 'bg-fuchsia-500/60', 'bg-amber-500/60', 'bg-cyan-500/60'];
-                        const totalFrames = scenesForVideo.reduce((max, s) => Math.max(max, s.endFrame), 1);
-                        const leftPct = (scene.startFrame / totalFrames) * 100;
-                        const widthPct = ((scene.endFrame - scene.startFrame) / totalFrames) * 100;
-                        const isActive = scene.id === selectedSceneId;
-                        return (
-                          <div
-                            key={scene.id}
-                            onClick={(e) => { e.stopPropagation(); setSelectedSceneId(scene.id); }}
-                            className={`absolute top-0 h-full ${colors[idx % colors.length]} border-r border-white/20 flex items-center px-1.5 cursor-pointer hover:brightness-125 transition-all ${isActive ? 'ring-2 ring-yellow-400 brightness-125 z-10' : ''}`}
-                            style={{ left: `${leftPct}%`, width: `${Math.max(widthPct, 2)}%` }}
-                            title={`Scene #${scene.sceneIndex}: ${scene.durationSeconds}s (frames ${scene.startFrame}–${scene.endFrame})`}
-                          >
-                            <span className="text-[7px] font-bold text-white drop-shadow truncate">
-                              S{scene.sceneIndex}
-                            </span>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-[8px] text-slate-500 font-mono">No scenes detected — run Scene Detection</span>
-                      </div>
-                    )}
-                    {/* Playhead */}
-                    <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 shadow-[0_0_6px_rgba(239,68,68,0.5)]" style={{ left: '15%' }}>
+              {/* Timeline bar with scene markers — kept out of the video's own box so it never
+                  covers the native <video controls> bar. Playhead and scene clicks are wired to
+                  previewVideoRef's real playback position, not decorative placeholders. */}
+              <div className="bg-slate-950/90 border-t border-slate-700/50 px-4 py-3">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Eye className="h-3 w-3 text-blue-400" />
+                  <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">
+                    {activeVideo.title.length > 45 ? activeVideo.title.substring(0, 45) + '...' : activeVideo.title}
+                  </span>
+                  <span className="text-[9px] text-slate-500 ml-auto font-mono">{activeVideo.duration}</span>
+                </div>
+                {/* Timeline track */}
+                <div className="relative h-5 bg-slate-800 rounded-md overflow-hidden border border-slate-700/50">
+                  {/* Scene blocks */}
+                  {scenesForVideo.length > 0 ? (
+                    scenesForVideo.map((scene, idx) => {
+                      const colors = ['bg-blue-500/60', 'bg-emerald-500/60', 'bg-fuchsia-500/60', 'bg-amber-500/60', 'bg-cyan-500/60'];
+                      const totalFrames = scenesForVideo.reduce((max, s) => Math.max(max, s.endFrame), 1);
+                      const leftPct = (scene.startFrame / totalFrames) * 100;
+                      const widthPct = ((scene.endFrame - scene.startFrame) / totalFrames) * 100;
+                      const isActive = scene.id === selectedSceneId;
+                      return (
+                        <div
+                          key={scene.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedSceneId(scene.id);
+                            const vid = previewVideoRef.current;
+                            if (vid && activeVideo.frameRate) {
+                              vid.currentTime = scene.startFrame / activeVideo.frameRate;
+                            }
+                          }}
+                          className={`absolute top-0 h-full ${colors[idx % colors.length]} border-r border-white/20 flex items-center px-1.5 cursor-pointer hover:brightness-125 transition-all ${isActive ? 'ring-2 ring-yellow-400 brightness-125 z-10' : ''}`}
+                          style={{ left: `${leftPct}%`, width: `${Math.max(widthPct, 2)}%` }}
+                          title={`Scene #${scene.sceneIndex}: ${scene.durationSeconds}s (frames ${scene.startFrame}–${scene.endFrame}) — click to jump here`}
+                        >
+                          <span className="text-[7px] font-bold text-white drop-shadow truncate">
+                            S{scene.sceneIndex}
+                          </span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-[8px] text-slate-500 font-mono">No scenes detected — run Scene Detection</span>
+                    </div>
+                  )}
+                  {/* Playhead — tracks the preview player's real currentTime/duration */}
+                  {previewDuration > 0 && (
+                    <div
+                      className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10 shadow-[0_0_6px_rgba(239,68,68,0.5)] pointer-events-none"
+                      style={{ left: `${Math.min((previewCurrentTime / previewDuration) * 100, 100)}%` }}
+                    >
                       <div className="absolute -top-1 left-1/2 -translate-x-1/2 h-2.5 w-2.5 bg-red-500 rounded-full shadow-[0_0_6px_rgba(239,68,68,0.7)]"></div>
                     </div>
-                  </div>
-                  {/* Time markers */}
-                  <div className="flex justify-between mt-1 text-[8px] text-slate-500 font-mono">
-                    <span>00:00</span>
-                    <span>{activeVideo.duration}</span>
-                  </div>
+                  )}
+                </div>
+                {/* Time markers */}
+                <div className="flex justify-between mt-1 text-[8px] text-slate-500 font-mono">
+                  <span>00:00</span>
+                  <span>{activeVideo.duration}</span>
                 </div>
               </div>
             </div>
