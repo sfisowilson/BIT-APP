@@ -88,6 +88,36 @@ public class RenderJobService
         }
     }
 
+    private const long PikaswapsMaxInputBytes = 8L * 1024 * 1024;
+
+    /// <summary>
+    /// fal.ai's Pikaswaps rejects any input file over 8MB (observed live: a "downstream service
+    /// error" / HTTP 413 fetching the video). Our shot chunks are extracted with "-c copy" (no
+    /// re-encoding), so they inherit the source video's bitrate — easily over 8MB for a few
+    /// seconds of anything above low bitrate. Only chunks that actually exceed the cap get
+    /// re-encoded, at a bitrate computed to fit the remaining budget for that chunk's duration.
+    /// </summary>
+    public static async Task<string> EnsureUnderPikaswapsSizeLimitAsync(string inputPath, double durationSeconds, CancellationToken ct)
+    {
+        if (new FileInfo(inputPath).Length <= PikaswapsMaxInputBytes)
+            return inputPath;
+
+        const int audioBitrateBps = 96_000;
+        var targetBits = (long)(PikaswapsMaxInputBytes * 8 * 0.9); // 10% margin for container overhead
+        var videoBitrateBps = Math.Max(300_000, (long)(targetBits / Math.Max(0.1, durationSeconds)) - audioBitrateBps);
+
+        var outputPath = Path.Combine(
+            Path.GetDirectoryName(inputPath)!,
+            $"{Path.GetFileNameWithoutExtension(inputPath)}_8mb.mp4");
+
+        var args = $"-y -hide_banner -loglevel error -i \"{inputPath.Replace("\\", "/")}\" " +
+            $"-c:v libx264 -preset fast -b:v {videoBitrateBps} -maxrate {videoBitrateBps} -bufsize {videoBitrateBps * 2} " +
+            $"-c:a aac -b:a {audioBitrateBps} -pix_fmt yuv420p \"{outputPath.Replace("\\", "/")}\"";
+        await RunFfmpegAsync(args, ct);
+
+        return File.Exists(outputPath) ? outputPath : inputPath;
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // Interactive Placement — Generative Path (pikaswaps)
     // ═══════════════════════════════════════════════════════════════
@@ -154,9 +184,17 @@ public class RenderJobService
             surface.TrackingStatus = trackResult.OverallStatus;
             await db.SaveChangesAsync(cancellationToken);
 
+            // Pikaswaps composites from modify_region/prompt TEXT alone (see CompositeWithPromptAsync's
+            // call site below — it never receives trackResult's mask/box data). Tracking is only used
+            // here for shot boundaries (redundant with the DB's own ShotItem rows in the common case)
+            // and the post-compositing drift-check, which already tolerates missing frames per shot.
+            // So a tracking failure — even a LockLost seed shot — doesn't mean Pikaswaps can't do its
+            // job; don't fail the whole render over it, just log it for visibility.
             if (trackResult.OverallStatus == "LockLost")
-                throw new InvalidOperationException(
-                    "Shot-aware tracking lost the surface in its seed shot (or every shot in the scene was skipped) — nothing to render.");
+                await eventLog.LogEventAsync("RenderEngine", "TRACKING_LOCK_LOST", "Warning",
+                    $"Render {renderId}: shot-aware tracking lost the surface in its seed shot. " +
+                    "Compositing will still be attempted on every shot via Pikaswaps' own text-driven " +
+                    "detection; the drift-check quality score may be less reliable without tracked frames.");
 
             var segments = ParseGenerativeShotSegments(trackResult.TrackingDataJson);
             if (segments.Count == 0)
@@ -201,54 +239,47 @@ public class RenderJobService
                 var shotDurationSec = (seg.EndFrame - seg.StartFrame + 1) / fps;
                 string shotOutputPath;
 
-                if (seg.Status == "Skipped" || seg.Frames.Count == 0)
+                // Every shot gets a genuine Pikaswaps attempt regardless of tracking coverage — see
+                // the note above Phase 2: Pikaswaps composites from modify_region/prompt text alone,
+                // so a shot tracking couldn't lock onto is not a reason to skip it.
+                var shotSourcePath = Path.Combine(workAbsDir, $"shot_{seg.ShotIndex}_src.mp4");
+                var extractArgs = $"-y -hide_banner -loglevel error " +
+                    $"-ss {shotStartSec:F3} -i \"{videoPath.Replace("\\", "/")}\" " +
+                    $"-t {shotDurationSec:F3} -c copy \"{shotSourcePath.Replace("\\", "/")}\"";
+                await RunFfmpegAsync(extractArgs, cancellationToken);
+
+                if (shotDurationSec <= 4.75)
                 {
-                    // No detection for this shot — pass the source video through unmodified.
-                    shotOutputPath = Path.Combine(workAbsDir, $"shot_{seg.ShotIndex}_passthrough.mp4");
-                    var passArgs = $"-y -hide_banner -loglevel error " +
-                        $"-ss {shotStartSec:F3} -i \"{videoPath.Replace("\\", "/")}\" " +
-                        $"-t {shotDurationSec:F3} -c copy \"{shotOutputPath.Replace("\\", "/")}\"";
-                    await RunFfmpegAsync(passArgs, cancellationToken);
+                    var compositeSourcePath = await EnsureUnderPikaswapsSizeLimitAsync(shotSourcePath, shotDurationSec, cancellationToken);
+                    var shotVideoUrl = $"{videoBaseUrl}/api/content/file/{workRelDir}/{Path.GetFileName(compositeSourcePath)}";
+                    var processedPath = await pikaswaps.CompositeWithPromptAsync(
+                        shotVideoUrl, assetUrl, modifyRegion, prompt, $"{render.SurfaceId}_s{seg.ShotIndex}", ct: cancellationToken);
+                    shotOutputPath = processedPath ?? shotSourcePath; // fall back to un-composited shot on failure
                 }
                 else
                 {
-                    var shotSourcePath = Path.Combine(workAbsDir, $"shot_{seg.ShotIndex}_src.mp4");
-                    var extractArgs = $"-y -hide_banner -loglevel error " +
-                        $"-ss {shotStartSec:F3} -i \"{videoPath.Replace("\\", "/")}\" " +
-                        $"-t {shotDurationSec:F3} -c copy \"{shotSourcePath.Replace("\\", "/")}\"";
-                    await RunFfmpegAsync(extractArgs, cancellationToken);
+                    // Shot exceeds pikaswaps' 4.75s limit — sub-split just this shot's own clip.
+                    var subDir = Path.Combine(workAbsDir, $"shot_{seg.ShotIndex}_sub");
+                    Directory.CreateDirectory(subDir);
+                    var subChunks = await chunker.SplitByShotBoundariesAsync(
+                        shotSourcePath, subDir, fps, new List<(double, double)> { (0, shotDurationSec) });
 
-                    if (shotDurationSec <= 4.75)
+                    foreach (var sub in subChunks)
                     {
-                        var shotVideoUrl = $"{videoBaseUrl}/api/content/file/{workRelDir}/{Path.GetFileName(shotSourcePath)}";
-                        var processedPath = await pikaswaps.CompositeWithPromptAsync(
-                            shotVideoUrl, assetUrl, modifyRegion, prompt, $"{render.SurfaceId}_s{seg.ShotIndex}", ct: cancellationToken);
-                        shotOutputPath = processedPath ?? shotSourcePath; // fall back to un-composited shot on failure
-                    }
-                    else
-                    {
-                        // Shot exceeds pikaswaps' 4.75s limit — sub-split just this shot's own clip.
-                        var subDir = Path.Combine(workAbsDir, $"shot_{seg.ShotIndex}_sub");
-                        Directory.CreateDirectory(subDir);
-                        var subChunks = await chunker.SplitByShotBoundariesAsync(
-                            shotSourcePath, subDir, fps, new List<(double, double)> { (0, shotDurationSec) });
-
-                        foreach (var sub in subChunks)
+                        var compositeSubPath = await EnsureUnderPikaswapsSizeLimitAsync(sub.SourceChunkPath, sub.DurationSeconds, cancellationToken);
+                        var subUrl = $"{videoBaseUrl}/api/content/file/{workRelDir}/shot_{seg.ShotIndex}_sub/{Path.GetFileName(compositeSubPath)}";
+                        try
                         {
-                            var subUrl = $"{videoBaseUrl}/api/content/file/{workRelDir}/shot_{seg.ShotIndex}_sub/{Path.GetFileName(sub.SourceChunkPath)}";
-                            try
-                            {
-                                var processed = await pikaswaps.CompositeWithPromptAsync(
-                                    subUrl, assetUrl, modifyRegion, prompt, $"{render.SurfaceId}_s{seg.ShotIndex}_c{sub.Index}", ct: cancellationToken);
-                                if (processed != null) sub.ProcessedChunkPath = processed; else sub.Failed = true;
-                            }
-                            catch { sub.Failed = true; }
+                            var processed = await pikaswaps.CompositeWithPromptAsync(
+                                subUrl, assetUrl, modifyRegion, prompt, $"{render.SurfaceId}_s{seg.ShotIndex}_c{sub.Index}", ct: cancellationToken);
+                            if (processed != null) sub.ProcessedChunkPath = processed; else sub.Failed = true;
                         }
-
-                        shotOutputPath = Path.Combine(workAbsDir, $"shot_{seg.ShotIndex}.mp4");
-                        await chunker.SpliceChunksAsync(subChunks, shotSourcePath, shotOutputPath, fps);
-                        try { Directory.Delete(subDir, true); } catch { }
+                        catch { sub.Failed = true; }
                     }
+
+                    shotOutputPath = Path.Combine(workAbsDir, $"shot_{seg.ShotIndex}.mp4");
+                    await chunker.SpliceChunksAsync(subChunks, shotSourcePath, shotOutputPath, fps);
+                    try { Directory.Delete(subDir, true); } catch { }
                 }
 
                 shotChunks.Add(new VideoChunkingService.VideoChunk
