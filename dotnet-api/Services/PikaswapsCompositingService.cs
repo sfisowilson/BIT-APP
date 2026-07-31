@@ -135,23 +135,36 @@ public class PikaswapsCompositingService : ICompositingService
             await _eventLog.LogEventAsync("Pikaswaps", "SUBMITTED", "Info",
                 $"Submit response: {Truncate(submitJson, 500)}");
 
-            // ── Extract request_id ──
+            // ── Extract request_id + the queue's own status/result URLs ──
+            // fal.ai apps with sub-paths (like this one) root their queue routes at the app's
+            // top-level namespace, not the full submit path — e.g. status_url here is
+            // "https://queue.fal.run/fal-ai/pika/requests/{id}/status", NOT
+            // "https://queue.fal.run/fal-ai/pika/v2/pikaswaps/requests/{id}/status".
+            // Always use the URLs fal.ai hands back rather than reconstructing them (see the
+            // identical fix in KlingPromptEditService.cs for the same fal.ai quirk).
             string? requestId = null;
+            string? statusUrl = null;
+            string? resultUrl = null;
             using (var submitDoc = JsonDocument.Parse(submitJson))
             {
-                if (submitDoc.RootElement.TryGetProperty("request_id", out var rid))
+                var root = submitDoc.RootElement;
+                if (root.TryGetProperty("request_id", out var rid))
                     requestId = rid.GetString();
+                if (root.TryGetProperty("status_url", out var su))
+                    statusUrl = su.GetString();
+                if (root.TryGetProperty("response_url", out var ru))
+                    resultUrl = ru.GetString();
             }
 
-            if (string.IsNullOrEmpty(requestId))
+            if (string.IsNullOrEmpty(requestId) || string.IsNullOrEmpty(statusUrl) || string.IsNullOrEmpty(resultUrl))
             {
-                await _eventLog.LogEventAsync("Pikaswaps", "NO_REQUEST_ID", "Error", "No request_id in response.");
+                await _eventLog.LogEventAsync("Pikaswaps", "NO_REQUEST_ID", "Error",
+                    $"Missing request_id/status_url/response_url in submit response: {Truncate(submitJson, 300)}");
                 return null;
             }
 
             // ── Poll for result ──
-            var queueBase = "https://queue.fal.run/fal-ai/pika/v2/pikaswaps/requests";
-            var videoPath = await PollForResultAsync(queueBase, requestId, surfaceId, ct);
+            var videoPath = await PollForResultAsync(statusUrl, resultUrl, requestId, surfaceId, ct);
 
             if (videoPath == null)
             {
@@ -181,10 +194,8 @@ public class PikaswapsCompositingService : ICompositingService
 
     // ── Polling ──
 
-    private async Task<string?> PollForResultAsync(string queueBase, string requestId, string surfaceId, CancellationToken ct)
+    private async Task<string?> PollForResultAsync(string statusUrl, string resultUrl, string requestId, string surfaceId, CancellationToken ct)
     {
-        var statusUrl = $"{queueBase}/{requestId}/status";
-        var resultUrl = $"{queueBase}/{requestId}";
         var deadline = DateTime.UtcNow.Add(MaxPollTime);
 
         await _eventLog.LogEventAsync("Pikaswaps", "POLLING_START", "Info",
