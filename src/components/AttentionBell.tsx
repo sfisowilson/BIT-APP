@@ -1,21 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, AlertTriangle, UserPlus, MonitorSmartphone, Cpu, Film, ShieldAlert, ArrowRight } from 'lucide-react';
-import { fetchWithAuth } from '../apiClient';
+import { Bell, AlertTriangle, UserPlus, MonitorSmartphone, Cpu, Film, ShieldAlert, ArrowRight, X } from 'lucide-react';
+import { fetchWithAuth, dismissAttentionCategory, type AttentionCounts } from '../apiClient';
 
-interface AttentionCounts {
-  totalAttention: number;
-  pendingRoleRequests: number;
-  pendingSurfaces: number;
-  failedRenders: number;
-  failedContent: number;
-  activeAlarms: number;
-}
+const DISMISSIBLE_CATEGORIES = new Set(['pendingSurfaces', 'failedRenders', 'failedContent']);
 
 export const AttentionBell: React.FC = () => {
   const [counts, setCounts] = useState<AttentionCounts | null>(null);
   const [open, setOpen] = useState(false);
+  const [dismissing, setDismissing] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const fetchingRef = useRef(false);
   const navigate = useNavigate();
@@ -29,6 +23,15 @@ export const AttentionBell: React.FC = () => {
     } catch { /* silent */ }
     finally { fetchingRef.current = false; }
   }, []);
+
+  const handleDismiss = async (category: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDismissing(category);
+    try {
+      setCounts(await dismissAttentionCategory(category));
+    } catch { /* silent — next 60s poll will retry */ }
+    finally { setDismissing(null); }
+  };
 
   useEffect(() => {
     fetchCounts();
@@ -104,12 +107,13 @@ export const AttentionBell: React.FC = () => {
                   const count = counts?.[item.key] ?? 0;
                   if (count === 0) return null;
                   const hasPath = !!item.path;
+                  const isDismissible = DISMISSIBLE_CATEGORIES.has(item.key);
                   return (
                     <div
                       key={item.key}
                       onClick={() => handleItemClick(item.path)}
                       className={`flex items-center gap-3 px-4 py-3 border-b border-slate-50 last:border-0 transition-colors ${
-                        hasPath ? 'hover:bg-slate-50 cursor-pointer' : 'cursor-default opacity-60'
+                        hasPath ? 'hover:bg-slate-50 cursor-pointer' : isDismissible ? '' : 'cursor-default opacity-60'
                       }`}
                       title={hasPath ? `Go to ${item.label}` : (item as any).hint || ''}
                     >
@@ -124,6 +128,17 @@ export const AttentionBell: React.FC = () => {
                         {count}
                       </span>
                       {hasPath && <ArrowRight className="h-3 w-3 text-slate-300" />}
+                      {isDismissible && (
+                        <button
+                          type="button"
+                          onClick={e => handleDismiss(item.key, e)}
+                          disabled={dismissing === item.key}
+                          title="Mark as seen — dismisses the current backlog, new items will still show up"
+                          className="p-1 rounded-md text-slate-300 hover:text-slate-600 hover:bg-slate-100 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-wait"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
                   );
                 })}

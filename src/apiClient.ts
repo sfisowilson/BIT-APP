@@ -508,6 +508,31 @@ export async function fetchStatsSummary(): Promise<StatsSummary> {
   return r.json();
 }
 
+export interface AttentionCounts {
+  totalAttention: number;
+  pendingRoleRequests: number;
+  pendingSurfaces: number;
+  failedRenders: number;
+  failedContent: number;
+  activeAlarms: number;
+}
+
+/** Dismisses the current backlog for one AttentionBell category ("pendingSurfaces" |
+ * "failedRenders" | "failedContent") — items created after this call still count going
+ * forward, so genuinely new items surface again. See AttentionController.cs. */
+export async function dismissAttentionCategory(category: string): Promise<AttentionCounts> {
+  const r = await fetchWithAuth('/api/notifications/attention/dismiss', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to dismiss.' }));
+    throw new Error(err.error || 'Failed to dismiss.');
+  }
+  return r.json();
+}
+
 export interface CampaignSummary {
   hasApprovedPlacements: boolean;
 }

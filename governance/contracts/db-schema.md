@@ -18,6 +18,7 @@
 | `AccountStatus` | string | Yes | `"Active"` | Active, Suspended |
 | `LastLoginAt` | DateTime | Yes | `UtcNow` | |
 | `MutedNotifications` | string(1000) | Yes | `"[]"` | JSON array of muted notification types |
+| `AttentionDismissals` | string(1000) | Yes | `"{}"` | JSON object: AttentionBell category key → UTC timestamp last dismissed. Items created after that timestamp still count. |
 
 ---
 
@@ -121,6 +122,7 @@
 | `TrackingDataJson` | string(100000) | No | — | Shot-segmented per-frame data: `{shotSegments:[{shotId,shotIndex,startFrame,endFrame,status,trackId,confidence,frames:[...]}]}`. Generative frames: `{frame,rle,trackId}`. Planar frames: `{frame,corners:[{x,y}×4]}`. Falls back to a legacy flat array for surfaces tracked before shot-aware tracking existed. Produced by `ShotAwareTrackingService`. |
 | `TrackingPointsJson` | text | No | — | Lightweight derived centroid: flat, frame-ordered `[{frame,x,y}, ...]` across every shot segment (quad-corner average for Planar, decoded-RLE-mask-pixel average for Generative). Computed alongside `TrackingDataJson` by `ShotAwareTrackingService`; lets the Placement Workbench draw a single moving point tracking the surface during scene playback without decoding RLE or understanding the shot-segmented structure client-side. Null until a render has actually run for this surface. |
 | `TrackingStatus` | string(20) | Yes | `"NotTracked"` | NotTracked, Tracked (every shot tracked/re-anchored), PartialCoverage (some shots skipped, source video passes through), LockLost (seed shot failed or every shot skipped) |
+| `CreatedAt` | DateTime | Yes | `UtcNow` | Rows predating this column were backfilled to `-infinity` by migration — treated as "always older than any dismissal" by the AttentionBell's per-category dismiss filter |
 
 ---
 

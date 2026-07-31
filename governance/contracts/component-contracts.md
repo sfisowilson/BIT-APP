@@ -302,12 +302,7 @@ Mutes/unmutes notification types per user.
 
 **File:** `src/components/AttentionBell.tsx`
 
-```typescript
-interface AttentionBellProps {
-  count: number;
-  onClick: () => void;
-}
-```
+Self-fetching, no props — polls `GET /api/notifications/attention` every 60s. Categories with no dedicated resolution page reachable from the bell (`pendingSurfaces`, `failedRenders`, `failedContent`) render a "✕ mark as seen" button that calls `dismissAttentionCategory(category)` (`POST /api/notifications/attention/dismiss`) and replaces local state with the response — this clears the *current* backlog only; items created after the dismiss still count. `pendingRoleRequests`/`activeAlarms` instead navigate to their real resolution page (`/admin`, `/telemetry`) on click, same as before.
 
 ---
 

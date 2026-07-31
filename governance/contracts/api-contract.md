@@ -143,7 +143,7 @@
 | **BrandSafety** | `api/brand-safety` | `GET /`, `PUT /` exclusion list |
 | **Notifications** | `api/notifications` | `GET /preferences`, `PUT /preferences` |
 | **Usage** | `api/usage` | `GET /` usage records |
-| **Attention** | `api/attention` | `GET /` attention feed |
+| **Attention** | `api/notifications` | `GET /attention` → `AttentionCounts` (live COUNTs of pending surfaces/failed renders/failed content/pending role requests/active alarms, minus each category's dismissed backlog per-user). `POST /attention/dismiss { category }` — dismisses the current backlog for one of `pendingSurfaces`\|`failedRenders`\|`failedContent` (stores a per-user dismissed-at timestamp on `User.AttentionDismissals`; items created after that timestamp still count). |
 | **Compositing** | `api/compositing` | `POST /preview` — Returns `CompositedFrame { imageBase64, contentType, engineUsed, processingMs }`. Overlays asset onto video frame at surface coordinates. |
 
 ---
@@ -166,6 +166,7 @@
 | `resetPipeline(contentId)` | POST | `/api/content/{id}/reset` | `{ success, id, ingestionStatus, message }` |
 | `fetchStatsSummary()` | GET | `/api/stats/summary` | `StatsSummary` |
 | `fetchCampaignInvoice(campaignId)` | GET | `/api/campaigns/{id}/invoice` | `InvoiceSummary` |
+| `dismissAttentionCategory(category)` | POST | `/api/notifications/attention/dismiss` | `AttentionCounts` |
 | `buildQueryString(params)` | — | — | Query string helper |
 
 ---
@@ -188,6 +189,7 @@
 | `StatsSummary` | Stats aggregation DTO |
 | `InvoiceSummary` | `InvoiceSummaryDto` |
 | `InvoiceLineItem` | `InvoiceLineItemDto` |
+| `AttentionCounts` | Anonymous response shape from `GET /api/notifications/attention` |
 | `BRAND_CATEGORIES` | 30 brand categories (constant array) |
 
 ---

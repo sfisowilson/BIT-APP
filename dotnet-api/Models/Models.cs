@@ -31,6 +31,12 @@ namespace Afrobotics.Bit.Api.Models
         /// <summary>JSON array of notification types the user has muted (e.g. ["RenderCompleted","CampaignCreated"]).</summary>
         [MaxLength(1000)]
         public string MutedNotifications { get; set; } = "[]";
+
+        /// <summary>JSON object mapping AttentionBell category key (e.g. "pendingSurfaces") to the UTC
+        /// timestamp the user last dismissed it. Items created after that timestamp still count —
+        /// dismissing only clears the backlog that existed at the time, not future items.</summary>
+        [MaxLength(1000)]
+        public string AttentionDismissals { get; set; } = "{}";
     }
 
     /// <summary>MReq 9: Tracks role elevation requests pending admin approval.</summary>
@@ -281,6 +287,8 @@ namespace Afrobotics.Bit.Api.Models
         [Required]
         [MaxLength(20)]
         public string TrackingStatus { get; set; } = "NotTracked";
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
     public class CampaignItem
