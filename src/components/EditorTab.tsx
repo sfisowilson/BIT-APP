@@ -240,14 +240,18 @@ export const EditorTab: React.FC<EditorTabProps> = ({
     if (!vid || !activeVideo?.frameRate) return;
     const fps = activeVideo.frameRate;
 
-    let seekTime = seekFrame / fps;
-    // Clamp to valid video range
-    const maxSafeTime = Math.max(0.1, (vid.duration || 10) - 0.1);
-    if (seekTime > maxSafeTime) seekTime = maxSafeTime;
-    if (!isFinite(seekTime) || seekTime < 0) return;
+    const rawSeekTime = seekFrame / fps;
+    if (!isFinite(rawSeekTime) || rawSeekTime < 0) return;
 
     const doSeek = () => {
       if (!vid || vid.readyState < 1) return;
+      // Clamp to the video's real duration — computed here, inside doSeek, rather than
+      // before the readyState check. vid.duration is NaN until metadata has loaded, and
+      // `NaN || 10` silently falls back to a bogus 10s default, which clamped every seek on
+      // a freshly-mounted video down to ~9.9s regardless of the actual target (the exact bug
+      // behind scenes never seeking to the right frame when navigating in from Content tab).
+      const maxSafeTime = Math.max(0.1, (vid.duration || rawSeekTime + 1) - 0.1);
+      const seekTime = Math.min(rawSeekTime, maxSafeTime);
       vid.currentTime = seekTime;
       vid.pause();
     };
