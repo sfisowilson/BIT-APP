@@ -45,6 +45,7 @@ public class SurfaceDetectionPipeline
         var contentService = scope.ServiceProvider.GetRequiredService<IContentService>();
         var gemini = scope.ServiceProvider.GetRequiredService<GeminiDetectionService>();
         var sam2 = scope.ServiceProvider.GetRequiredService<FalAiSam2Service>();
+        var settings = scope.ServiceProvider.GetRequiredService<IPlatformSettingsService>();
         var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
 
         var content = await db.ContentItems.FindAsync(contentId);
@@ -119,8 +120,8 @@ public class SurfaceDetectionPipeline
                     content.DetectionProgress = 44;
                     await db.SaveChangesAsync(ct);
 
-                    var surfaces = await ProcessSceneAsync(
-                        contentId, scene, videoPath, gemini, sam2,
+                    var surfaces = await DetectSurfacesAcrossSceneAsync(
+                        sceneItem, videoPath, gemini, sam2, settings,
                         runVidW, runVidH, ct);
 
                     content.DetectionProgress = 48;
@@ -225,6 +226,7 @@ public class SurfaceDetectionPipeline
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
         var gemini = scope.ServiceProvider.GetRequiredService<GeminiDetectionService>();
+        var settings = scope.ServiceProvider.GetRequiredService<IPlatformSettingsService>();
         var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
 
         var sceneItem = await db.SceneItems.FindAsync(sceneId);
@@ -263,23 +265,6 @@ public class SurfaceDetectionPipeline
             db.SurfaceItems.RemoveRange(oldSurfaces);
             await db.SaveChangesAsync(ct);
 
-            // ── Multi-frame sampling ──────────────────────────────────────
-            // Sample N frames evenly across the scene duration so transient
-            // surfaces (e.g. a passing bus) are captured. Configurable via
-            // platform setting: gemini_sample_interval_sec (default 2 s) and
-            // gemini_max_frames_per_scene (default 5).
-            var sampleInterval = 2.0;
-            var maxFrames = 5;
-            try
-            {
-                var settings = scope.ServiceProvider.GetRequiredService<IPlatformSettingsService>();
-                var intervalStr = await settings.GetAsync("gemini_sample_interval_sec", "2");
-                sampleInterval = double.TryParse(intervalStr, out var iv) && iv >= 0.5 ? iv : 2.0;
-                var maxStr = await settings.GetAsync("gemini_max_frames_per_scene", "5");
-                maxFrames = int.TryParse(maxStr, out var mf) && mf >= 1 ? mf : 5;
-            }
-            catch { /* use defaults */ }
-
             // ── Auto-correct scene frame range using real video metadata ──
             var (realFps, realDuration) = await GetVideoInfoAsync(videoPath, ct);
             if (realFps > 0 && realDuration > 0)
@@ -296,81 +281,14 @@ public class SurfaceDetectionPipeline
                 }
             }
 
-            var sceneFrameCount = sceneItem.EndFrame - sceneItem.StartFrame + 1;
-            var sceneDurationSec = sceneItem.DurationSeconds;
-            var frameStep = Math.Max(1, (int)(sampleInterval * (sceneFrameCount / Math.Max(0.5, sceneDurationSec))));
-            var sampleFrames = new List<int>();
-
-            // Evenly distribute sample frames across the scene
-            var totalSteps = Math.Min(maxFrames, Math.Max(1, sceneFrameCount / Math.Max(1, frameStep)));
-            for (int i = 0; i < totalSteps; i++)
-            {
-                var t = totalSteps == 1 ? 0.5 : i / (double)(totalSteps - 1);
-                var frame = sceneItem.StartFrame + (int)(t * (sceneFrameCount - 1));
-                if (!sampleFrames.Contains(frame))
-                    sampleFrames.Add(frame);
-            }
-
-            _logger.LogInformation("[Pipeline:PerScene] Sampling {Count} frames across scene {Index} ({Duration:F1}s, frames {Start}-{End})",
-                sampleFrames.Count, sceneItem.SceneIndex, sceneDurationSec, sceneItem.StartFrame, sceneItem.EndFrame);
-
-            // Detect surfaces in each sampled frame
-            var allDetections = new List<(int frameNumber, SurfaceDetectionResult detection)>();
-            foreach (var frame in sampleFrames)
-            {
-                ct.ThrowIfCancellationRequested();
-                var frameBase64 = await ExtractKeyFrameAsync(videoPath, frame, ct);
-                if (string.IsNullOrEmpty(frameBase64))
-                {
-                    _logger.LogWarning("[Pipeline:PerScene] Failed to extract frame {Frame}, skipping", frame);
-                    continue;
-                }
-
-                // Compute scaled dimensions matching ffmpeg scale filter
-                var scaleFactor = Math.Min(1024.0 / vidW, 1024.0 / vidH);
-                var scaledW = (int)(vidW * scaleFactor);
-                var scaledH = (int)(vidH * scaleFactor);
-
-                var results = await gemini.DetectFromBase64Async(
-                    sceneItem.ContentId, sceneItem.SceneIndex, frameBase64,
-                    frame, sceneItem.EndFrame, scaledW, scaledH, vidW, vidH, ct);
-
-                foreach (var det in results)
-                    allDetections.Add((frame, det));
-
-                _logger.LogInformation("[Pipeline:PerScene] Frame {Frame}: {Count} surface candidates",
-                    frame, results.Count);
-
-                // Rate-limit: pause 1.5 s between Gemini calls to avoid 429
-                if (sampleFrames.Count > 1)
-                    await Task.Delay(1500, ct);
-            }
-
-            // Deduplicate across frames — same surface type + overlapping boundary → keep highest confidence
-            var uniqueSurfaces = DeduplicateSurfaces(allDetections);
-
-            var surfaces = new List<SurfaceItem>();
-            foreach (var (frameNumber, det) in uniqueSurfaces)
-            {
-                surfaces.Add(new SurfaceItem
-                {
-                    Id = $"sf-{Guid.NewGuid()}",
-                    SurfaceType = det.SurfaceType,
-                    BoundaryCoordinatesJson = det.BoundaryCoordinatesJson,
-                    EstimatedDepth = det.EstimatedDepth,
-                    OrientationVectorJson = det.OrientationVectorJson,
-                    ConfidenceScore = det.ConfidenceScore,
-                    ViabilityScore = det.ViabilityScore,
-                    Status = string.IsNullOrEmpty(det.ExclusionReason) ? "Candidate" : "Excluded",
-                    ExclusionReason = det.ExclusionReason,
-                    DetectedAtFrame = frameNumber,
-                    Sam3Prompt = det.Sam3Prompt,
-                });
-            }
+            // Multi-frame sampling across the scene's full duration (not just one frame) —
+            // see DetectSurfacesAcrossSceneAsync. sam2: null preserves this path's existing
+            // behavior (no mask refinement here; only the bulk pipeline does that).
+            var surfaces = await DetectSurfacesAcrossSceneAsync(
+                sceneItem, videoPath, gemini, sam2: null, settings, vidW, vidH, ct);
 
             foreach (var surface in surfaces)
             {
-                surface.SceneId = sceneId;
                 db.SurfaceItems.Add(surface);
             }
 
@@ -397,80 +315,146 @@ public class SurfaceDetectionPipeline
         }
     }
 
-    private async Task<List<SurfaceItem>> ProcessSceneAsync(
-        string contentId,
-        SceneCut scene,
+    /// <summary>
+    /// Evenly distributes up to maxFrames sample points across a scene's frame range, spaced
+    /// roughly sampleIntervalSec apart. Pure/static so it's unit-testable without any I/O — this
+    /// is the piece that determines whether detection actually covers a scene's full length or
+    /// just a single point in it.
+    /// </summary>
+    public static List<int> ComputeSampleFrames(int startFrame, int endFrame, double durationSeconds, double sampleIntervalSec, int maxFrames)
+    {
+        var sceneFrameCount = endFrame - startFrame + 1;
+        var frameStep = Math.Max(1, (int)(sampleIntervalSec * (sceneFrameCount / Math.Max(0.5, durationSeconds))));
+        var sampleFrames = new List<int>();
+
+        var totalSteps = Math.Min(maxFrames, Math.Max(1, sceneFrameCount / Math.Max(1, frameStep)));
+        for (int i = 0; i < totalSteps; i++)
+        {
+            var t = totalSteps == 1 ? 0.5 : i / (double)(totalSteps - 1);
+            var frame = startFrame + (int)(t * (sceneFrameCount - 1));
+            if (!sampleFrames.Contains(frame))
+                sampleFrames.Add(frame);
+        }
+        return sampleFrames;
+    }
+
+    /// <summary>
+    /// Detects surfaces across a scene by sampling multiple frames evenly across its full
+    /// duration (not just the midpoint), running Gemini detection + SAM2 mask refinement per
+    /// sampled frame, then deduplicating overlapping detections across frames. Shared by the
+    /// bulk "AI Split Analyze" pipeline (RunAsync) and the manual per-scene re-detection path
+    /// (RunSurfaceDetectionForSceneAsync) — a scene can contain surfaces that are only visible
+    /// partway through it (a passing bus, a screen that lights up later), which checking only
+    /// the midpoint frame would miss entirely. Pass sam2=null to skip mask refinement.
+    /// </summary>
+    private async Task<List<SurfaceItem>> DetectSurfacesAcrossSceneAsync(
+        SceneItem sceneItem,
         string videoPath,
         GeminiDetectionService gemini,
-        FalAiSam2Service sam2,
+        FalAiSam2Service? sam2,
+        IPlatformSettingsService settings,
         int vidW,
         int vidH,
         CancellationToken ct)
     {
-        var surfaces = new List<SurfaceItem>();
-
-        var keyFrameNum = (scene.StartFrame + scene.EndFrame) / 2;
-        var frameBase64 = await ExtractKeyFrameAsync(videoPath, keyFrameNum, ct);
-
-        if (string.IsNullOrEmpty(frameBase64))
+        var sampleInterval = 2.0;
+        var maxFrames = 5;
+        try
         {
-            _logger.LogWarning("[Pipeline] Failed to extract frame {Frame} from {Video}", keyFrameNum, videoPath);
-            return surfaces;
+            var intervalStr = await settings.GetAsync("gemini_sample_interval_sec", "2");
+            sampleInterval = double.TryParse(intervalStr, out var iv) && iv >= 0.5 ? iv : 2.0;
+            var maxStr = await settings.GetAsync("gemini_max_frames_per_scene", "5");
+            maxFrames = int.TryParse(maxStr, out var mf) && mf >= 1 ? mf : 5;
         }
+        catch { /* use defaults */ }
 
-        _logger.LogInformation("[Pipeline] Gemini: scene {Index} frame {Frame}", scene.SceneIndex, keyFrameNum);
+        var sampleFrames = ComputeSampleFrames(
+            sceneItem.StartFrame, sceneItem.EndFrame, sceneItem.DurationSeconds, sampleInterval, maxFrames);
 
-        var detectionResults = await gemini.DetectFromBase64Async(
-            contentId, scene.SceneIndex, frameBase64, keyFrameNum, scene.EndFrame,
-            scaledWidth: (int)(vidW * Math.Min(1024.0 / vidW, 1024.0 / vidH)),
-            scaledHeight: (int)(vidH * Math.Min(1024.0 / vidW, 1024.0 / vidH)),
-            origWidth: vidW, origHeight: vidH, ct);
+        _logger.LogInformation("[Pipeline] Sampling {Count} frames across scene {Index} ({Duration:F1}s, frames {Start}-{End})",
+            sampleFrames.Count, sceneItem.SceneIndex, sceneItem.DurationSeconds, sceneItem.StartFrame, sceneItem.EndFrame);
 
-        if (detectionResults.Count == 0)
+        var scaleFactor = Math.Min(1024.0 / vidW, 1024.0 / vidH);
+        var scaledW = (int)(vidW * scaleFactor);
+        var scaledH = (int)(vidH * scaleFactor);
+
+        var allDetections = new List<(int frameNumber, SurfaceDetectionResult detection)>();
+
+        foreach (var frame in sampleFrames)
         {
-            _logger.LogInformation("[Pipeline] Gemini found no surfaces in scene {Index}", scene.SceneIndex);
-            return surfaces;
-        }
-
-        var boxesForSam2 = new List<List<double>>();
-        var sam2Indices = new List<int>();
-
-        for (int i = 0; i < detectionResults.Count; i++)
-        {
-            var s = detectionResults[i];
-            if (s.ViabilityScore >= 0.35)
+            ct.ThrowIfCancellationRequested();
+            var frameBase64 = await ExtractKeyFrameAsync(videoPath, frame, ct);
+            if (string.IsNullOrEmpty(frameBase64))
             {
-                var coords = JsonSerializer.Deserialize<List<Coord>>(s.BoundaryCoordinatesJson);
-                if (coords != null && coords.Count >= 4)
+                _logger.LogWarning("[Pipeline] Failed to extract frame {Frame}, skipping", frame);
+                continue;
+            }
+
+            var results = await gemini.DetectFromBase64Async(
+                sceneItem.ContentId, sceneItem.SceneIndex, frameBase64, frame, sceneItem.EndFrame,
+                scaledW, scaledH, vidW, vidH, ct);
+
+            if (sam2 != null && results.Count > 0)
+            {
+                var boxesForSam2 = new List<List<double>>();
+                var sam2Indices = new List<int>();
+                for (int i = 0; i < results.Count; i++)
                 {
-                    var xs = coords.Select(c => (double)c.X).ToList();
-                    var ys = coords.Select(c => (double)c.Y).ToList();
-                    boxesForSam2.Add(new List<double> { xs.Min(), ys.Min(), xs.Max(), ys.Max() });
-                    sam2Indices.Add(i);
+                    var s = results[i];
+                    if (s.ViabilityScore >= 0.35)
+                    {
+                        var coords = JsonSerializer.Deserialize<List<Coord>>(s.BoundaryCoordinatesJson);
+                        if (coords != null && coords.Count >= 4)
+                        {
+                            var xs = coords.Select(c => (double)c.X).ToList();
+                            var ys = coords.Select(c => (double)c.Y).ToList();
+                            boxesForSam2.Add(new List<double> { xs.Min(), ys.Min(), xs.Max(), ys.Max() });
+                            sam2Indices.Add(i);
+                        }
+                    }
+                }
+
+                if (boxesForSam2.Count > 0)
+                {
+                    _logger.LogInformation("[Pipeline] SAM2: {Count} boxes for scene {Index} frame {Frame}",
+                        boxesForSam2.Count, sceneItem.SceneIndex, frame);
+                    var sam2Masks = await sam2.GenerateMasksAsync(frameBase64, boxesForSam2, ct);
+                    for (int sam2Idx = 0; sam2Idx < sam2Indices.Count && sam2Idx < sam2Masks.Count; sam2Idx++)
+                    {
+                        if (sam2Masks[sam2Idx].Count >= 4)
+                        {
+                            results[sam2Indices[sam2Idx]].BoundaryCoordinatesJson = JsonSerializer.Serialize(sam2Masks[sam2Idx]);
+                        }
+                    }
                 }
             }
+
+            foreach (var det in results)
+                allDetections.Add((frame, det));
+
+            _logger.LogInformation("[Pipeline] Frame {Frame}: {Count} surface candidates", frame, results.Count);
+
+            // Rate-limit: pause between Gemini calls to avoid 429 when sampling multiple frames
+            if (sampleFrames.Count > 1)
+                await Task.Delay(1500, ct);
         }
 
-        List<List<Coord>> sam2Masks = new();
-        if (boxesForSam2.Count > 0)
+        if (allDetections.Count == 0)
         {
-            _logger.LogInformation("[Pipeline] SAM2: {Count} boxes for scene {Index}", boxesForSam2.Count, scene.SceneIndex);
-            sam2Masks = await sam2.GenerateMasksAsync(frameBase64, boxesForSam2, ct);
+            _logger.LogInformation("[Pipeline] Gemini found no surfaces in scene {Index}", sceneItem.SceneIndex);
+            return new List<SurfaceItem>();
         }
 
-        for (int i = 0; i < detectionResults.Count; i++)
+        // Deduplicate across frames — same surface type + overlapping boundary → keep highest confidence
+        var uniqueSurfaces = DeduplicateSurfaces(allDetections);
+
+        var surfaces = new List<SurfaceItem>();
+        foreach (var (frameNumber, det) in uniqueSurfaces)
         {
-            var det = detectionResults[i];
-
-            var sam2Idx = sam2Indices.IndexOf(i);
-            if (sam2Idx >= 0 && sam2Idx < sam2Masks.Count && sam2Masks[sam2Idx].Count >= 4)
-            {
-                det.BoundaryCoordinatesJson = JsonSerializer.Serialize(sam2Masks[sam2Idx]);
-            }
-
             surfaces.Add(new SurfaceItem
             {
                 Id = $"sf-{Guid.NewGuid()}",
+                SceneId = sceneItem.Id,
                 SurfaceType = det.SurfaceType,
                 BoundaryCoordinatesJson = det.BoundaryCoordinatesJson,
                 EstimatedDepth = det.EstimatedDepth,
@@ -479,7 +463,7 @@ public class SurfaceDetectionPipeline
                 ViabilityScore = det.ViabilityScore,
                 Status = string.IsNullOrEmpty(det.ExclusionReason) ? "Candidate" : "Excluded",
                 ExclusionReason = det.ExclusionReason,
-                DetectedAtFrame = keyFrameNum,
+                DetectedAtFrame = frameNumber,
                 Sam3Prompt = det.Sam3Prompt,
             });
         }
