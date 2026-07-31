@@ -47,18 +47,15 @@ public class KlingPromptEditService
 
     /// <summary>Appended to every user-authored prompt before it reaches the model — the free-text
     /// box is the one place a user can type arbitrary instructions, so this is the one enforcement
-    /// point that actually constrains what gets sent. Keeps brand assets legally/visually intact:
-    /// no wording, logo, or color changes, only physical compositing adjustments. Also constrains
-    /// the model's own edit scope — keyframes/regions untouched by the requested placement, and the
-    /// clip's overall length, should come back unchanged, both to avoid unrelated visual drift and
-    /// to reduce a real source of the audio/video desync fixed in ExtractSceneClipAsync (Kling
-    /// altering output duration would undo that fix's frame-accurate input).</summary>
+    /// point that actually constrains what gets sent. Deliberately kept to one short clause: an
+    /// earlier, longer version (itemizing "text/wording/logo/colors/keyframes/regions/frames") was
+    /// observed live to make the model overcorrect — editing unrelated parts of the scene (a
+    /// speaker's face, replacing an unrelated prop, in one case replacing the whole scene) instead
+    /// of just placing the asset as asked. Video-edit models are sensitive to prompt length/
+    /// complexity; a terse instruction stays closer to the user's actual, narrow request.</summary>
     public const string BrandIntegrityRules =
-        "Preserve the brand asset's appearance exactly as provided — do not alter, add, or remove " +
-        "any text, wording, logo, or colors. Only wrap, reposition, and adjust lighting/shading to " +
-        "fit the scene naturally; the asset's content itself must stay completely unchanged. Leave " +
-        "all keyframes and regions unaffected by this placement exactly as they are, and keep the " +
-        "output clip's length identical to the input — do not add, remove, or trim any frames.";
+        "Only change what's needed to place the asset as described — keep the asset's appearance " +
+        "and the rest of the scene and clip exactly as given.";
 
     public KlingPromptEditService(
         IPlatformSettingsService settings,
