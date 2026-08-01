@@ -96,6 +96,11 @@ public class RenderJobService
     /// re-encoding), so they inherit the source video's bitrate — easily over 8MB for a few
     /// seconds of anything above low bitrate. Only chunks that actually exceed the cap get
     /// re-encoded, at a bitrate computed to fit the remaining budget for that chunk's duration.
+    ///
+    /// A single calculated bitrate isn't a hard guarantee: libx264's -maxrate/-bufsize allow
+    /// short-term bursts above the average, and hard-to-compress content (fast motion, noise)
+    /// can still land over budget even with margin. Verify the actual output size and retry at
+    /// a lower target instead of trusting the math to be exact on the first pass.
     /// </summary>
     public static async Task<string> EnsureUnderPikaswapsSizeLimitAsync(string inputPath, double durationSeconds, CancellationToken ct)
     {
@@ -103,17 +108,26 @@ public class RenderJobService
             return inputPath;
 
         const int audioBitrateBps = 96_000;
-        var targetBits = (long)(PikaswapsMaxInputBytes * 8 * 0.9); // 10% margin for container overhead
-        var videoBitrateBps = Math.Max(300_000, (long)(targetBits / Math.Max(0.1, durationSeconds)) - audioBitrateBps);
-
         var outputPath = Path.Combine(
             Path.GetDirectoryName(inputPath)!,
             $"{Path.GetFileNameWithoutExtension(inputPath)}_8mb.mp4");
 
-        var args = $"-y -hide_banner -loglevel error -i \"{inputPath.Replace("\\", "/")}\" " +
-            $"-c:v libx264 -preset fast -b:v {videoBitrateBps} -maxrate {videoBitrateBps} -bufsize {videoBitrateBps * 2} " +
-            $"-c:a aac -b:a {audioBitrateBps} -pix_fmt yuv420p \"{outputPath.Replace("\\", "/")}\"";
-        await RunFfmpegAsync(args, ct);
+        var marginFactor = 0.85;
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            var targetBits = (long)(PikaswapsMaxInputBytes * 8 * marginFactor);
+            var videoBitrateBps = Math.Max(150_000, (long)(targetBits / Math.Max(0.1, durationSeconds)) - audioBitrateBps);
+
+            var args = $"-y -hide_banner -loglevel error -i \"{inputPath.Replace("\\", "/")}\" " +
+                $"-c:v libx264 -preset fast -b:v {videoBitrateBps} -maxrate {videoBitrateBps} -bufsize {videoBitrateBps / 2} " +
+                $"-c:a aac -b:a {audioBitrateBps} -pix_fmt yuv420p \"{outputPath.Replace("\\", "/")}\"";
+            await RunFfmpegAsync(args, ct);
+
+            if (File.Exists(outputPath) && new FileInfo(outputPath).Length <= PikaswapsMaxInputBytes)
+                return outputPath;
+
+            marginFactor *= 0.65; // still over budget — cut the target harder and retry
+        }
 
         return File.Exists(outputPath) ? outputPath : inputPath;
     }
