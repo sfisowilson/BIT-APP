@@ -41,7 +41,8 @@ public class RenderJobService
         return Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "assets", fileName);
     }
 
-    private static string? ResolveVideoPath(string? storageKey)
+    /// <summary>internal (not private) so FinalAssemblyJobService can resolve the same source video path.</summary>
+    internal static string? ResolveVideoPath(string? storageKey)
     {
         if (string.IsNullOrEmpty(storageKey)) return null;
         var fileName = storageKey.Replace("/api/content/file/", "");
@@ -49,6 +50,35 @@ public class RenderJobService
         if (File.Exists(path)) return path;
         var proxyPath = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "proxy", fileName.Replace(".mov", "_proxy.mp4").Replace(".avi", "_proxy.mp4"));
         return File.Exists(proxyPath) ? proxyPath : null;
+    }
+
+    /// <summary>
+    /// Resolves a render output storage key (e.g. RenderItem.SceneClipStorageKey) back to its
+    /// local disk path — matches whichever of the "/api/renders/{id}/..." routes it points to
+    /// (see RendersController's download/preview/scene-clip actions for the same file naming).
+    /// </summary>
+    internal static string? ResolveRenderOutputPath(string? storageKey)
+    {
+        if (string.IsNullOrEmpty(storageKey)) return null;
+        var rendersDir = Path.Combine(Directory.GetCurrentDirectory(), "renders");
+        string? fileName = storageKey switch
+        {
+            var k when k.EndsWith("/download") => $"BIT_Render_{ExtractRenderId(k)}.mp4",
+            var k when k.EndsWith("/preview") => $"BIT_Preview_{ExtractRenderId(k)}.mp4",
+            var k when k.EndsWith("/scene-clip") => $"BIT_SceneClip_{ExtractRenderId(k)}.mp4",
+            _ => null,
+        };
+        if (fileName == null) return null;
+        var path = Path.Combine(rendersDir, fileName);
+        return File.Exists(path) ? path : null;
+    }
+
+    private static string ExtractRenderId(string storageKey)
+    {
+        // "/api/renders/{id}/download" → "{id}"
+        var parts = storageKey.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var idx = Array.IndexOf(parts, "renders");
+        return idx >= 0 && idx + 1 < parts.Length ? parts[idx + 1] : string.Empty;
     }
 
     private static async Task RunFfmpegAsync(string arguments, CancellationToken ct)
@@ -333,6 +363,9 @@ public class RenderJobService
             render.CompositingEngine = "pikaswaps";
             render.QualityTier = "AI";
             render.StorageKey = $"/api/renders/{renderId}/download";
+            // Already scene-only (unlike PromptEdit's splice, which produces a full-video output) —
+            // reuse the same file for final assembly.
+            render.SceneClipStorageKey = render.StorageKey;
             render.ProcessingDurationMs = (int)sw.ElapsedMilliseconds;
             await db.SaveChangesAsync(cancellationToken);
             await _hubContext.Clients.All.RenderProgress(renderId, 100, "Complete");
@@ -933,11 +966,18 @@ public class RenderJobService
             var outputPath = Path.Combine(Directory.GetCurrentDirectory(), "renders", $"BIT_Render_{renderId}.mp4");
             await SpliceSceneReplacementAsync(videoPath, normalizedPath, scene, fps, videoWidth, videoHeight, workDir, outputPath, cancellationToken);
 
+            // Persist the normalized scene-only clip too (StorageKey/outputPath above is the full
+            // video with just this scene changed — final assembly needs the scene alone, the same
+            // way ProcessGenerativeRenderJob's output already is one).
+            var sceneClipPath = Path.Combine(Directory.GetCurrentDirectory(), "renders", $"BIT_SceneClip_{renderId}.mp4");
+            File.Copy(normalizedPath, sceneClipPath, overwrite: true);
+
             render.Progress = 100;
             render.RenderStatus = "Finished";
             render.CompositingEngine = "kling-o1-edit";
             render.QualityTier = "AI";
             render.StorageKey = $"/api/renders/{renderId}/download";
+            render.SceneClipStorageKey = $"/api/renders/{renderId}/scene-clip";
             render.ProcessingDurationMs += (int)sw.ElapsedMilliseconds;
             await db.SaveChangesAsync(cancellationToken);
             await _hubContext.Clients.All.RenderProgress(renderId, 100, "Complete");

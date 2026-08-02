@@ -122,6 +122,16 @@ namespace Afrobotics.Bit.Api.Models
         public bool IsDetectionPaused { get; set; } = false;
         [MaxLength(50)]
         public string? JobState { get; set; } // Enqueued, Processing, Paused, Completed, Cancelled, Failed
+
+        // ── Final assembly: one combined video per content item, splicing in each scene's
+        // queued render (RenderItem.IsQueuedForFinal) where present, original footage elsewhere ──
+        [MaxLength(20)]
+        public string FinalAssemblyStatus { get; set; } = "NotStarted"; // NotStarted, Processing, Finished, Failed
+        public int FinalAssemblyProgress { get; set; } = 0; // 0-100, updated by Hangfire job
+        public string? FinalVideoStorageKey { get; set; }
+        [MaxLength(500)]
+        public string? FinalAssemblyErrorMessage { get; set; }
+        public DateTime? FinalAssemblyUpdatedAt { get; set; }
     }
 
     public class SceneItem
@@ -470,6 +480,24 @@ namespace Afrobotics.Bit.Api.Models
         public string QualityTier { get; set; } = string.Empty;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        /// <summary>
+        /// This render is the chosen one for its scene, to be spliced into the content's final
+        /// assembled video (see ContentItem.FinalVideoStorageKey). At most one render per scene
+        /// can be queued at a time — queuing a new one un-queues whichever was queued before it
+        /// for that same scene. Independent of RenderStatus "Queued", which means something
+        /// unrelated (awaiting Hangfire dispatch).
+        /// </summary>
+        public bool IsQueuedForFinal { get; set; } = false;
+
+        /// <summary>
+        /// Path to this render's composited output trimmed to just its scene's span (not the
+        /// full video) — what final assembly actually splices in. For Interactive/Pikaswaps
+        /// renders this is the same file as StorageKey (already scene-only). For PromptEdit
+        /// renders, StorageKey points to the full video (see ProcessPromptSpliceJob) so this is
+        /// the separately-preserved single-scene clip.
+        /// </summary>
+        public string? SceneClipStorageKey { get; set; }
     }
 
     public class EventLog

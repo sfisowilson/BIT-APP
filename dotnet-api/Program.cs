@@ -178,6 +178,7 @@ builder.Services.AddScoped<IPlatformSettingsService, PlatformSettingsService>();
 
 // Hangfire job services
 builder.Services.AddScoped<RenderJobService>();
+builder.Services.AddScoped<FinalAssemblyJobService>();
 builder.Services.AddScoped<SceneDetectionJobService>();
 
 // ── SignalR — real-time push for pipeline progress, eliminating polling ──

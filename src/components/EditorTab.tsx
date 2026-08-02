@@ -72,6 +72,8 @@ interface EditorTabProps {
   // Render tracking — show render status inline on the placement screen
   renderList?: RenderItem[];
   onRetryRender?: (renderId: string) => Promise<void>;
+  onSetRenderQueuedForFinal?: (renderId: string, queued: boolean) => Promise<void>;
+  onDeleteRender?: (renderId: string) => Promise<void>;
   userRole?: 'Admin' | 'Editor' | 'Advertiser';
 
   // AI Placement Assistant — "Generate New" mode (prompt-based AI video placement, no surface required)
@@ -79,6 +81,10 @@ interface EditorTabProps {
   onApprovePromptSplice?: (renderId: string) => Promise<void>;
   onRejectPromptPlacement?: (renderId: string) => Promise<void>;
   activePromptRender?: RenderItem | null;
+
+  // Final assembly — combine every scene's queued render + original footage into one video
+  selectedContent?: ContentItem | null;
+  onStartFinalAssembly?: (contentId: string) => Promise<void>;
 }
 
 export const EditorTab: React.FC<EditorTabProps> = ({
@@ -130,12 +136,17 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   // Render tracking
   renderList = [],
   onRetryRender,
+  onSetRenderQueuedForFinal,
+  onDeleteRender,
   userRole,
   // AI Placement Assistant — Generate New mode
   onSubmitPromptPlacement,
   onApprovePromptSplice,
   onRejectPromptPlacement,
   activePromptRender,
+  // Final assembly
+  selectedContent,
+  onStartFinalAssembly,
 }) => {
   // Controls whether the click-to-place overlay (SurfaceClickOverlay) intercepts clicks on the
   // video. It fully covers the player, including the native play/pause/seek controls, so it must
@@ -179,6 +190,10 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   const [deletingSurfaceId, setDeletingSurfaceId] = React.useState<string | null>(null);
   const [deletingAllSurfaces, setDeletingAllSurfaces] = React.useState(false);
   const [retryingId, setRetryingId] = React.useState<string | null>(null);
+  const [queuingId, setQueuingId] = React.useState<string | null>(null);
+  const [deletingRenderId, setDeletingRenderId] = React.useState<string | null>(null);
+  const [deleteRenderConfirmId, setDeleteRenderConfirmId] = React.useState<string | null>(null);
+  const [assemblingFinal, setAssemblingFinal] = React.useState(false);
 
   // ── Interactive placement state ──
   const [interactionMode, setInteractionMode] = React.useState<'product' | 'signage'>('product');
@@ -720,6 +735,57 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                   )}
                 </div>
               </div>
+
+              {/* Final assembly — combine every scene's queued render + original footage into one video */}
+              {scenesForVideo.length > 0 && (onStartFinalAssembly || selectedContent) && (() => {
+                const queuedSceneIds = new Set(renderList.filter(r => r.isQueuedForFinal && r.sceneId).map(r => r.sceneId));
+                const queuedCount = scenesForVideo.filter(s => queuedSceneIds.has(s.id)).length;
+                const status = selectedContent?.finalAssemblyStatus || 'NotStarted';
+                const isAssembling = status === 'Processing' || assemblingFinal;
+
+                return (
+                  <div className="mt-2 p-3 rounded-xl border border-indigo-200 bg-indigo-50/50">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <span className="text-xs font-semibold text-indigo-900">
+                        {queuedCount}/{scenesForVideo.length} scene{scenesForVideo.length !== 1 ? 's' : ''} queued for the final video
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {status === 'Finished' && selectedContent?.finalVideoStorageKey && (
+                          <a href={selectedContent.finalVideoStorageKey} download className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all shadow-sm">
+                            <Download className="h-3 w-3" /> Download Final Video
+                          </a>
+                        )}
+                        {onStartFinalAssembly && selectedContent && (
+                          <button
+                            onClick={async () => {
+                              setAssemblingFinal(true);
+                              try { await onStartFinalAssembly(selectedContent.id); }
+                              catch (err: any) { setActionError(err.message || 'Failed to start final assembly.'); }
+                              finally { setAssemblingFinal(false); }
+                            }}
+                            disabled={isAssembling || queuedCount === 0}
+                            title={queuedCount === 0 ? 'Queue at least one scene\'s render first' : undefined}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-300 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all shadow-sm"
+                          >
+                            {isAssembling ? <><Loader2 className="h-3 w-3 animate-spin" />Assembling...</> : <><Sparkles className="h-3 w-3" />Render Final Video</>}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {status === 'Processing' && (
+                      <div className="w-full bg-indigo-200 rounded-full h-1.5 mt-2 overflow-hidden">
+                        <div className="bg-indigo-500 h-full rounded-full transition-all duration-500" style={{ width: `${selectedContent?.finalAssemblyProgress || 0}%` }} />
+                      </div>
+                    )}
+                    {status === 'Finished' && selectedContent?.finalVideoStorageKey && (
+                      <video key={selectedContent.finalVideoStorageKey} src={selectedContent.finalVideoStorageKey} controls className="w-full rounded-lg mt-2 bg-black" />
+                    )}
+                    {status === 'Failed' && selectedContent?.finalAssemblyErrorMessage && (
+                      <div className="text-[10px] text-red-600 mt-1.5">{selectedContent.finalAssemblyErrorMessage}</div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Scene Approval Bar */}
               {currentScene && placedSurfaceCount > 0 && (
@@ -1528,8 +1594,11 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                       const asset = getPlacedAsset(currentSurface.id)!;
                       const currentRender = renderList.find(r => r.surfaceId === currentSurface.id);
                       const isRenderProcessing = currentRender && (currentRender.renderStatus === 'Queued' || currentRender.renderStatus === 'Processing');
-                      const isRenderFinished = currentRender?.renderStatus === 'Finished';
+                      // NeedsReview is a completed, playable/downloadable output too (partial shot
+                      // coverage or a drift-check below threshold) — not a failure.
+                      const isRenderFinished = currentRender?.renderStatus === 'Finished' || currentRender?.renderStatus === 'NeedsReview';
                       const isRenderFailed = currentRender?.renderStatus === 'Failed';
+                      const playableUrl = currentRender && (currentRender.sceneClipStorageKey || currentRender.storageKey);
 
                       if (!currentRender) {
                         return currentScene.qaStatus === 'Approved' ? (
@@ -1571,12 +1640,43 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                                 <div className="bg-amber-500 h-full rounded-full transition-all duration-500" style={{ width: `${currentRender.progress}%` }} />
                               </div>
                             )}
+
+                            {/* Play the composited output inline */}
+                            {isRenderFinished && playableUrl && (
+                              <video
+                                key={playableUrl}
+                                src={playableUrl}
+                                controls
+                                className="w-full rounded-lg mt-2 bg-black"
+                              />
+                            )}
+
                             {/* Actions */}
-                            <div className="flex items-center gap-2 mt-2">
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
                               {isRenderFinished && currentRender.storageKey && (
                                 <a href={currentRender.storageKey} download className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all shadow-sm">
                                   <Download className="h-3 w-3" /> Download
                                 </a>
+                              )}
+                              {isRenderFinished && onSetRenderQueuedForFinal && (
+                                <button
+                                  onClick={async () => {
+                                    setQueuingId(currentRender.id);
+                                    try { await onSetRenderQueuedForFinal(currentRender.id, !currentRender.isQueuedForFinal); }
+                                    catch (err: any) { setActionError(err.message || 'Failed to update queue status.'); }
+                                    finally { setQueuingId(null); }
+                                  }}
+                                  disabled={queuingId === currentRender.id}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 font-semibold text-[10px] rounded-lg cursor-pointer transition-all shadow-sm ${
+                                    currentRender.isQueuedForFinal
+                                      ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                                      : 'bg-white border border-blue-300 text-blue-600 hover:bg-blue-50'
+                                  } disabled:opacity-50`}
+                                  title="Use this render for this scene in the final combined video"
+                                >
+                                  {queuingId === currentRender.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
+                                  {currentRender.isQueuedForFinal ? 'Queued for Final Video' : 'Queue for Final Video'}
+                                </button>
                               )}
                               {isRenderFailed && onRetryRender && (
                                 <button
@@ -1590,6 +1690,14 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-red-300 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all shadow-sm"
                                 >
                                   {retryingId === currentRender.id ? <><Loader2 className="h-3 w-3 animate-spin" />Retrying...</> : <><RefreshCw className="h-3 w-3" />Retry Render</>}
+                                </button>
+                              )}
+                              {onDeleteRender && (
+                                <button
+                                  onClick={() => setDeleteRenderConfirmId(currentRender.id)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 hover:bg-red-50 text-red-600 font-semibold text-[10px] rounded-lg cursor-pointer transition-all"
+                                >
+                                  <Trash2 className="h-3 w-3" /> Delete
                                 </button>
                               )}
                               <button onClick={() => onNavigateToRenders?.()} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium cursor-pointer ml-auto">
@@ -1725,6 +1833,56 @@ export const EditorTab: React.FC<EditorTabProps> = ({
             </div>
           );
         })()}
+
+        {/* ── Delete Render Confirmation Modal ── */}
+        {deleteRenderConfirmId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full mx-4 p-6"
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="h-10 w-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                  <Trash2 className="h-5 w-5 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-bold text-slate-800 font-display">Delete Render #{deleteRenderConfirmId.slice(0, 8)}?</h3>
+                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                    This permanently deletes this render and its output file. This cannot be undone.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <button
+                  onClick={() => setDeleteRenderConfirmId(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={deletingRenderId === deleteRenderConfirmId}
+                  onClick={async () => {
+                    if (!onDeleteRender) return;
+                    setDeletingRenderId(deleteRenderConfirmId);
+                    try {
+                      await onDeleteRender(deleteRenderConfirmId);
+                      setDeleteRenderConfirmId(null);
+                    } catch (err: any) {
+                      setActionError(err.message || 'Failed to delete render.');
+                    } finally {
+                      setDeletingRenderId(null);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 disabled:bg-red-300 rounded-lg cursor-pointer transition-colors shadow-sm"
+                >
+                  {deletingRenderId === deleteRenderConfirmId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  Delete Render
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
 
         {/* ── Delete All Surfaces Confirmation Modal ── */}
         {deleteAllSurfacesConfirmOpen && (

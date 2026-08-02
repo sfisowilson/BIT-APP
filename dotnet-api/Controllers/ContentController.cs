@@ -690,6 +690,53 @@ namespace Afrobotics.Bit.Api.Controllers
             }
         }
 
+        /// <summary>
+        /// Assembles one final video combining every scene: each scene's queued render
+        /// (RenderItem.IsQueuedForFinal) if it has one, original footage otherwise. Poll
+        /// GET /api/content/{id} (FinalAssemblyStatus/Progress) or listen for SignalR
+        /// DetectionProgress with jobId "final-assembly" for live status.
+        /// </summary>
+        [HttpPost("{id}/final-assembly")]
+        public async Task<IActionResult> StartFinalAssembly(string id)
+        {
+            var content = await _db.ContentItems.FindAsync(id);
+            if (content == null) return NotFound(new { error = "Content not found." });
+
+            if (content.FinalAssemblyStatus == "Processing")
+                return BadRequest(new { error = "Final assembly is already in progress for this content." });
+
+            var hasAnyScene = await _db.SceneItems.AnyAsync(s => s.ContentId == id);
+            if (!hasAnyScene)
+                return BadRequest(new { error = "This content has no scenes to assemble." });
+
+            content.FinalAssemblyStatus = "Processing";
+            content.FinalAssemblyProgress = 0;
+            content.FinalAssemblyErrorMessage = null;
+            await _db.SaveChangesAsync();
+
+            BackgroundJob.Enqueue<FinalAssemblyJobService>(s => s.ProcessFinalAssemblyJob(id, CancellationToken.None));
+
+            await _eventLog.LogEventAsync("RenderEngine", "FINAL_ASSEMBLY_QUEUED", "Info", $"Final assembly queued for content '{id}'.");
+
+            return Ok(new { id, finalAssemblyStatus = content.FinalAssemblyStatus });
+        }
+
+        /// <summary>Serves the assembled final video (see ContentItem.FinalVideoStorageKey).</summary>
+        [HttpGet("{id}/final-video")]
+        [AllowAnonymous] // Allow direct video player stream, matching render download/preview routes
+        public async Task<IActionResult> DownloadFinalVideo(string id)
+        {
+            var content = await _db.ContentItems.FindAsync(id);
+            if (content == null) return NotFound(new { error = "Content not found." });
+
+            var localPath = Path.Combine(Directory.GetCurrentDirectory(), "renders", $"BIT_Final_{id}.mp4");
+            if (!System.IO.File.Exists(localPath))
+                return NotFound(new { error = "Final video not found on disk." });
+
+            var stream = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return File(stream, "video/mp4", $"BIT_Final_{content.Title}.mp4", enableRangeProcessing: true);
+        }
+
         /// <summary>Delete all scenes (and child surfaces/ad-slots/approvals) for a content item.</summary>
         [HttpDelete("{contentId}/scenes")]
         public async Task<IActionResult> DeleteAllScenes(string contentId)

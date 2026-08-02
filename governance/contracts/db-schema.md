@@ -60,6 +60,11 @@
 | `LastErrorAt` | DateTime | No | — | |
 | `DetectionProgress` | int | Yes | `0` | 0-100 |
 | `DetectionJobId` | string(100) | No | — | Hangfire job ID |
+| `FinalAssemblyStatus` | string(20) | Yes | `"NotStarted"` | NotStarted, Processing, Finished, Failed |
+| `FinalAssemblyProgress` | int | Yes | `0` | 0-100 |
+| `FinalVideoStorageKey` | string | No | — | Download path (`/api/content/{id}/final-video`) for the combined video assembled from every scene's queued render (`RenderItems.IsQueuedForFinal`) plus original footage elsewhere |
+| `FinalAssemblyErrorMessage` | string(500) | No | — | |
+| `FinalAssemblyUpdatedAt` | DateTime | No | — | |
 
 ---
 
@@ -211,6 +216,8 @@
 | `CompositingEngine` | string(50) | No | `""` | "pikaswaps", "PlanarWarp", "ffmpeg-luma", "ffmpeg-perspective", or "kling-o1-edit" |
 | `QualityTier` | string(20) | No | `""` | "AI" (pikaswaps or kling-o1-edit), "Exact" (planar warp), or "Standard" (ffmpeg fallback) |
 | `CreatedAt` | DateTime | Yes | `UtcNow` | |
+| `IsQueuedForFinal` | bool | Yes | `false` | This render is the chosen one for its scene, to be spliced into the content's final assembled video (`ContentItems.FinalVideoStorageKey`). At most one render per scene at a time — see `RenderService.SetQueuedForFinalAsync` |
+| `SceneClipStorageKey` | string | No | — | Download path (`/api/renders/{id}/scene-clip` for PromptEdit, or the same value as `StorageKey` for Interactive) for this render's output trimmed to just its scene — what final assembly actually splices in, since `StorageKey` is the full video for PromptEdit renders |
 
 ---
 

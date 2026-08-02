@@ -25,6 +25,12 @@ export interface ContentItem {
   detectionJobId?: string;    // Hangfire job ID for status polling
   isDetectionPaused: boolean; // Whether the detection job is paused by an operator
   jobState?: string;          // Hangfire job state: Enqueued, Processing, Paused, Succeeded, Failed, Cancelled
+  // ── Final assembly: one combined video, splicing in each scene's queued render where present ──
+  finalAssemblyStatus: "NotStarted" | "Processing" | "Finished" | "Failed" | "";
+  finalAssemblyProgress: number; // 0–100
+  finalVideoStorageKey?: string | null;
+  finalAssemblyErrorMessage?: string | null;
+  finalAssemblyUpdatedAt?: string | null;
 }
 
 export interface SceneItem {
@@ -208,6 +214,10 @@ export interface RenderItem {
   surfaceType?: string | null;
   /** CreativeAsset.Name — null if the asset has since been deleted. */
   assetName?: string | null;
+  /** This render is the chosen one for its scene, to be spliced into the content's final assembled video. At most one render per scene can be queued at a time. */
+  isQueuedForFinal: boolean;
+  /** Path to this render's output trimmed to just its scene (not the full video) — what final assembly splices in. Same as storageKey for Interactive renders; PromptEdit renders keep it separate. */
+  sceneClipStorageKey?: string | null;
 }
 
 /** fal-ai/kling-video/o1/video-to-video/edit's real, hard input-duration constraints — mirrored

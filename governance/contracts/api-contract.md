@@ -54,6 +54,8 @@
 | `DELETE` | `/api/content/{contentId}/scenes` | — | `{ success, contentId, message }` — Delete all scenes (and child surfaces/ad-slots/approvals) for a content item. Blocks if any surfaces are Approved (400). |
 | `POST` | `/api/content/{id}/mark-failed` | `{ targetStage: "Failed", errorMessage? }` | `{ success, id, ingestionStatus, lastErrorMessage? }` |
 | `POST` | `/api/content/{id}/reset` | — | `{ success, id, ingestionStatus, message }` |
+| `POST` | `/api/content/{id}/final-assembly` | — | `{ id, finalAssemblyStatus }` — Enqueues `ProcessFinalAssemblyJob`, which combines every scene into one video: each scene's queued render (`RenderItem.IsQueuedForFinal`) if it has one, original footage otherwise. `400` if already `Processing` or the content has no scenes. Poll `GET /api/content/{id}` (`finalAssemblyStatus`/`finalAssemblyProgress`) or SignalR `DetectionProgress` with `jobId: "final-assembly"`. |
+| `GET` | `/api/content/{id}/final-video` | — | `video/mp4` file download, `[AllowAnonymous]`. Serves `renders/BIT_Final_{id}.mp4` (see `ContentItem.FinalVideoStorageKey`); `404` if missing. |
 | `GET` | `/api/content/file/{*fileName}` | — | Binary file (video or image). Supports subdirectories (e.g., `thumbnails/`). MIME: mp4, mov, avi, mxf, webm, jpg, png, gif, webp |
 
 ---
@@ -100,6 +102,9 @@
 | `POST` | `/api/renders/{id}/retry` | — | Re-enqueues a Failed render. For `RenderMode = "PromptEdit"` renders, re-enqueues `ProcessPromptPreviewJob` instead of the Interactive-mode retry path. |
 | `GET` | `/api/renders/{id}/download` | — | `video/mp4` file download, `[AllowAnonymous]`. Serves `renders/BIT_Render_{id}.mp4`, falling back to a sample video if missing. |
 | `GET` | `/api/renders/{id}/preview` | — | `video/mp4` file download, `[AllowAnonymous]`. Serves the not-yet-approved `renders/BIT_Preview_{id}.mp4` for the preview player; `404` if missing (no fallback). |
+| `PUT` | `/api/renders/{id}/queue-for-final` | `SetQueuedForFinalDto { queued }` | `200` → `RenderItem` — Marks (or unmarks) this render as the chosen one for its scene in the content's final assembled video. Requires `RenderStatus` `Finished`/`NeedsReview` and a set `SceneClipStorageKey` (else `400`). Setting `queued: true` un-queues whichever other render was previously queued for the same scene — at most one queued render per scene. |
+| `DELETE` | `/api/renders/{id}` | — | `200` → `{ success: true }` — Deletes the render row and its output files (`BIT_Render_/BIT_Preview_/BIT_SceneClip_{id}.mp4`) from disk (best-effort). Any authenticated user, matching `retry`'s permission model. |
+| `GET` | `/api/renders/{id}/scene-clip` | — | `video/mp4` file download, `[AllowAnonymous]`. Serves `renders/BIT_SceneClip_{id}.mp4` — the render's output trimmed to just its scene (see `RenderItem.SceneClipStorageKey`); `404` if missing. |
 
 ---
 

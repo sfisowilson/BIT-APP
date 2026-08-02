@@ -387,6 +387,29 @@ export async function retryRender(
   return r.json();
 }
 
+/** Mark (or unmark) a render as the chosen one for its scene in the content's final assembled video. */
+export async function setRenderQueuedForFinal(renderId: string, queued: boolean): Promise<RenderItem> {
+  const r = await fetchWithAuth(`/api/renders/${renderId}/queue-for-final`, {
+    method: 'PUT',
+    body: JSON.stringify({ queued }),
+  });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to update render queue status.');
+  }
+  return r.json();
+}
+
+/** Delete a render and its output files. */
+export async function deleteRender(renderId: string): Promise<{ success: boolean }> {
+  const r = await fetchWithAuth(`/api/renders/${renderId}`, { method: 'DELETE' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to delete render.');
+  }
+  return r.json();
+}
+
 /** Poll for detection job progress. Returns 0-100 percentage and current status. */
 export async function getDetectionStatus(
   contentId: string,
@@ -431,6 +454,18 @@ export async function resetPipeline(
   if (!r.ok) {
     const data = await r.json();
     throw new Error(data.error || 'Failed to reset pipeline.');
+  }
+  return r.json();
+}
+
+/** Assemble one final video combining every scene: each scene's queued render if it has one, original footage otherwise. */
+export async function startFinalAssembly(
+  contentId: string,
+): Promise<{ id: string; finalAssemblyStatus: string }> {
+  const r = await fetchWithAuth(`/api/content/${contentId}/final-assembly`, { method: 'POST' });
+  if (!r.ok) {
+    const data = await r.json();
+    throw new Error(data.error || 'Failed to start final assembly.');
   }
   return r.json();
 }

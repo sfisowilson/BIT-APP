@@ -42,7 +42,7 @@ import {
   SurfaceAssetPair,
   CreatePromptRenderRequest,
 } from './types';
-import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, fetchPublic, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession, retranscode, redetectScenes, aiSplitAnalyze, detectSurfacesForScene, deleteScene, deleteAllScenes, deleteSurface, deleteAllSurfaces, resetPipeline, refreshToken, fetchStatsSummary, fetchSurfacesBatch, retryRender, confirmInteractivePlacement, submitPromptPlacement, approvePromptSplice, rejectPromptPlacement, fetchCampaignSummary, type StatsSummary } from './apiClient';
+import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, fetchPublic, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession, retranscode, redetectScenes, aiSplitAnalyze, detectSurfacesForScene, deleteScene, deleteAllScenes, deleteSurface, deleteAllSurfaces, resetPipeline, refreshToken, fetchStatsSummary, fetchSurfacesBatch, retryRender, setRenderQueuedForFinal, deleteRender, startFinalAssembly, confirmInteractivePlacement, submitPromptPlacement, approvePromptSplice, rejectPromptPlacement, fetchCampaignSummary, type StatsSummary } from './apiClient';
 import { useChunkedUpload } from './hooks/useChunkedUpload';
 import { useSignalR, type DetectionProgressEvent, type RenderProgressEvent, type ContentStatusEvent, type AlarmEvent, type NotificationEvent } from './hooks/useSignalR';
 
@@ -520,6 +520,19 @@ export default function App() {
   // All live updates flow through here; no polling needed.
   const { connectionState: _signalRState } = useSignalR({
     onDetectionProgress: (e: DetectionProgressEvent) => {
+      // Final assembly shares this same broadcast channel (contentId-scoped progress), disambiguated
+      // by jobId — a genuinely different concern from scene detection, so it updates different fields.
+      if (e.jobId === 'final-assembly') {
+        setContentList(prev => prev.map(c =>
+          c.id === e.contentId ? { ...c, finalAssemblyStatus: (e.status === 'Failed' ? 'Failed' : e.percent >= 100 ? 'Finished' : 'Processing'), finalAssemblyProgress: e.percent } : c
+        ));
+        if (e.percent >= 100 || e.status === 'Failed') {
+          // Picks up finalVideoStorageKey / finalAssemblyErrorMessage, which the progress push doesn't carry.
+          fetchAllData();
+        }
+        return;
+      }
+
       // Update detection progress for the content item in local state
       setContentList(prev => prev.map(c =>
         c.id === e.contentId ? { ...c, detectionProgress: e.percent } : c
@@ -1048,6 +1061,36 @@ export default function App() {
       await fetchAllData();
     } catch (err: any) {
       console.error('Failed to retry render:', err);
+      throw err;
+    }
+  };
+
+  const handleSetRenderQueuedForFinal = async (renderId: string, queued: boolean) => {
+    try {
+      await setRenderQueuedForFinal(renderId, queued);
+      await fetchAllData();
+    } catch (err: any) {
+      console.error('Failed to update render queue status:', err);
+      throw err;
+    }
+  };
+
+  const handleDeleteRender = async (renderId: string) => {
+    try {
+      await deleteRender(renderId);
+      await fetchAllData();
+    } catch (err: any) {
+      console.error('Failed to delete render:', err);
+      throw err;
+    }
+  };
+
+  const handleStartFinalAssembly = async (contentId: string) => {
+    try {
+      await startFinalAssembly(contentId);
+      await fetchAllData();
+    } catch (err: any) {
+      console.error('Failed to start final assembly:', err);
       throw err;
     }
   };
@@ -2106,6 +2149,8 @@ export default function App() {
                     // Render tracking
                     renderList={renderList}
                     onRetryRender={handleRetryRender}
+                    onSetRenderQueuedForFinal={handleSetRenderQueuedForFinal}
+                    onDeleteRender={handleDeleteRender}
                     userRole={user?.role}
                     // AI Placement Assistant — Generate New mode
                     onSubmitPromptPlacement={handleSubmitPromptPlacement}
@@ -2121,6 +2166,9 @@ export default function App() {
                         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
                         ?? null
                     }
+                    // Final assembly
+                    selectedContent={contentList.find(c => c.id === selectedVideo) ?? null}
+                    onStartFinalAssembly={handleStartFinalAssembly}
                   />
                 )}
 

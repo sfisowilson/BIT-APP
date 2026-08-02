@@ -51,4 +51,9 @@ namespace Afrobotics.Bit.Api.DTOs
     {
         public string? Reason { get; set; }
     }
+
+    public class SetQueuedForFinalDto
+    {
+        public bool Queued { get; set; }
+    }
 }

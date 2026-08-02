@@ -301,4 +301,63 @@ public class VideoChunkingService
             throw new InvalidOperationException($"ffmpeg exited with code {process.ExitCode}");
         }
     }
+
+    /// <summary>
+    /// Assembles one continuous output video spanning a content item's full duration, scene by
+    /// scene: for each scene, splices in its replacement clip if one is given, otherwise the
+    /// scene's own original footage — the "combine all scenes, using queued renders where
+    /// available, original footage elsewhere" final-assembly primitive.
+    ///
+    /// Unlike SpliceChunksAsync (which trusts every piece already shares identical encoding),
+    /// every segment here is explicitly re-encoded to one common resolution/fps first: replacement
+    /// clips come from two different render engines with no shared encoding guarantee between
+    /// them, and original-footage segments must match both. ffmpeg's concat demuxer with -c copy
+    /// requires identical stream parameters across every piece, so skipping this step risks a
+    /// corrupted or desynced final output. Matches the same audio-free v1 limitation as the
+    /// single-scene splice this generalizes (RenderJobService.SpliceSceneReplacementAsync).
+    /// </summary>
+    /// <param name="segments">Every scene in the content, in SceneIndex order, each paired with
+    /// its queued render's scene clip path (or null to use the scene's original footage).</param>
+    public async Task<string> SpliceFinalAssemblyAsync(
+        string sourceVideoPath,
+        List<(SceneItem scene, string? replacementClipPath)> segments,
+        double fps, int videoWidth, int videoHeight,
+        string workDir, string outputPath,
+        Func<int, int, Task>? onProgress = null)
+    {
+        Directory.CreateDirectory(workDir);
+        var concatListPath = Path.Combine(workDir, "concat_final_assembly.txt");
+        var lines = new List<string>();
+
+        for (int i = 0; i < segments.Count; i++)
+        {
+            var (scene, replacementClipPath) = segments[i];
+            var normalizedPath = Path.Combine(workDir, $"segment_{i}_{scene.SceneIndex}.mp4");
+            var hasReplacement = !string.IsNullOrEmpty(replacementClipPath) && File.Exists(replacementClipPath);
+
+            var inputArgs = hasReplacement
+                ? $"-i \"{replacementClipPath!.Replace("\\", "/")}\""
+                : $"-ss {(scene.StartFrame / fps):F3} -i \"{sourceVideoPath.Replace("\\", "/")}\" -t {(scene.DurationSeconds):F3}";
+
+            await RunFfmpegAsync(
+                $"-y -hide_banner -loglevel error {inputArgs} " +
+                $"-vf \"scale={videoWidth}:{videoHeight},setsar=1\" -r {fps:F3} " +
+                $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -an " +
+                $"\"{normalizedPath.Replace("\\", "/")}\"");
+
+            lines.Add($"file '{normalizedPath.Replace("\\", "/")}'");
+            if (onProgress != null) await onProgress(i + 1, segments.Count);
+        }
+
+        await File.WriteAllLinesAsync(concatListPath, lines);
+
+        await RunFfmpegAsync(
+            $"-y -hide_banner -loglevel error -f concat -safe 0 -i \"{concatListPath.Replace("\\", "/")}\" " +
+            $"-c copy \"{outputPath.Replace("\\", "/")}\"");
+
+        try { File.Delete(concatListPath); } catch (Exception ex) { _logger.LogWarning(ex, "[Chunking] Failed to delete final-assembly concat temp file"); }
+
+        _logger.LogInformation("[Chunking] Final assembly: spliced {Count} scenes → {Output}", segments.Count, outputPath);
+        return outputPath;
+    }
 }

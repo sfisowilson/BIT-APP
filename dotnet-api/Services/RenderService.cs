@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Hangfire;
@@ -21,6 +22,10 @@ namespace Afrobotics.Bit.Api.Services
         Task<RenderItem> DispatchPromptPreviewRenderAsync(CreatePromptRenderDto dto);
         Task<RenderItem> ApproveSpliceAsync(string renderId);
         Task RejectPromptRenderAsync(string renderId, string? reason);
+        /// <summary>Resolves the scene a render targets — directly via SceneId (PromptEdit), or via SurfaceId → SurfaceItem.SceneId (Interactive).</summary>
+        Task<string?> ResolveSceneIdAsync(RenderItem render);
+        Task<RenderItem> SetQueuedForFinalAsync(string renderId, bool queued);
+        Task DeleteRenderAsync(string renderId);
     }
 
     public class RenderService : IRenderService
@@ -315,6 +320,72 @@ namespace Afrobotics.Bit.Api.Services
 
             await _eventLog.LogEventAsync("RenderEngine", "PROMPT_REJECTED", "Info",
                 $"Render '{render.Id}' rejected by user.");
+        }
+
+        public async Task<string?> ResolveSceneIdAsync(RenderItem render)
+        {
+            if (!string.IsNullOrEmpty(render.SceneId)) return render.SceneId;
+            if (string.IsNullOrEmpty(render.SurfaceId)) return null;
+
+            var surface = await _context.SurfaceItems.FindAsync(render.SurfaceId);
+            return surface?.SceneId;
+        }
+
+        public async Task<RenderItem> SetQueuedForFinalAsync(string renderId, bool queued)
+        {
+            var render = await _renderRepository.GetByIdAsync(renderId);
+            if (render == null)
+                throw new ArgumentException($"Render '{renderId}' not found.");
+
+            if (queued && render.RenderStatus != "Finished" && render.RenderStatus != "NeedsReview")
+                throw new InvalidOperationException(
+                    $"Only a Finished or NeedsReview render can be queued for final assembly (status: '{render.RenderStatus}').");
+            if (queued && string.IsNullOrEmpty(render.SceneClipStorageKey))
+                throw new InvalidOperationException("This render has no scene clip to splice — cannot be queued for final assembly.");
+
+            if (queued)
+            {
+                var sceneId = await ResolveSceneIdAsync(render);
+                if (string.IsNullOrEmpty(sceneId))
+                    throw new InvalidOperationException("Could not resolve which scene this render targets.");
+
+                // At most one queued render per scene — un-queue whichever was queued before this one.
+                var previouslyQueued = await _context.Renders
+                    .Where(r => r.Id != renderId && r.IsQueuedForFinal)
+                    .ToListAsync();
+                foreach (var other in previouslyQueued)
+                {
+                    if (await ResolveSceneIdAsync(other) == sceneId)
+                        other.IsQueuedForFinal = false;
+                }
+            }
+
+            render.IsQueuedForFinal = queued;
+            await _renderRepository.SaveChangesAsync();
+
+            await _eventLog.LogEventAsync("RenderEngine", queued ? "RENDER_QUEUED_FOR_FINAL" : "RENDER_UNQUEUED_FOR_FINAL", "Info",
+                $"Render '{render.Id}' {(queued ? "queued for" : "removed from")} final assembly.");
+
+            return render;
+        }
+
+        public async Task DeleteRenderAsync(string renderId)
+        {
+            var render = await _renderRepository.GetByIdAsync(renderId);
+            if (render == null)
+                throw new ArgumentException($"Render '{renderId}' not found.");
+
+            var rendersDir = Path.Combine(Directory.GetCurrentDirectory(), "renders");
+            foreach (var fileName in new[] { $"BIT_Render_{renderId}.mp4", $"BIT_Preview_{renderId}.mp4", $"BIT_SceneClip_{renderId}.mp4" })
+            {
+                var path = Path.Combine(rendersDir, fileName);
+                try { if (File.Exists(path)) File.Delete(path); } catch { /* best-effort cleanup */ }
+            }
+
+            await _renderRepository.DeleteAsync(render);
+            await _renderRepository.SaveChangesAsync();
+
+            await _eventLog.LogEventAsync("RenderEngine", "RENDER_DELETED", "Info", $"Render '{renderId}' deleted.");
         }
     }
 }

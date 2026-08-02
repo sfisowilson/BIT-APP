@@ -162,6 +162,70 @@ namespace Afrobotics.Bit.Api.Controllers
             }
         }
 
+        /// <summary>Marks (or unmarks) this render as the chosen one for its scene in the content's final assembled video. At most one render per scene can be queued at a time.</summary>
+        [HttpPut("{id}/queue-for-final")]
+        public async Task<IActionResult> SetQueuedForFinal(string id, [FromBody] SetQueuedForFinalDto dto)
+        {
+            try
+            {
+                var render = await _renderService.SetQueuedForFinalAsync(id, dto.Queued);
+                return Ok(render);
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Render", "RENDER_QUEUE_ERROR", "Error", $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteRender(string id)
+        {
+            try
+            {
+                await _renderService.DeleteRenderAsync(id);
+                return Ok(new { success = true });
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Render", "RENDER_DELETE_ERROR", "Error", $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>Serves the composited output trimmed to just this render's scene (not the full video) — see RenderItem.SceneClipStorageKey.</summary>
+        [HttpGet("{id}/scene-clip")]
+        [AllowAnonymous] // Allow direct video player stream, matching /download and /preview
+        public async Task<IActionResult> DownloadSceneClip(string id)
+        {
+            var render = await _context.Renders.FindAsync(id);
+            if (render == null)
+            {
+                return NotFound(new { error = $"Render '{id}' not found." });
+            }
+
+            var localPath = Path.Combine(Directory.GetCurrentDirectory(), "renders", $"BIT_SceneClip_{id}.mp4");
+            if (!System.IO.File.Exists(localPath))
+            {
+                return NotFound(new { error = "Scene clip not found on disk." });
+            }
+
+            var stream = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return File(stream, "video/mp4", $"BIT_SceneClip_{id}.mp4", enableRangeProcessing: true);
+        }
+
         [HttpGet("{id}/status")]
         public async Task<IActionResult> GetStatus(string id)
         {

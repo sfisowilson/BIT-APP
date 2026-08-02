@@ -253,4 +253,35 @@ public class VideoChunkingServiceTests : IDisposable
         Assert.True(File.Exists(result));
         Assert.True(new FileInfo(result).Length > 0);
     }
+
+    [Fact]
+    public async Task SpliceFinalAssemblyAsync_MixOfReplacementAndOriginalScenes_ProducesFullDurationOutput()
+    {
+        if (!FfmpegAvailable() || !FfprobeAvailable()) return;
+
+        var chunker = new VideoChunkingService(NullLogger<VideoChunkingService>.Instance);
+        var sourcePath = GenerateTestVideo(4.0, "source.mp4"); // two 2s scenes
+        var replacementClipPath = GenerateTestVideo(2.0, "replacement.mp4"); // stands in for scene 0's queued render
+
+        var scenes = new List<(SceneItem scene, string? replacementClipPath)>
+        {
+            (new SceneItem { Id = "sc-0", ContentId = "c-01", SceneIndex = 0, StartFrame = 0, EndFrame = 19, DurationSeconds = 2.0 }, replacementClipPath),
+            (new SceneItem { Id = "sc-1", ContentId = "c-01", SceneIndex = 1, StartFrame = 20, EndFrame = 39, DurationSeconds = 2.0 }, null), // no queued render — original footage
+        };
+
+        var workDir = Path.Combine(_workDir, "final-assembly-work");
+        var outputPath = Path.Combine(_workDir, "final.mp4");
+        var progressCalls = new List<(int done, int total)>();
+
+        var result = await chunker.SpliceFinalAssemblyAsync(
+            sourcePath, scenes, Fps, 64, 64, workDir, outputPath,
+            onProgress: (done, total) => { progressCalls.Add((done, total)); return Task.CompletedTask; });
+
+        Assert.True(File.Exists(result));
+        var outputDuration = ProbeStreamDuration(result, "video");
+        Assert.NotNull(outputDuration);
+        Assert.Equal(4.0, outputDuration!.Value, 1); // both 2s scenes present, regardless of source
+
+        Assert.Equal(new[] { (1, 2), (2, 2) }, progressCalls);
+    }
 }
