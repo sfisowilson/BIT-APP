@@ -330,18 +330,18 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
 
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
+                <label className="flex items-end min-h-[2.8rem] text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
                   Duration HH:MM:SS (auto)
                 </label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={newVideoDuration || '00:00:00'}
                   readOnly
                   className="w-full border rounded-lg px-2 py-1.5 text-xs font-mono bg-slate-100 border-slate-200 text-slate-500 pointer-events-none select-none"
                 />
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Native FPS</label>
+                <label className="flex items-end min-h-[2.8rem] text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Native FPS</label>
                 <input
                   type="number"
                   value={newVideoFps}
@@ -372,13 +372,13 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                 </datalist>
               </div>
               <div>
-                <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
+                <label className="flex items-end min-h-[2.8rem] text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
                   Source Channel
                 </label>
-                <input 
-                  type="text" 
-                  value={newVideoChannel} 
-                  onChange={(e) => setNewVideoChannel(e.target.value)} 
+                <input
+                  type="text"
+                  value={newVideoChannel}
+                  onChange={(e) => setNewVideoChannel(e.target.value)}
                   placeholder="SuperSport Variety"
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
                   required
