@@ -192,7 +192,7 @@ export interface RenderItem {
   processingDurationMs: number;
   lastErrorMessage?: string;
   createdAt: string;
-  /** Scene this render targets. Set for "PromptEdit" renders; Interactive renders derive their scene via surfaceId instead. */
+  /** Scene this render targets — always resolved by the backend (directly for "PromptEdit" renders, via surfaceId for Interactive ones). Null only if unresolvable (e.g. deleted surface). */
   sceneId?: string | null;
   /** User's free-text placement instruction for a "PromptEdit" render. */
   promptText?: string | null;
@@ -200,6 +200,14 @@ export interface RenderItem {
   previewStorageKey?: string | null;
   /** Undefined/"Interactive" (click/quad placement) vs "PromptEdit" (free-text AI video generation). */
   renderMode?: "Interactive" | "PromptEdit" | null;
+  /** ContentItem.Title — null if the source content has since been deleted. */
+  contentTitle?: string | null;
+  /** SceneItem.SceneIndex for the resolved scene — null if unresolvable. */
+  sceneIndex?: number | null;
+  /** SurfaceItem.SurfaceType — null for PromptEdit renders (no surface) or a deleted surface. */
+  surfaceType?: string | null;
+  /** CreativeAsset.Name — null if the asset has since been deleted. */
+  assetName?: string | null;
 }
 
 /** fal-ai/kling-video/o1/video-to-video/edit's real, hard input-duration constraints — mirrored

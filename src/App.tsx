@@ -622,6 +622,27 @@ export default function App() {
     }
   }, [contentList, token]);
 
+  // Deep-link into Placements from elsewhere (e.g. "View in Placements" on a Render Queue card)
+  // via ?contentId=&sceneId=&surfaceId= query params. Runs after the auto-select effect above so
+  // it wins when both fire in the same commit; once selectedVideo/selectedSceneId/selectedSurfaceId
+  // are set, the effects that fetch scenes/surfaces already preserve a valid existing selection
+  // instead of defaulting to the first one. The params are stripped afterward (replacing history,
+  // not pushing) so they don't linger or re-apply on a later back-navigation.
+  useEffect(() => {
+    if (activeView !== 'placements' || !location.search) return;
+    const params = new URLSearchParams(location.search);
+    const deepLinkContentId = params.get('contentId');
+    if (!deepLinkContentId) return;
+
+    setSelectedVideo(deepLinkContentId);
+    const deepLinkSceneId = params.get('sceneId');
+    if (deepLinkSceneId) setSelectedSceneId(deepLinkSceneId);
+    const deepLinkSurfaceId = params.get('surfaceId');
+    if (deepLinkSurfaceId) setSelectedSurfaceId(deepLinkSurfaceId);
+
+    navigate(location.pathname, { replace: true });
+  }, [activeView, location.search]);
+
   // Fetch scenes when selected video changes — also batch-fetch all surfaces
   useEffect(() => {
     if (!selectedVideo || !token) return;
@@ -683,7 +704,9 @@ export default function App() {
     if (cached) {
       setSurfacesForScene(cached);
       if (cached.length > 0) {
-        setSelectedSurfaceId(cached[0].id);
+        // Preserve an already-valid selection (e.g. a deep-linked surfaceId) instead of always
+        // snapping to the first surface — mirrors the scene-selection effect's same guard above.
+        setSelectedSurfaceId(prev => (prev && cached.some(s => s.id === prev)) ? prev : cached[0].id);
       } else {
         setSelectedSurfaceId('');
       }

@@ -1,10 +1,20 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Cpu, Download, Film, Loader2, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react';
+import { Cpu, Download, Film, Loader2, CheckCircle, XCircle, Clock, RefreshCw, ExternalLink } from 'lucide-react';
 import type { RenderItem } from '../types';
 import { usePaginatedData } from '../hooks/usePaginatedData';
 import { Pagination } from './Pagination';
 import { fetchPaginated } from '../apiClient';
+
+/** Builds the deep-link back to the Placement/Editor screen this render was kicked off from —
+ * consumed by App.tsx's query-param handling for the "placements" view. */
+function buildPlacementUrl(r: RenderItem): string {
+  const params = new URLSearchParams({ contentId: r.contentId });
+  if (r.sceneId) params.set('sceneId', r.sceneId);
+  if (r.surfaceId) params.set('surfaceId', r.surfaceId);
+  return `/c/${r.campaignId}/placements?${params.toString()}`;
+}
 
 interface RendersTabProps {
   campaignId?: string;
@@ -14,6 +24,8 @@ interface RendersTabProps {
 }
 
 export const RendersTab: React.FC<RendersTabProps> = ({ campaignId, campaignName, onRetryRender, userRole }) => {
+  const navigate = useNavigate();
+
   // ── Paginated render queue, scoped to the selected campaign ──
   const {
     data: renders,
@@ -137,6 +149,27 @@ export const RendersTab: React.FC<RendersTabProps> = ({ campaignId, campaignName
                       <Clock className="h-3 w-3" />
                       {r.processingDurationMs ? `${(r.processingDurationMs / 1000).toFixed(1)}s` : '—'}
                     </div>
+                  </div>
+
+                  {/* Where this render came from */}
+                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-slate-500 mb-2">
+                    {r.contentTitle && (
+                      <span className="font-semibold text-slate-600 truncate max-w-[220px]" title={r.contentTitle}>{r.contentTitle}</span>
+                    )}
+                    {r.sceneIndex != null && <span>· Scene #{r.sceneIndex}</span>}
+                    {r.surfaceType ? (
+                      <span>· {r.surfaceType}</span>
+                    ) : r.promptText ? (
+                      <span className="truncate max-w-[240px]" title={r.promptText}>· "{r.promptText}"</span>
+                    ) : null}
+                    {r.assetName && <span>· {r.assetName}</span>}
+                    <a
+                      href={buildPlacementUrl(r)}
+                      onClick={(e) => { e.preventDefault(); navigate(buildPlacementUrl(r)); }}
+                      className="inline-flex items-center gap-0.5 text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                    >
+                      <ExternalLink className="h-2.5 w-2.5" /> View in Placements
+                    </a>
                   </div>
 
                   {/* Progress bar */}

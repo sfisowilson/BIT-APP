@@ -15,7 +15,7 @@ namespace Afrobotics.Bit.Api.Services
 {
     public interface IRenderService
     {
-        Task<PaginatedResult<RenderItem>> GetRendersAsync(RenderFilterParams filter);
+        Task<PaginatedResult<RenderItemResponse>> GetRendersAsync(RenderFilterParams filter);
         Task<RenderItem> DispatchInteractiveRenderAsync(CreateInteractiveRenderDto dto);
         Task<RenderItem> RetryRenderAsync(string renderId);
         Task<RenderItem> DispatchPromptPreviewRenderAsync(CreatePromptRenderDto dto);
@@ -40,7 +40,7 @@ namespace Afrobotics.Bit.Api.Services
             _config = config;
         }
 
-        public async Task<PaginatedResult<RenderItem>> GetRendersAsync(RenderFilterParams filter)
+        public async Task<PaginatedResult<RenderItemResponse>> GetRendersAsync(RenderFilterParams filter)
         {
             var query = _renderRepository.GetAllQueryable();
 
@@ -54,7 +54,85 @@ namespace Afrobotics.Bit.Api.Services
             else
                 query = query.OrderByDescending(r => r.CreatedAt);
 
-            return await query.ToPaginatedResultAsync(filter.Page, filter.PageSize);
+            var page = await query.ToPaginatedResultAsync(filter.Page, filter.PageSize);
+            var items = await EnrichWithDisplayFieldsAsync(page.Items);
+
+            return new PaginatedResult<RenderItemResponse>
+            {
+                Items = items,
+                TotalCount = page.TotalCount,
+                Page = page.Page,
+                PageSize = page.PageSize,
+                TotalPages = page.TotalPages,
+                HasPreviousPage = page.HasPreviousPage,
+                HasNextPage = page.HasNextPage,
+            };
+        }
+
+        /// <summary>
+        /// Joins each render to the content/scene/surface/asset it targeted, for just the page
+        /// of renders being returned — not the whole table. A render's effective scene is
+        /// SceneId when set directly (RenderMode "PromptEdit"), otherwise derived via
+        /// SurfaceId → SurfaceItem.SceneId (Interactive renders never set SceneId themselves).
+        /// </summary>
+        private async Task<List<RenderItemResponse>> EnrichWithDisplayFieldsAsync(List<RenderItem> renders)
+        {
+            var surfaceIds = renders.Where(r => !string.IsNullOrEmpty(r.SurfaceId)).Select(r => r.SurfaceId!).Distinct().ToList();
+            var surfaces = surfaceIds.Count == 0
+                ? new List<SurfaceItem>()
+                : await _context.SurfaceItems.Where(s => surfaceIds.Contains(s.Id)).ToListAsync();
+            var surfaceById = surfaces.ToDictionary(s => s.Id);
+
+            var sceneIds = renders
+                .Select(r => r.SceneId ?? (r.SurfaceId != null && surfaceById.TryGetValue(r.SurfaceId, out var sf) ? sf.SceneId : null))
+                .Where(id => !string.IsNullOrEmpty(id))
+                .Select(id => id!)
+                .Distinct()
+                .ToList();
+            var scenes = sceneIds.Count == 0
+                ? new List<SceneItem>()
+                : await _context.SceneItems.Where(s => sceneIds.Contains(s.Id)).ToListAsync();
+            var sceneById = scenes.ToDictionary(s => s.Id);
+
+            var contentIds = renders.Select(r => r.ContentId).Distinct().ToList();
+            var contents = await _context.ContentItems.Where(c => contentIds.Contains(c.Id)).ToListAsync();
+            var contentById = contents.ToDictionary(c => c.Id);
+
+            var assetIds = renders.Select(r => r.AssetId).Distinct().ToList();
+            var assets = await _context.CreativeAssets.Where(a => assetIds.Contains(a.Id)).ToListAsync();
+            var assetById = assets.ToDictionary(a => a.Id);
+
+            return renders.Select(r =>
+            {
+                var resolvedSceneId = r.SceneId ?? (r.SurfaceId != null && surfaceById.TryGetValue(r.SurfaceId, out var sf) ? sf.SceneId : null);
+                var scene = resolvedSceneId != null && sceneById.TryGetValue(resolvedSceneId, out var sc) ? sc : null;
+
+                return new RenderItemResponse
+                {
+                    Id = r.Id,
+                    ContentId = r.ContentId,
+                    SurfaceId = r.SurfaceId,
+                    CampaignId = r.CampaignId,
+                    AssetId = r.AssetId,
+                    ExportPreset = r.ExportPreset,
+                    StorageKey = r.StorageKey,
+                    RenderStatus = r.RenderStatus,
+                    SceneId = resolvedSceneId,
+                    PromptText = r.PromptText,
+                    PreviewStorageKey = r.PreviewStorageKey,
+                    RenderMode = r.RenderMode,
+                    Progress = r.Progress,
+                    ProcessingDurationMs = r.ProcessingDurationMs,
+                    LastErrorMessage = r.LastErrorMessage,
+                    CompositingEngine = r.CompositingEngine,
+                    QualityTier = r.QualityTier,
+                    CreatedAt = r.CreatedAt,
+                    ContentTitle = contentById.TryGetValue(r.ContentId, out var content) ? content.Title : null,
+                    SceneIndex = scene?.SceneIndex,
+                    SurfaceType = r.SurfaceId != null && surfaceById.TryGetValue(r.SurfaceId, out var surface) ? surface.SurfaceType : null,
+                    AssetName = assetById.TryGetValue(r.AssetId, out var asset) ? asset.Name : null,
+                };
+            }).ToList();
         }
 
         public async Task<RenderItem> DispatchInteractiveRenderAsync(CreateInteractiveRenderDto dto)

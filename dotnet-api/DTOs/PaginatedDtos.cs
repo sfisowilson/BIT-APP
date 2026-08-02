@@ -108,4 +108,46 @@ namespace Afrobotics.Bit.Api.DTOs
         public string? AccountStatus { get; set; }
         public string? Search { get; set; }
     }
+
+    // ─── Entity-Specific Response DTOs ────────────────────────────────────
+
+    /// <summary>
+    /// GET /api/renders item shape — the raw RenderItem entity plus display fields joined from
+    /// ContentItem/SceneItem/SurfaceItem/CreativeAsset, so the Render Queue can show what a
+    /// render actually targeted without the frontend making N follow-up requests per row.
+    ///
+    /// SceneId is always resolved here (unlike the raw entity, where it's only set for
+    /// RenderMode "PromptEdit" — Interactive renders derive it via SurfaceId → SurfaceItem.SceneId).
+    /// See RenderService.GetRendersAsync.
+    /// </summary>
+    public class RenderItemResponse
+    {
+        public string Id { get; set; } = string.Empty;
+        public string ContentId { get; set; } = string.Empty;
+        public string? SurfaceId { get; set; }
+        public string CampaignId { get; set; } = string.Empty;
+        public string AssetId { get; set; } = string.Empty;
+        public string ExportPreset { get; set; } = string.Empty;
+        public string StorageKey { get; set; } = string.Empty;
+        public string RenderStatus { get; set; } = string.Empty;
+        public string? SceneId { get; set; }
+        public string? PromptText { get; set; }
+        public string? PreviewStorageKey { get; set; }
+        public string? RenderMode { get; set; }
+        public int Progress { get; set; }
+        public int ProcessingDurationMs { get; set; }
+        public string? LastErrorMessage { get; set; }
+        public string CompositingEngine { get; set; } = string.Empty;
+        public string QualityTier { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+
+        /// <summary>ContentItem.Title — null if the source content has since been deleted.</summary>
+        public string? ContentTitle { get; set; }
+        /// <summary>SceneItem.SceneIndex for the resolved SceneId — null if unresolvable.</summary>
+        public int? SceneIndex { get; set; }
+        /// <summary>SurfaceItem.SurfaceType — null for PromptEdit renders (no surface) or a deleted surface.</summary>
+        public string? SurfaceType { get; set; }
+        /// <summary>CreativeAsset.Name — null if the asset has since been deleted.</summary>
+        public string? AssetName { get; set; }
+    }
 }
