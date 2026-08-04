@@ -248,7 +248,7 @@ public class VideoChunkingServiceTests : IDisposable
         Assert.Single(chunks); // 2s < MaxChunkDuration — single chunk, no split needed
 
         var splicedPath = Path.Combine(_workDir, "spliced.mp4");
-        var result = await chunker.SpliceChunksAsync(chunks, videoPath, splicedPath, Fps);
+        var result = await chunker.SpliceChunksAsync(chunks, splicedPath, Fps);
 
         Assert.True(File.Exists(result));
         Assert.True(new FileInfo(result).Length > 0);

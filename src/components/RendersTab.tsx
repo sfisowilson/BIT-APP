@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { Cpu, Download, Film, Loader2, CheckCircle, XCircle, Clock, RefreshCw, ExternalLink } from 'lucide-react';
+import { Cpu, Download, Film, Loader2, CheckCircle, XCircle, Clock, RefreshCw, ExternalLink, AlertTriangle } from 'lucide-react';
 import type { RenderItem } from '../types';
 import { usePaginatedData } from '../hooks/usePaginatedData';
 import { Pagination } from './Pagination';
@@ -132,16 +132,18 @@ export const RendersTab: React.FC<RendersTabProps> = ({ campaignId, campaignName
             {renders.map(r => {
               const isProcessing = r.renderStatus === 'Processing' || r.renderStatus === 'Queued';
               const isFinished = r.renderStatus === 'Finished';
+              const isNeedsReview = r.renderStatus === 'NeedsReview';
               const isFailed = r.renderStatus === 'Failed';
               return (
-                <div key={r.id} className={`border rounded-xl p-4 transition-all ${isProcessing ? 'border-amber-200 bg-amber-50/30' : isFinished ? 'border-emerald-200 bg-emerald-50/30' : 'border-red-200 bg-red-50/30'}`}>
+                <div key={r.id} className={`border rounded-xl p-4 transition-all ${isProcessing ? 'border-amber-200 bg-amber-50/30' : isFinished ? 'border-emerald-200 bg-emerald-50/30' : isNeedsReview ? 'border-amber-200 bg-amber-50/30' : 'border-red-200 bg-red-50/30'}`}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2.5">
                       {isProcessing ? <Loader2 className="h-4 w-4 text-amber-500 animate-spin" /> :
                        isFinished ? <CheckCircle className="h-4 w-4 text-emerald-500" /> :
+                       isNeedsReview ? <AlertTriangle className="h-4 w-4 text-amber-500" /> :
                        <XCircle className="h-4 w-4 text-red-500" />}
                       <span className="text-sm font-bold text-slate-800">Render #{r.id.slice(0, 8)}</span>
-                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${isProcessing ? 'bg-amber-100 text-amber-700' : isFinished ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${isProcessing ? 'bg-amber-100 text-amber-700' : isFinished ? 'bg-emerald-100 text-emerald-700' : isNeedsReview ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
                         {r.renderStatus}
                       </span>
                     </div>
@@ -187,8 +189,8 @@ export const RendersTab: React.FC<RendersTabProps> = ({ campaignId, campaignName
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 mt-2">
-                    {isFinished && r.storageKey && (
-                      <a href={r.storageKey} download className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all shadow-sm">
+                    {(isFinished || isNeedsReview) && r.storageKey && (
+                      <a href={r.storageKey} download className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all shadow-sm ${isNeedsReview ? 'bg-amber-600 hover:bg-amber-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>
                         <Download className="h-3 w-3" /> Download MP4
                       </a>
                     )}
@@ -223,6 +225,12 @@ export const RendersTab: React.FC<RendersTabProps> = ({ campaignId, campaignName
                       <div className="mt-2 p-2.5 bg-red-100 border border-red-200 rounded-lg">
                         <div className="text-[9px] font-mono font-bold text-red-600 uppercase mb-0.5">Failure Reason (admin)</div>
                         <div className="text-[10px] text-red-700 font-mono leading-relaxed break-all">{r.lastErrorMessage}</div>
+                      </div>
+                    )}
+                    {isNeedsReview && r.lastErrorMessage && (
+                      <div className="mt-2 p-2.5 bg-amber-100 border border-amber-200 rounded-lg">
+                        <div className="text-[9px] font-mono font-bold text-amber-700 uppercase mb-0.5">Why this needs review</div>
+                        <div className="text-[10px] text-amber-800 leading-relaxed">{r.lastErrorMessage}</div>
                       </div>
                     )}
                   </div>

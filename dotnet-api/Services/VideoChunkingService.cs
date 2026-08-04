@@ -226,14 +226,14 @@ public class VideoChunkingService
 
     /// <summary>
     /// Splice processed chunks back into a single video using ffmpeg concat.
-    /// Handles failed chunks by filling gaps with original video frames.
+    /// Failed/unprocessed chunks fall back to their own already-extracted SourceChunkPath
+    /// (original footage for that timespan) rather than re-cutting it from the full source.
     /// </summary>
     /// <param name="chunks">List of chunks with ProcessedChunkPath set for successful ones.</param>
-    /// <param name="sourceVideoPath">Original source video for gap-filling.</param>
     /// <param name="outputPath">Output file path for the spliced video.</param>
     /// <param name="fps">Video frame rate.</param>
     public async Task<string> SpliceChunksAsync(
-        List<VideoChunk> chunks, string sourceVideoPath, string outputPath, double fps)
+        List<VideoChunk> chunks, string outputPath, double fps)
     {
         // Build concat file list
         var concatListPath = Path.Combine(Path.GetDirectoryName(outputPath)!, "concat_list.txt");
@@ -241,23 +241,21 @@ public class VideoChunkingService
 
         foreach (var chunk in chunks.OrderBy(c => c.Index))
         {
-            if (chunk.Failed)
-            {
-                // Extract original frames for this chunk's timespan as gap fill
-                var gapPath = Path.Combine(Path.GetDirectoryName(outputPath)!, $"gap_{chunk.Index}.mp4");
-                var gapArgs = $"-y -hide_banner -loglevel error " +
-                    $"-ss {chunk.StartTimeSeconds:F3} -i \"{sourceVideoPath.Replace("\\", "/")}\" " +
-                    $"-t {chunk.DurationSeconds:F3} -c copy \"{gapPath.Replace("\\", "/")}\"";
-                await RunFfmpegAsync(gapArgs);
-                lines.Add($"file '{gapPath.Replace("\\", "/")}'");
-                _logger.LogWarning("[Chunking] Chunk {Index}: using original frames (pikaswaps failed)", chunk.Index);
-            }
-            else if (!string.IsNullOrEmpty(chunk.ProcessedChunkPath) && File.Exists(chunk.ProcessedChunkPath))
+            if (!chunk.Failed && !string.IsNullOrEmpty(chunk.ProcessedChunkPath) && File.Exists(chunk.ProcessedChunkPath))
             {
                 lines.Add($"file '{chunk.ProcessedChunkPath.Replace("\\", "/")}'");
             }
             else
             {
+                // Gap fill (pikaswaps failed, or nothing was ever attempted for this chunk):
+                // reuse the chunk's own already-extracted SourceChunkPath rather than re-cutting
+                // the same timespan again from sourceVideoPath. Re-cutting independently via a
+                // second -ss/-c copy seek can snap to a different keyframe than the original
+                // extraction did, producing a visible splice-boundary glitch — since
+                // SourceChunkPath is always populated at chunk-creation time and still on disk
+                // here, there's no reason to redo that seek.
+                if (chunk.Failed)
+                    _logger.LogWarning("[Chunking] Chunk {Index}: using original frames (pikaswaps failed)", chunk.Index);
                 lines.Add($"file '{chunk.SourceChunkPath.Replace("\\", "/")}'");
             }
         }

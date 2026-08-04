@@ -275,6 +275,7 @@ public class RenderJobService
             var shotChunks = new List<VideoChunkingService.VideoChunk>();
             var totalShots = segments.Count;
             var shotsDone = 0;
+            var shotsFullyFailed = 0;
 
             foreach (var seg in segments)
             {
@@ -299,6 +300,7 @@ public class RenderJobService
                     var processedPath = await pikaswaps.CompositeWithPromptAsync(
                         shotVideoUrl, assetUrl, modifyRegion, prompt, $"{render.SurfaceId}_s{seg.ShotIndex}", ct: cancellationToken);
                     shotOutputPath = processedPath ?? shotSourcePath; // fall back to un-composited shot on failure
+                    if (processedPath == null) shotsFullyFailed++;
                 }
                 else
                 {
@@ -322,8 +324,9 @@ public class RenderJobService
                     }
 
                     shotOutputPath = Path.Combine(workAbsDir, $"shot_{seg.ShotIndex}.mp4");
-                    await chunker.SpliceChunksAsync(subChunks, shotSourcePath, shotOutputPath, fps);
+                    await chunker.SpliceChunksAsync(subChunks, shotOutputPath, fps);
                     try { Directory.Delete(subDir, true); } catch { }
+                    if (subChunks.All(c => c.Failed)) shotsFullyFailed++;
                 }
 
                 shotChunks.Add(new VideoChunkingService.VideoChunk
@@ -340,7 +343,7 @@ public class RenderJobService
             // ── Phase 5: Splice shots back into one scene-length clip (80% → 85%) ──
             await _hubContext.Clients.All.RenderProgress(renderId, 80, "Splicing shots");
             var finalVideoPath = Path.Combine(workAbsDir, $"spliced_{renderId}.mp4");
-            await chunker.SpliceChunksAsync(shotChunks.OrderBy(c => c.Index).ToList(), videoPath, finalVideoPath, fps);
+            await chunker.SpliceChunksAsync(shotChunks.OrderBy(c => c.Index).ToList(), finalVideoPath, fps);
 
             // ── Phase 6: Drift check (85% → 90%) — re-detect the surface in the composited output
             // and compare against the pre-composite tracked mask; flags NeedsReview, doesn't fail the render ──
@@ -357,7 +360,7 @@ public class RenderJobService
 
             try { Directory.Delete(workAbsDir, true); } catch { }
 
-            var needsReview = trackResult.OverallStatus == "PartialCoverage" || driftIoU < 0.85;
+            var needsReview = trackResult.OverallStatus == "PartialCoverage" || driftIoU < 0.85 || shotsFullyFailed > 0;
             render.Progress = 100;
             render.RenderStatus = needsReview ? "NeedsReview" : "Finished";
             render.CompositingEngine = "pikaswaps";
@@ -367,6 +370,24 @@ public class RenderJobService
             // reuse the same file for final assembly.
             render.SceneClipStorageKey = render.StorageKey;
             render.ProcessingDurationMs = (int)sw.ElapsedMilliseconds;
+
+            // A shot falling back to un-composited source footage doesn't fail the render (by design —
+            // see the note above Phase 4), but it must not be silently indistinguishable from a real
+            // success either. Surface it plainly: as the render's own error message and as a
+            // high-severity, distinctly-coded event, not just buried in per-attempt RESULT_ERROR logs.
+            if (shotsFullyFailed == totalShots)
+            {
+                render.LastErrorMessage = $"Compositing failed on all {totalShots} shot(s) — Pikaswaps returned no usable output for every shot, so the asset is not visible anywhere in this render. Output is 100% unmodified original footage. Check the RESULT_ERROR events logged for this render (a repeated fetch failure usually means the cloudflared tunnel is down).";
+                await eventLog.LogEventAsync("RenderEngine", "COMPOSITING_ALL_SHOTS_FAILED", "Error",
+                    $"Render {renderId}: all {totalShots} shot(s) failed to composite — output contains zero branded footage despite RenderStatus reporting completion.");
+            }
+            else if (shotsFullyFailed > 0)
+            {
+                render.LastErrorMessage = $"Compositing failed on {shotsFullyFailed} of {totalShots} shot(s) — those portions of the output use unmodified original footage instead of the placed asset.";
+                await eventLog.LogEventAsync("RenderEngine", "COMPOSITING_PARTIAL_FAILURE", "Warning",
+                    $"Render {renderId}: {shotsFullyFailed}/{totalShots} shot(s) failed to composite and fell back to original footage.");
+            }
+
             await db.SaveChangesAsync(cancellationToken);
             await _hubContext.Clients.All.RenderProgress(renderId, 100, "Complete");
 
@@ -604,7 +625,7 @@ public class RenderJobService
 
             var outputPath = Path.Combine(rendersDir, $"BIT_Render_{renderId}.mp4");
             await chunker.SpliceChunksAsync(
-                shotChunks.OrderBy(c => c.Index).ToList(), videoPath, outputPath, fps);
+                shotChunks.OrderBy(c => c.Index).ToList(), outputPath, fps);
 
             // Cleanup
             try { Directory.Delete(workDir, true); } catch { }

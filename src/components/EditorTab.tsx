@@ -1216,10 +1216,12 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     const renderForSurface = renderList.find(r => r.surfaceId === sf.id);
                     const isRenderProcessing = renderForSurface && (renderForSurface.renderStatus === 'Queued' || renderForSurface.renderStatus === 'Processing');
                     const isRenderFinished = renderForSurface?.renderStatus === 'Finished';
+                    const isRenderNeedsReview = renderForSurface?.renderStatus === 'NeedsReview';
                     const isRenderFailed = renderForSurface?.renderStatus === 'Failed';
                     return (
                       <div key={sf.id} className={`border rounded-lg px-3 py-2 ${
                         isRenderFinished ? 'bg-emerald-50/50 border-emerald-200/60' :
+                        isRenderNeedsReview ? 'bg-amber-50/50 border-amber-200/60' :
                         isRenderFailed ? 'bg-red-50/50 border-red-200/60' :
                         isRenderProcessing ? 'bg-amber-50/50 border-amber-200/60' :
                         'bg-emerald-50/50 border-emerald-200/60'
@@ -1228,6 +1230,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                           <div className="flex items-center gap-3">
                             <div className={`h-8 w-8 rounded-lg flex items-center justify-center overflow-hidden border ${
                               isRenderFinished ? 'bg-emerald-100 border-emerald-200' :
+                              isRenderNeedsReview ? 'bg-amber-100 border-amber-200' :
                               isRenderFailed ? 'bg-red-100 border-red-200' :
                               isRenderProcessing ? 'bg-amber-100 border-amber-200' :
                               'bg-emerald-100 border-emerald-200'
@@ -1235,7 +1238,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                               {asset.thumbnailUrl ? (
                                 <img src={asset.thumbnailUrl} alt={asset.name} className="h-full w-full object-cover" />
                               ) : (
-                                <Image className={`h-4 w-4 ${isRenderFailed ? 'text-red-600' : isRenderProcessing ? 'text-amber-600' : 'text-emerald-600'}`} />
+                                <Image className={`h-4 w-4 ${isRenderFailed ? 'text-red-600' : (isRenderProcessing || isRenderNeedsReview) ? 'text-amber-600' : 'text-emerald-600'}`} />
                               )}
                             </div>
                             <div>
@@ -1277,6 +1280,18 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                                 )}
                               </div>
                             )}
+                            {isRenderNeedsReview && (
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 font-semibold text-[10px] rounded-lg border border-amber-200">
+                                  <AlertTriangle className="h-3 w-3" /> Needs Review
+                                </span>
+                                {renderForSurface.storageKey && (
+                                  <a href={renderForSurface.storageKey} download className="inline-flex items-center gap-1 px-2 py-1 bg-amber-600 hover:bg-amber-500 text-white font-semibold text-[10px] rounded-lg cursor-pointer transition-all">
+                                    <Download className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </div>
+                            )}
                             {isRenderFailed && (
                               <div className="flex items-center gap-2">
                                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 text-red-700 font-semibold text-[10px] rounded-lg border border-red-200">
@@ -1300,11 +1315,19 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                             )}
                           </div>
                         </div>
-                        {/* Admin-only failure reason */}
+                        {/* NeedsReview reasons (e.g. compositing failed on every shot) are shown to
+                            everyone — that's exactly the kind of silent gap this is meant to close.
+                            Failure reasons stay admin-only, matching the rest of the app. */}
+                        {isRenderNeedsReview && renderForSurface.lastErrorMessage && (
+                          <div className="mt-2 p-2 bg-amber-100 border border-amber-200 rounded-lg">
+                            <div className="text-[9px] font-mono font-bold uppercase mb-0.5 text-amber-700">Why this needs review</div>
+                            <div className="text-[10px] leading-relaxed text-amber-800">{renderForSurface.lastErrorMessage}</div>
+                          </div>
+                        )}
                         {isRenderFailed && renderForSurface.lastErrorMessage && userRole === 'Admin' && (
                           <div className="mt-2 p-2 bg-red-100 border border-red-200 rounded-lg">
-                            <div className="text-[9px] font-mono font-bold text-red-600 uppercase mb-0.5">Failure Reason (admin)</div>
-                            <div className="text-[10px] text-red-700 font-mono leading-relaxed break-all">{renderForSurface.lastErrorMessage}</div>
+                            <div className="text-[9px] font-mono font-bold uppercase mb-0.5 text-red-600">Failure Reason (admin)</div>
+                            <div className="text-[10px] font-mono leading-relaxed break-all text-red-700">{renderForSurface.lastErrorMessage}</div>
                           </div>
                         )}
                       </div>
@@ -1597,6 +1620,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                       // NeedsReview is a completed, playable/downloadable output too (partial shot
                       // coverage or a drift-check below threshold) — not a failure.
                       const isRenderFinished = currentRender?.renderStatus === 'Finished' || currentRender?.renderStatus === 'NeedsReview';
+                      const isRenderNeedsReview = currentRender?.renderStatus === 'NeedsReview';
                       const isRenderFailed = currentRender?.renderStatus === 'Failed';
                       const playableUrl = currentRender && (currentRender.sceneClipStorageKey || currentRender.storageKey);
 
@@ -1620,6 +1644,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                         <div className="space-y-2">
                           {/* Render status card */}
                           <div className={`p-3 rounded-lg border ${
+                            isRenderNeedsReview ? 'bg-amber-50 border-amber-200' :
                             isRenderFinished ? 'bg-emerald-50 border-emerald-200' :
                             isRenderFailed ? 'bg-red-50 border-red-200' :
                             'bg-amber-50 border-amber-200'
@@ -1627,6 +1652,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-xs font-bold text-slate-800">Render Status</span>
                               <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                                isRenderNeedsReview ? 'bg-amber-100 text-amber-700' :
                                 isRenderFinished ? 'bg-emerald-100 text-emerald-700' :
                                 isRenderFailed ? 'bg-red-100 text-red-700' :
                                 'bg-amber-100 text-amber-700'
@@ -1705,6 +1731,17 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                               </button>
                             </div>
                           </div>
+                          {/* NeedsReview is a completed status, not a failure — but it can mean the asset
+                              never actually got placed (e.g. every shot's compositing call failed and
+                              fell back to original footage). Surface that plainly to every user, not just
+                              admins, since a silent "Finished"-looking status is exactly the confusing gap
+                              this is meant to close. */}
+                          {isRenderNeedsReview && currentRender.lastErrorMessage && (
+                            <div className="p-2.5 bg-amber-100 border border-amber-200 rounded-lg">
+                              <div className="text-[9px] font-mono font-bold text-amber-700 uppercase mb-0.5">Why this needs review</div>
+                              <div className="text-[10px] text-amber-800 leading-relaxed">{currentRender.lastErrorMessage}</div>
+                            </div>
+                          )}
                           {/* Admin-only failure reason */}
                           {isRenderFailed && currentRender.lastErrorMessage && userRole === 'Admin' && (
                             <div className="p-2.5 bg-red-100 border border-red-200 rounded-lg">
