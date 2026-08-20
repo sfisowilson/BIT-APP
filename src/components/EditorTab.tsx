@@ -639,86 +639,6 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                       <RefreshCw className="h-3 w-3" /> Replay Scene
                     </button>
                   )}
-                  {/* Approve interactive placement */}
-                  {isClickToPlaceFlow && (interactiveMask || interactiveQuad) && selectedCampaignId && (
-                    <button
-                      onClick={async () => {
-                        if (!interactiveAssetId) return;
-                        setInteractivePlacing(true);
-                        try {
-                          const assetType = interactionMode === 'signage' ? 'Planar' : 'Generative';
-
-                          // Persist the click/quad as a real SurfaceItem first — the render
-                          // dispatch below requires a surfaceId that already exists in the DB.
-                          let surfaceId: string;
-                          if (assetType === 'Planar' && interactiveQuad) {
-                            const created = await createSurfaceFromQuad({
-                              contentId: selectedVideo,
-                              frameIndex: currentVideoFrame,
-                              quadCornersJson: JSON.stringify(interactiveQuad),
-                            });
-                            surfaceId = created.surfaceId;
-                          } else if (interactiveMask) {
-                            const created = await createSurfaceFromClick({
-                              contentId: selectedVideo,
-                              frameIndex: currentVideoFrame,
-                              maskPolygonJson: JSON.stringify(interactiveMask.points),
-                              surfaceType: interactiveSurfaceDescription.trim() || undefined,
-                            });
-                            surfaceId = created.surfaceId;
-                          } else {
-                            return;
-                          }
-
-                          await confirmInteractivePlacement({
-                            contentId: selectedVideo,
-                            surfaceId,
-                            campaignId: selectedCampaignId,
-                            assetId: interactiveAssetId,
-                            assetType,
-                          });
-                          setInteractiveMask(null);
-                          setInteractiveQuad(null);
-                          setInteractiveSurfaceDescription('');
-                        } catch (err: any) {
-                          console.error('Interactive placement failed:', err);
-                          setActionError(err.message || 'Failed to submit placement.');
-                        } finally {
-                          setInteractivePlacing(false);
-                        }
-                      }}
-                      disabled={interactivePlacing || !interactiveAssetId}
-                      className="px-3 py-1.5 text-[10px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white cursor-pointer transition-all shadow-sm whitespace-nowrap"
-                    >
-                      {interactivePlacing ? 'Dispatching…' : '✅ Approve & Render'}
-                    </button>
-                  )}
-                  {/* Describe exactly what was selected — feeds Pikaswaps' modify_region text prompt,
-                      since the precise SAM3 mask geometry itself is never sent to Pikaswaps (it only
-                      accepts a free-text region description). Without this, every Insert Product
-                      render falls back to a generic "Product Surface" label. */}
-                  {isClickToPlaceFlow && interactiveMask && (
-                    <input
-                      type="text"
-                      value={interactiveSurfaceDescription}
-                      onChange={(e) => setInteractiveSurfaceDescription(e.target.value)}
-                      placeholder="Describe exactly what to replace (e.g. 'the flat poster face only, not the support posts')"
-                      className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] text-slate-800 focus:outline-none w-64"
-                    />
-                  )}
-                  {/* Asset selector for interactive placement */}
-                  {isClickToPlaceFlow && (interactiveMask || interactiveQuad) && (
-                    <select
-                      value={interactiveAssetId}
-                      onChange={(e) => setInteractiveAssetId(e.target.value)}
-                      className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] text-slate-800 focus:outline-none"
-                    >
-                      <option value="">Select asset…</option>
-                      {assetList.map(a => (
-                        <option key={a.id} value={a.id}>{a.name}</option>
-                      ))}
-                    </select>
-                  )}
                   <div className="flex items-center gap-1 bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 text-slate-600 font-mono text-[10px]">
                     <Eye className="h-3 w-3 text-fuchsia-600 animate-pulse" />
                     <span className="font-bold text-slate-700">Preview:</span>
@@ -1405,28 +1325,230 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               </div>
             )}
 
-            {/* AI Placement Assistant — Match to Surface / Generate New. Visibility and content are
-                now driven entirely by the top flow tabs (no more internal mode pill duplicating
-                that choice). */}
-            {(activeFlow === 'match' || activeFlow === 'generate') && (
+          </div>
+
+          {/* ── RIGHT (1/3): Surface details + Asset Placement + Navigate ── */}
+          <div className="col-span-1 space-y-6">
+
+            {/* Placement Settings — every flow's configuration lives here, in one consistent
+                sidebar spot, instead of scattered across the video toolbar (Insert Product/Place
+                Signage used to live there) and a separate left-column card (Match to
+                Surface/Generate New used to live there). Content switches with the active flow
+                tab; the header/description treatment stays the same for all five so it's always
+                obvious this is "where this flow's settings are." */}
             <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
               <div className="flex items-center gap-2.5 border-b border-slate-100 pb-4 mb-4">
-                <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${activeFlow === 'match' ? 'bg-emerald-50 text-emerald-600' : 'bg-fuchsia-50 text-fuchsia-600'}`}>
+                <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${
+                  activeFlow === 'insert' ? 'bg-indigo-50 text-indigo-600' :
+                  activeFlow === 'signage' ? 'bg-emerald-50 text-emerald-600' :
+                  activeFlow === 'match' ? 'bg-emerald-50 text-emerald-600' :
+                  'bg-fuchsia-50 text-fuchsia-600'
+                }`}>
                   <Sparkles className="h-4 w-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-800 font-display flex items-center gap-1.5">
-                    AI Placement Assistant
+                  <h3 className="text-sm font-bold text-slate-800 font-display">
+                    {activeFlow === 'insert' && 'Insert Product'}
+                    {activeFlow === 'signage' && 'Place Signage'}
+                    {activeFlow === 'match' && 'Match to Surface'}
+                    {activeFlow === 'generate' && 'Generate New'}
+                    {activeFlow === 'anchor' && 'Anchor & Generate'}
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    {activeFlow === 'match'
-                      ? <>Describe which assets to place on which surfaces. <strong>Never modifies the original scene.</strong></>
-                      : <>Describe a brand-new placement — AI generates the video clip directly.</>}
+                    {activeFlow === 'insert' && 'Click a point on the video, then approve here to render.'}
+                    {activeFlow === 'signage' && 'Draw a 4-corner quad on the video, then approve here to render.'}
+                    {activeFlow === 'match' && <>Describe which assets to place on which surfaces. <strong>Never modifies the original scene.</strong></>}
+                    {activeFlow === 'generate' && 'Describe a brand-new placement — AI generates the video clip directly.'}
+                    {activeFlow === 'anchor' && 'Anchor on a paused frame, then propagate across the scene.'}
                   </p>
                 </div>
               </div>
 
-              {activeFlow === 'generate' ? (
+              {/* Insert Product / Place Signage — click-to-place config, moved here from the video
+                  toolbar. The click/quad drawing itself still happens on the video (can't move
+                  that), but the description + asset + submit controls live here now. */}
+              {isClickToPlaceFlow && (
+                (interactiveMask || interactiveQuad) ? (
+                  <div className="space-y-3">
+                    {interactiveMask && (
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
+                          Describe exactly what to replace
+                        </label>
+                        <input
+                          type="text"
+                          value={interactiveSurfaceDescription}
+                          onChange={(e) => setInteractiveSurfaceDescription(e.target.value)}
+                          placeholder="e.g. 'the flat poster face only, not the support posts'"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none"
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
+                        Brand Asset
+                      </label>
+                      <select
+                        value={interactiveAssetId}
+                        onChange={(e) => setInteractiveAssetId(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none"
+                      >
+                        <option value="">Select asset…</option>
+                        {assetList.map(a => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!interactiveAssetId || !selectedCampaignId) return;
+                        setInteractivePlacing(true);
+                        try {
+                          const assetType = interactionMode === 'signage' ? 'Planar' : 'Generative';
+
+                          // Persist the click/quad as a real SurfaceItem first — the render
+                          // dispatch below requires a surfaceId that already exists in the DB.
+                          let surfaceId: string;
+                          if (assetType === 'Planar' && interactiveQuad) {
+                            const created = await createSurfaceFromQuad({
+                              contentId: selectedVideo,
+                              frameIndex: currentVideoFrame,
+                              quadCornersJson: JSON.stringify(interactiveQuad),
+                            });
+                            surfaceId = created.surfaceId;
+                          } else if (interactiveMask) {
+                            const created = await createSurfaceFromClick({
+                              contentId: selectedVideo,
+                              frameIndex: currentVideoFrame,
+                              maskPolygonJson: JSON.stringify(interactiveMask.points),
+                              surfaceType: interactiveSurfaceDescription.trim() || undefined,
+                            });
+                            surfaceId = created.surfaceId;
+                          } else {
+                            return;
+                          }
+
+                          await confirmInteractivePlacement({
+                            contentId: selectedVideo,
+                            surfaceId,
+                            campaignId: selectedCampaignId,
+                            assetId: interactiveAssetId,
+                            assetType,
+                          });
+                          setInteractiveMask(null);
+                          setInteractiveQuad(null);
+                          setInteractiveSurfaceDescription('');
+                        } catch (err: any) {
+                          console.error('Interactive placement failed:', err);
+                          setActionError(err.message || 'Failed to submit placement.');
+                        } finally {
+                          setInteractivePlacing(false);
+                        }
+                      }}
+                      disabled={interactivePlacing || !interactiveAssetId || !selectedCampaignId}
+                      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white font-bold text-xs rounded-lg cursor-pointer transition-all shadow-sm"
+                    >
+                      {interactivePlacing ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Dispatching…</> : <>✅ Approve & Render</>}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-400 italic text-center py-6">
+                    {activeFlow === 'insert' ? 'Click a point on the video to segment it with SAM3.' : 'Draw a 4-corner quad on the video.'}
+                  </div>
+                )
+              )}
+
+              {/* Match to Surface */}
+              {activeFlow === 'match' && (
+                currentScene ? (
+                  <div className="space-y-4">
+                    <div className="text-2xs font-mono bg-emerald-50/50 text-emerald-700 border border-emerald-100/50 p-2.5 rounded-lg">
+                      <span>Scene #{currentScene.sceneIndex} · {surfacesForScene.length} surfaces · {campaignAssets.length} campaign assets available</span>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1.5 font-mono">
+                        Placement Instructions
+                      </label>
+                      <textarea
+                        value={aiPromptText}
+                        onChange={(e) => setAiPromptText(e.target.value)}
+                        placeholder={'Examples:\n"Place the Nike logo on the billboard"\n"Put Coke Zero on the wall banner and Adidas on the field board"\n"Place all beverage assets on available surfaces"'}
+                        rows={3}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:outline-none focus:border-emerald-500/50 resize-none font-sans"
+                      />
+                    </div>
+
+                    {/* Show available assets for context */}
+                    <div className="flex flex-wrap gap-1 text-[9px] font-mono text-slate-400">
+                      <span className="font-bold text-slate-500">Assets:</span>
+                      {campaignAssets.slice(0, 6).map(a => (
+                        <span key={a.id} className="bg-slate-100 px-1.5 py-0.5 rounded">{a.name}</span>
+                      ))}
+                      {campaignAssets.length > 6 && <span className="text-slate-300">+{campaignAssets.length - 6} more</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-1 text-[9px] font-mono text-slate-400">
+                      <span className="font-bold text-slate-500">Surfaces:</span>
+                      {surfacesForScene.slice(0, 6).map(sf => (
+                        <span key={sf.id} className="bg-slate-100 px-1.5 py-0.5 rounded">{sf.surfaceType}</span>
+                      ))}
+                      {surfacesForScene.length > 6 && <span className="text-slate-300">+{surfacesForScene.length - 6} more</span>}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!aiPromptText.trim()) return;
+                        setAiPlacing(true);
+                        try {
+                          const { suggestPlacements } = await import('../apiClient');
+                          const result = await suggestPlacements({
+                            prompt: aiPromptText,
+                            contentId: selectedVideo || '',
+                            sceneId: currentScene?.id || '',
+                            surfaces: surfacesForScene.map(sf => ({ id: sf.id, surfaceType: sf.surfaceType, confidenceScore: sf.confidenceScore })),
+                            assets: campaignAssets.map(a => ({ id: a.id, name: a.name, brandCategory: a.brandCategory })),
+                          });
+                          let placed = 0;
+                          for (const pair of result.placements) {
+                            if (surfaceAssetPairs[pair.surfaceId]) continue;
+                            if (Object.values(surfaceAssetPairs).includes(pair.assetId)) continue;
+                            onPlaceAsset(pair.surfaceId, pair.assetId);
+                            placed++;
+                          }
+                          setAiExplanation(result.explanation);
+                          setAiPromptText('');
+                        } catch (err: any) {
+                          console.error('AI placement failed:', err);
+                          setAiExplanation(err.message || 'Placement failed. Check Gemini API key.');
+                        } finally {
+                          setAiPlacing(false);
+                        }
+                      }}
+                      disabled={!aiPromptText.trim() || campaignAssets.length === 0 || surfacesForScene.length === 0 || aiPlacing}
+                      className="w-full inline-flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer shadow-sm"
+                    >
+                      {aiPlacing ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Asking Gemini...</> : <><Wand2 className="h-3.5 w-3.5" />Auto-Place Assets with AI</>}
+                    </button>
+
+                    {aiExplanation && (
+                      <div className="text-[10px] text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 font-medium">
+                        💡 {aiExplanation}
+                      </div>
+                    )}
+
+                    {campaignAssets.length === 0 && (
+                      <div className="text-[10px] text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                        No campaign assets available. Add assets in the Assets tab first.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-xs text-slate-400 italic text-center py-6">Select a scene above to use Match to Surface.</div>
+                )
+              )}
+
+              {/* Generate New */}
+              {activeFlow === 'generate' && (
                 <PromptGeneratePanel
                   currentScene={currentScene}
                   campaignAssets={campaignAssets}
@@ -1437,97 +1559,51 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                   onApprove={async (renderId) => { await onApprovePromptSplice?.(renderId); }}
                   onReject={async (renderId) => { await onRejectPromptPlacement?.(renderId); }}
                 />
-              ) : currentScene ? (
-                <div className="space-y-4">
-                  <div className="text-2xs font-mono bg-emerald-50/50 text-emerald-700 border border-emerald-100/50 p-2.5 rounded-lg">
-                    <span>Scene #{currentScene.sceneIndex} · {surfacesForScene.length} surfaces · {campaignAssets.length} campaign assets available</span>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1.5 font-mono">
-                      Placement Instructions
-                    </label>
-                    <textarea
-                      value={aiPromptText}
-                      onChange={(e) => setAiPromptText(e.target.value)}
-                      placeholder={'Examples:\n"Place the Nike logo on the billboard"\n"Put Coke Zero on the wall banner and Adidas on the field board"\n"Place all beverage assets on available surfaces"'}
-                      rows={3}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-800 focus:outline-none focus:border-emerald-500/50 resize-none font-sans"
-                    />
-                  </div>
+              )}
 
-                  {/* Show available assets for context */}
-                  <div className="flex flex-wrap gap-1 text-[9px] font-mono text-slate-400">
-                    <span className="font-bold text-slate-500">Assets:</span>
-                    {campaignAssets.slice(0, 6).map(a => (
-                      <span key={a.id} className="bg-slate-100 px-1.5 py-0.5 rounded">{a.name}</span>
-                    ))}
-                    {campaignAssets.length > 6 && <span className="text-slate-300">+{campaignAssets.length - 6} more</span>}
+              {/* Anchor & Generate */}
+              {activeFlow === 'anchor' && (
+                compositingEngine !== 'fal-kontext-kling' ? (
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    ⚠️ Anchor & Generate requires the "fal-kontext-kling" compositing engine to be configured in Admin → Platform Settings.
                   </div>
-                  <div className="flex flex-wrap gap-1 text-[9px] font-mono text-slate-400">
-                    <span className="font-bold text-slate-500">Surfaces:</span>
-                    {surfacesForScene.slice(0, 6).map(sf => (
-                      <span key={sf.id} className="bg-slate-100 px-1.5 py-0.5 rounded">{sf.surfaceType}</span>
-                    ))}
-                    {surfacesForScene.length > 6 && <span className="text-slate-300">+{surfacesForScene.length - 6} more</span>}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!aiPromptText.trim()) return;
-                      setAiPlacing(true);
-                      try {
-                        const { suggestPlacements } = await import('../apiClient');
-                        const result = await suggestPlacements({
-                          prompt: aiPromptText,
-                          contentId: selectedVideo || '',
-                          sceneId: currentScene?.id || '',
-                          surfaces: surfacesForScene.map(sf => ({ id: sf.id, surfaceType: sf.surfaceType, confidenceScore: sf.confidenceScore })),
-                          assets: campaignAssets.map(a => ({ id: a.id, name: a.name, brandCategory: a.brandCategory })),
-                        });
-                        let placed = 0;
-                        for (const pair of result.placements) {
-                          if (surfaceAssetPairs[pair.surfaceId]) continue;
-                          if (Object.values(surfaceAssetPairs).includes(pair.assetId)) continue;
-                          onPlaceAsset(pair.surfaceId, pair.assetId);
-                          placed++;
-                        }
-                        setAiExplanation(result.explanation);
-                        setAiPromptText('');
-                      } catch (err: any) {
-                        console.error('AI placement failed:', err);
-                        setAiExplanation(err.message || 'Placement failed. Check Gemini API key.');
-                      } finally {
-                        setAiPlacing(false);
-                      }
+                ) : currentScene ? (
+                  <KontextKlingPanel
+                    key={kontextResetKey}
+                    currentScene={currentScene}
+                    currentSurface={currentSurface}
+                    campaignAssets={campaignAssets}
+                    contentId={selectedVideo || ''}
+                    campaignId={selectedCampaignId}
+                    currentFrame={currentVideoFrame}
+                    activeRender={(() => {
+                      const candidates = renderList
+                        .filter(r => r.renderMode === 'KontextStep' && r.sceneId === currentScene?.id);
+                      // Prioritize: PreviewReady (Kling already succeeded — furthest along) > KontextReady
+                      // (frame-only, step 1) > Processing/Queued (in-flight) > Failed (dead). A stray newer
+                      // KontextReady attempt for the same scene must never hide an already-completed
+                      // PreviewReady result — that result is strictly more progressed regardless of age.
+                      const statusOrder = (s: string) =>
+                        s === 'PreviewReady' ? 0 :
+                        s === 'KontextReady' ? 1 :
+                        s === 'Processing' || s === 'Queued' ? 2 : 3;
+                      candidates.sort((a, b) =>
+                        statusOrder(a.renderStatus) - statusOrder(b.renderStatus) ||
+                        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                      );
+                      return candidates[0];
+                    })()}
+                    onRenderCreated={(render) => {
+                      if (!render) { setKontextResetKey(k => k + 1); return; }
+                      onRenderUpdated?.(render);
                     }}
-                    disabled={!aiPromptText.trim() || campaignAssets.length === 0 || surfacesForScene.length === 0 || aiPlacing}
-                    className="w-full inline-flex items-center justify-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-300 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer shadow-sm"
-                  >
-                    {aiPlacing ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Asking Gemini...</> : <><Wand2 className="h-3.5 w-3.5" />Auto-Place Assets with AI</>}
-                  </button>
-
-                  {aiExplanation && (
-                    <div className="text-[10px] text-emerald-700 bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 font-medium">
-                      💡 {aiExplanation}
-                    </div>
-                  )}
-
-                  {campaignAssets.length === 0 && (
-                    <div className="text-[10px] text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-200">
-                      No campaign assets available. Add assets in the Assets tab first.
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-xs text-slate-400 italic text-center py-6">Select a scene above to use the AI Placement Assistant.</div>
+                    onSetRenderQueuedForFinal={onSetRenderQueuedForFinal}
+                  />
+                ) : (
+                  <div className="text-xs text-slate-400 italic text-center py-6">Select a scene above to use Anchor & Generate.</div>
+                )
               )}
             </div>
-            )}
-          </div>
-
-          {/* ── RIGHT (1/3): Surface details + Asset Placement + Navigate ── */}
-          <div className="col-span-1 space-y-6">
 
             {/* PHASE 2: Asset Placement Panel — the configs for whichever flow is active (asset
                 picker, AI suggest, submit/render controls) live here. Moved above Surface Details
@@ -1753,56 +1829,6 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     })()}
                   </div>
                 )}
-              </div>
-            )}
-
-            {/* Anchor & Generate — merges what used to be two separate panels (a one-shot
-                "Anchor & Generate" card and this step-by-step Kontext→Kling panel) into one, via
-                the Quick mode toggle inside KontextKlingPanel. No surfaces required — pause at
-                any frame. Requires the fal-kontext-kling engine to be configured. */}
-            {activeFlow === 'anchor' && currentScene && compositingEngine !== 'fal-kontext-kling' && (
-              <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
-                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  ⚠️ Anchor & Generate requires the "fal-kontext-kling" compositing engine to be configured in Admin → Platform Settings.
-                </div>
-              </div>
-            )}
-            {activeFlow === 'anchor' && currentScene && compositingEngine === 'fal-kontext-kling' && (
-              <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
-                <h3 className="text-sm font-bold text-slate-800 font-display flex items-center gap-2 mb-4">
-                  <Sparkles className="h-4 w-4 text-fuchsia-500" />Anchor & Generate
-                </h3>
-              <KontextKlingPanel
-                key={kontextResetKey}
-                currentScene={currentScene}
-                currentSurface={currentSurface}
-                campaignAssets={campaignAssets}
-                contentId={selectedVideo || ''}
-                campaignId={selectedCampaignId}
-                currentFrame={currentVideoFrame}
-                activeRender={(() => {
-                  const candidates = renderList
-                    .filter(r => r.renderMode === 'KontextStep' && r.sceneId === currentScene?.id);
-                  // Prioritize: PreviewReady (Kling already succeeded — furthest along) > KontextReady
-                  // (frame-only, step 1) > Processing/Queued (in-flight) > Failed (dead). A stray newer
-                  // KontextReady attempt for the same scene must never hide an already-completed
-                  // PreviewReady result — that result is strictly more progressed regardless of age.
-                  const statusOrder = (s: string) =>
-                    s === 'PreviewReady' ? 0 :
-                    s === 'KontextReady' ? 1 :
-                    s === 'Processing' || s === 'Queued' ? 2 : 3;
-                  candidates.sort((a, b) =>
-                    statusOrder(a.renderStatus) - statusOrder(b.renderStatus) ||
-                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                  );
-                  return candidates[0];
-                })()}
-                onRenderCreated={(render) => {
-                  if (!render) { setKontextResetKey(k => k + 1); return; }
-                  onRenderUpdated?.(render);
-                }}
-                onSetRenderQueuedForFinal={onSetRenderQueuedForFinal}
-              />
               </div>
             )}
 
