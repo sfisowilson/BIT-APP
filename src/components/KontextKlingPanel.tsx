@@ -28,10 +28,11 @@ interface KontextKlingPanelProps {
 
 type Step = 'setup' | 'generating-kontext' | 'review-frame' | 'generating-kling' | 'review-video';
 
-// What actually gets sent to Kling when the propagation prompt field is left blank — matches the
-// field's placeholder text, so "optional" genuinely means "this sensible default applies" rather
-// than silently falling back to reusing the earlier placement prompt (which describes WHERE to
-// place the asset, not HOW Kling should propagate/animate it — a different concern).
+// Illustrative placeholder text only — NOT sent when the field is left blank. An earlier version
+// of this made blank actually send this generic string, which overwrote the specific placement
+// prompt from the Kontext step and caused Kling to add unrelated scene elements instead of
+// staying focused on the brand. Leaving the field blank now correctly falls through to the
+// backend's own default: keep reusing the original, specific placement prompt.
 const DEFAULT_KLING_PROPAGATION_PROMPT =
   'Keep the brand placement consistent across the entire scene, matching all camera movements.';
 
@@ -213,8 +214,13 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
     setSubmitting(true);
     setError('');
     try {
+      // Leaving this blank must NOT send a generic filler prompt — the backend then keeps
+      // reusing the original, specific placement prompt (e.g. "place the X logo on the Y
+      // billboard face") set during the Kontext frame step, which is what actually keeps Kling
+      // focused on just the brand. A hardcoded generic prompt was tried here and made Kling add
+      // unrelated scene elements instead, because it overwrote that specific guidance.
       const dto: PropagateKlingRequest = {
-        promptText: klingPrompt.trim() || DEFAULT_KLING_PROPAGATION_PROMPT,
+        promptText: klingPrompt.trim() || undefined,
       };
       const render = await propagateKling(activeRender.id, dto);
       onRenderCreated(render);
@@ -581,7 +587,7 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
         {/* Kling prompt */}
         <div>
           <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
-            Kling Propagation Prompt <span className="text-slate-300">(optional — leave blank to use the default below)</span>
+            Kling Propagation Prompt <span className="text-slate-300">(optional — leave blank to keep using the placement prompt above)</span>
           </label>
           <textarea
             value={klingPrompt}
@@ -683,7 +689,7 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
         {/* Updated prompt for redo */}
         <div>
           <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">
-            Updated Prompt <span className="text-slate-300">(for redo — leave blank to use the default below)</span>
+            Updated Prompt <span className="text-slate-300">(for redo — leave blank to keep using the same placement prompt)</span>
           </label>
           <textarea
             value={klingPrompt}
