@@ -22,4 +22,20 @@ namespace Afrobotics.Bit.Api.DTOs
         /// <summary>Optional error message (used when transitioning to Failed).</summary>
         public string? ErrorMessage { get; set; }
     }
+
+    /// <summary>Response from the video probe endpoint — ffprobe-extracted metadata.</summary>
+    public class VideoProbeResponseDto
+    {
+        /// <summary>Key to reference the pre-uploaded file when finalising the upload.</summary>
+        public string ProbeKey { get; set; } = string.Empty;
+        public string FileName { get; set; } = string.Empty;
+        public string Duration { get; set; } = "00:00:00";
+        public int Fps { get; set; }
+        public string Resolution { get; set; } = string.Empty;
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public string Codec { get; set; } = string.Empty;
+        public string Container { get; set; } = string.Empty;
+        public long FileSize { get; set; }
+    }
 }

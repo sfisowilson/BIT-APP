@@ -3,6 +3,7 @@ using System;
 using Afrobotics.Bit.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Afrobotics.Bit.Api.Migrations
 {
     [DbContext(typeof(PostgresDbContext))]
-    partial class PostgresDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807065630_AddKontextFrameStorageKey")]
+    partial class AddKontextFrameStorageKey
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -500,10 +503,6 @@ namespace Afrobotics.Bit.Api.Migrations
 
                     b.Property<string>("KontextFrameStorageKey")
                         .HasColumnType("text");
-
-                    b.Property<string>("KontextPromptText")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
 
                     b.Property<string>("LastErrorMessage")
                         .HasMaxLength(2000)

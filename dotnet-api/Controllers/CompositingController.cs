@@ -13,10 +13,20 @@ namespace Afrobotics.Bit.Api.Controllers
     public class CompositingController : ControllerBase
     {
         private readonly ICompositingService _compositingService;
+        private readonly IPlatformSettingsService _settings;
 
-        public CompositingController(ICompositingService compositingService)
+        public CompositingController(ICompositingService compositingService, IPlatformSettingsService settings)
         {
             _compositingService = compositingService;
+            _settings = settings;
+        }
+
+        /// <summary>Returns the active compositing engine key so the frontend can gate engine-specific UI.</summary>
+        [HttpGet("engine")]
+        public async Task<IActionResult> GetActiveEngine()
+        {
+            var engine = await _settings.GetAsync("engine_compositing") ?? "opencv";
+            return Ok(new { engine });
         }
 
         [HttpPost("preview")]

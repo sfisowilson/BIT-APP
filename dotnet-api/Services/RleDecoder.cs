@@ -6,16 +6,24 @@ using System.Text;
 namespace Afrobotics.Bit.Api.Services;
 
 /// <summary>
-/// Decodes SAM3 video-rle Run-Length Encoded (RLE) masks into usable formats.
-/// RLE format: Kaggle/COCO order — counts alternate between runs of 0s and 1s,
-/// starting with 0 (background). The decoded bool[,] has true = foreground, false = background.
+/// Decodes fal.ai SAM3 video-rle masks into usable formats.
+///
+/// RLE format: NOT the classic COCO/pycocotools alternating-background/foreground toggle
+/// encoding the field name suggests — verified empirically against a real API response (the
+/// decoded foreground bounding box was compared against the object's independently-reported
+/// normalized `box` field and matched almost exactly). fal.ai's actual format is a flat list of
+/// (absolute_pixel_position, run_length) PAIRS, each directly specifying one foreground run in
+/// row-major pixel order — background is implicit (everywhere not covered by a pair), and there
+/// is no start-with-background toggle to track. Decoding this via the COCO toggle convention
+/// (tried first) silently scattered every mask into a degenerate near-zero-area sliver.
+/// The decoded bool[,] has true = foreground, false = background.
 /// </summary>
 public static class RleDecoder
 {
     /// <summary>
-    /// Decode a COCO/Kaggle RLE string into a 2D boolean mask.
+    /// Decode a fal.ai SAM3 video-rle string into a 2D boolean mask.
     /// </summary>
-    /// <param name="rle">RLE string in Kaggle/COCO order (space-separated integer counts).</param>
+    /// <param name="rle">RLE string: space-separated (position, length) pairs.</param>
     /// <param name="width">Mask width in pixels.</param>
     /// <param name="height">Mask height in pixels.</param>
     /// <returns>2D bool array: true = foreground (mask), false = background.</returns>
@@ -24,24 +32,23 @@ public static class RleDecoder
         if (string.IsNullOrWhiteSpace(rle))
             return new bool[height, width];
 
-        var counts = rle.Trim().Split(' ')
+        var nums = rle.Trim().Split(' ')
             .Select(s => int.Parse(s))
             .ToArray();
 
         var mask = new bool[height, width];
-        int pixel = 0;
-        bool value = false; // RLE starts with 0 (background)
+        int total = width * height;
 
-        foreach (var count in counts)
+        for (int i = 0; i + 1 < nums.Length; i += 2)
         {
-            for (int i = 0; i < count && pixel < width * height; i++)
+            int start = nums[i];
+            int len = nums[i + 1];
+            for (int p = start; p < start + len && p < total; p++)
             {
-                int y = pixel / width;
-                int x = pixel % width;
-                mask[y, x] = value;
-                pixel++;
+                int y = p / width;
+                int x = p % width;
+                mask[y, x] = true;
             }
-            value = !value; // Flip after each run
         }
 
         return mask;

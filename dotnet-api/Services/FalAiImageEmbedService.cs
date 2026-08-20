@@ -124,29 +124,49 @@ public class FalAiImageEmbedService
         Func<int, int, Task>? onProgress = null,
         string? contentId = null)
     {
-        var results = new Dictionary<int, float[]?>();
+        var results = new System.Collections.Concurrent.ConcurrentDictionary<int, float[]?>();
         var total = shotIndexToUrl.Count;
         var completed = 0;
         var failed = 0;
-        // Simple sequential for now — batching with parallel submits + unified
-        // poll loop is an optimization for when shot counts grow.
-        foreach (var (index, url) in shotIndexToUrl)
+
+        // Each embed can involve polling fal.ai's queue for up to 5 minutes, so running these
+        // strictly sequentially (as before) made a shot-heavy video (dozens to hundreds of
+        // shots) take tens of minutes just for embedding — before scene clustering or surface
+        // detection even start. Bounded parallelism keeps this from overwhelming fal.ai's API
+        // while cutting wall-clock time roughly by the concurrency factor.
+        var concurrencyStr = await _settings.GetAsync("sam3_embed_concurrency", "6");
+        var concurrency = int.TryParse(concurrencyStr, out var cVal) && cVal >= 1 ? cVal : 6;
+        using var semaphore = new SemaphoreSlim(concurrency);
+
+        async Task EmbedOneAsync(int index, string url)
         {
-            results[index] = await EmbedAsync(url, ct);
-            if (results[index] == null) failed++;
-            completed++;
+            await semaphore.WaitAsync(ct);
+            try
+            {
+                var result = await EmbedAsync(url, ct);
+                results[index] = result;
+                if (result == null) Interlocked.Increment(ref failed);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+
+            var completedSoFar = Interlocked.Increment(ref completed);
             if (onProgress != null)
             {
                 try
                 {
-                    await onProgress(completed, total);
+                    await onProgress(completedSoFar, total);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "[ImageEmbed] onProgress callback failed at {Completed}/{Total}", completed, total);
+                    _logger.LogWarning(ex, "[ImageEmbed] onProgress callback failed at {Completed}/{Total}", completedSoFar, total);
                 }
             }
         }
+
+        await Task.WhenAll(shotIndexToUrl.Select(kvp => EmbedOneAsync(kvp.Key, kvp.Value)));
 
         // Failures are otherwise only visible in console logs — surface an aggregate summary
         // to the DB event log so a fully-broken embedding pass (e.g. an unreachable base URL)
@@ -160,7 +180,7 @@ public class FalAiImageEmbedService
                 (failed == total ? " (all failed — check falai_api_key and sam3_video_base_url reachability)." : "."));
         }
 
-        return results;
+        return new Dictionary<int, float[]?>(results);
     }
 
     // ── Polling ──

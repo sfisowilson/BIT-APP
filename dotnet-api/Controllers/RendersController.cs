@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Afrobotics.Bit.Api.Data;
 using Afrobotics.Bit.Api.DTOs;
@@ -19,12 +20,14 @@ namespace Afrobotics.Bit.Api.Controllers
         private readonly IRenderService _renderService;
         private readonly PostgresDbContext _context;
         private readonly IEventLogService _eventLog;
+        private readonly GeminiKontextPromptService _kontextPromptService;
 
-        public RendersController(IRenderService renderService, PostgresDbContext context, IEventLogService eventLog)
+        public RendersController(IRenderService renderService, PostgresDbContext context, IEventLogService eventLog, GeminiKontextPromptService kontextPromptService)
         {
             _renderService = renderService;
             _context = context;
             _eventLog = eventLog;
+            _kontextPromptService = kontextPromptService;
         }
 
         [HttpGet]
@@ -79,6 +82,164 @@ namespace Afrobotics.Bit.Api.Controllers
             catch (Exception ex)
             {
                 await _eventLog.LogEventAsync("Render", "PROMPT_PREVIEW_DISPATCH_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Dispatch a surface-anchored render — the "Anchor &amp; Generate" flow.
+        /// Anchors on a real detected surface (DetectedAtFrame + Gemini SurfaceType), composites
+        /// the asset into that exact frame via FLUX.1 Kontext, then propagates across the full
+        /// scene via Kling O1 Edit with the composited frame as a visual reference.
+        /// </summary>
+        [HttpPost("surface-anchor")]
+        public async Task<IActionResult> DispatchSurfaceAnchorRender([FromBody] CreateSurfaceAnchorRenderDto dto)
+        {
+            try
+            {
+                var render = await _renderService.DispatchSurfaceAnchorRenderAsync(dto);
+                return Accepted(render);
+            }
+            catch (ArgumentException ex)
+            {
+                await _eventLog.LogEventAsync("Render", "SURFACE_ANCHOR_DISPATCH_INVALID", "Warning", ex.Message);
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Render", "SURFACE_ANCHOR_DISPATCH_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Step 1 of the interactive Kontext→Kling workflow. Generates just the FLUX.1 Kontext
+        /// composited frame (no Kling) so the user can review/redo the frame before proceeding.
+        /// Returns the render in "Queued" status; poll for RenderStatus "KontextReady".
+        /// </summary>
+        [HttpPost("surface-anchor/kontext-frame")]
+        public async Task<IActionResult> DispatchKontextFrame([FromBody] CreateKontextFrameDto dto)
+        {
+            try
+            {
+                var render = await _renderService.DispatchKontextFrameAsync(dto);
+                return Accepted(render);
+            }
+            catch (ArgumentException ex)
+            {
+                await _eventLog.LogEventAsync("Render", "KONTEXT_FRAME_DISPATCH_INVALID", "Warning", ex.Message);
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Render", "KONTEXT_FRAME_DISPATCH_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Alternative to Step 1: the user already has a reference frame (from a prior attempt or
+        /// an external tool) and wants to skip FLUX.1 Kontext generation. Stores the uploaded image
+        /// as the composited frame and creates the render directly in "KontextReady" status.
+        /// </summary>
+        [HttpPost("surface-anchor/upload-kontext-frame")]
+        [RequestSizeLimit(50_000_000)]
+        [RequestFormLimits(MultipartBodyLengthLimit = 50_000_000)]
+        public async Task<IActionResult> UploadKontextFrame(
+            [FromForm] string contentId,
+            [FromForm] string sceneId,
+            [FromForm] string? surfaceId,
+            [FromForm] string campaignId,
+            [FromForm] string assetId,
+            [FromForm] int frameNumber,
+            [FromForm] string? promptText,
+            IFormFile file)
+        {
+            try
+            {
+                var dto = new UploadKontextFrameDto
+                {
+                    ContentId = contentId,
+                    SceneId = sceneId,
+                    SurfaceId = surfaceId,
+                    CampaignId = campaignId,
+                    AssetId = assetId,
+                    FrameNumber = frameNumber,
+                    PromptText = promptText,
+                };
+                var render = await _renderService.UploadKontextFrameAsync(dto, file);
+                return Accepted(render);
+            }
+            catch (ArgumentException ex)
+            {
+                await _eventLog.LogEventAsync("Render", "KONTEXT_FRAME_UPLOAD_INVALID", "Warning", ex.Message);
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Render", "KONTEXT_FRAME_UPLOAD_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Asks Gemini to rewrite a rough Kontext placement idea into a precise instruction,
+        /// grounded in the actual scene frame and asset image — not just the text alone. Read-only:
+        /// does not create or modify any render. The caller decides whether to use the suggestion.
+        /// </summary>
+        [HttpPost("suggest-kontext-prompt")]
+        public async Task<IActionResult> SuggestKontextPrompt([FromBody] SuggestKontextPromptDto dto)
+        {
+            try
+            {
+                var result = await _kontextPromptService.SuggestPromptAsync(dto);
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Render", "KONTEXT_PROMPT_SUGGEST_ERROR", "Error",
+                    $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Step 2 of the interactive Kontext→Kling workflow. Propagates the stored Kontext
+        /// composited frame through Kling O1 Edit to produce a video preview. The render must
+        /// be in "KontextReady" status. An optional updated promptText can be provided.
+        /// </summary>
+        [HttpPost("{id}/propagate-kling")]
+        public async Task<IActionResult> PropagateKling(string id, [FromBody] PropagateKlingDto dto)
+        {
+            try
+            {
+                var render = await _renderService.DispatchKlingPropagationAsync(id, dto);
+                return Accepted(render);
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                await _eventLog.LogEventAsync("Render", "KLING_PROPAGATION_DISPATCH_INVALID", "Warning", ex.Message);
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Render", "KLING_PROPAGATION_DISPATCH_ERROR", "Error",
                     $"{ex.GetType().Name} — {ex.Message}");
                 return StatusCode(500, new { error = ex.Message });
             }

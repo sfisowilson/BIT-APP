@@ -36,6 +36,8 @@ interface CampaignsTabProps {
 
 The `campaignList`/`assetList` props are only used for cross-references that need the global unpaginated first-page snapshot: the "selected campaign" fallback lookup, per-card asset-count badges, and the "Assign to Campaign" quick-pick `<select>` in the Unassigned Assets panel (a known, documented gap for campaigns beyond page 1 — see `governance/nfrs/pagination-consistency-fix.md`). The three actual list UIs (Campaign Database grid, Campaign Assets, Unassigned Assets) each self-fetch their own paginated copy via `usePaginatedData` + `<Pagination>`, independent of these props — matching the pattern already used by `IngestionTab`'s Content catalog. All five mutation props (`handleCreateAsset`, `handleUpdateAsset`, `handleAssociateAsset`, `handleUnassociateAsset`, `handleDeleteAsset`, `handleDeleteCampaign`) are called through internal wrappers that `refresh()` the relevant paginated hook(s) afterward.
 
+**Metadata extraction flow:** When a video file is attached, the browser extracts a quick first pass (duration, resolution) to populate form fields immediately. Simultaneously, the file is uploaded to `POST /api/content/probe` which runs ffprobe. When ffprobe completes, the returned values **overwrite** the form fields — ffprobe is the source of truth. A green "Verified by ffprobe" indicator confirms the values were applied. The `probeKey` from the probe response is passed to the upload endpoint so the file is reused without a second upload. If ffprobe fails, a warning is shown and browser-detected values remain in place.
+
 ---
 
 ## `RendersTab`
@@ -87,15 +89,21 @@ interface IngestionTabProps {
   uploadProgress?: number;
   chunkProgress?: string;
   handleDeleteContent?: (id: string) => void;
-  handleAiSplitAnalyze?: (contentId: string, videoTitle: string) => Promise<void>;
+  handleAiSplitAnalyze?: (contentId: string, videoTitle: string, splitMode?: SplitMode) => Promise<void>;
   aiAnalyzingVideoId?: string | null;
   selectedCampaignId?: string | null;
   campaignList?: { id: string; name: string }[];
   onDataChanged?: () => void;
   onRetranscode?: (contentId: string) => Promise<void>;
-  onRedetectScenes?: (contentId: string, videoTitle: string) => Promise<void>;
+  onRedetectScenes?: (contentId: string, videoTitle: string, splitMode?: SplitMode) => Promise<void>;
   onResetPipeline?: (contentId: string) => Promise<void>;
   isPipelineActionPending?: string | null;
+  probeKey: string | null;
+  setProbeKey: (key: string | null) => void;
+  splitMode: SplitMode;
+  setSplitMode: (m: SplitMode) => void;
+  /** Fuse 2+ consecutive scenes into one — manual alternative to AI clustering, typically used after "Cut" split mode. */
+  onMergeScenes?: (sceneIds: string[], contentId: string) => Promise<void>;
 }
 ```
 
@@ -204,6 +212,8 @@ interface EditorTabProps {
   onApprovePromptSplice?: (renderId: string) => Promise<void>;
   onRejectPromptPlacement?: (renderId: string) => Promise<void>;
   activePromptRender?: RenderItem | null;
+  // Surface-Anchored mode — "Anchor & Generate" (FLUX Kontext + Kling O1, anchored on a real surface)
+  onSubmitSurfaceAnchor?: (dto: CreateSurfaceAnchorRenderRequest) => Promise<void>;
 }
 ```
 

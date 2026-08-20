@@ -209,7 +209,8 @@
 | `SceneId` | string | No | — | FK → SceneItems, `SetNull` on delete. Always set for `RenderMode = "PromptEdit"` renders; Interactive renders derive their scene via `SurfaceId → SurfaceItem.SceneId` instead |
 | `PromptText` | string(1000) | No | — | User's free-text placement instruction for a `PromptEdit` render. Null for Interactive renders |
 | `PreviewStorageKey` | string | No | — | Download path (`/api/renders/{id}/preview`) for the not-yet-approved AI-generated preview clip, set once `ProcessPromptPreviewJob` reaches `RenderStatus = "PreviewReady"` |
-| `RenderMode` | string(20) | No | — | Null or `"Interactive"` (click/quad-based placement, the original two flows) vs `"PromptEdit"` (free-text AI video generation via Kling O1, no surface). Existing rows are all null/`"Interactive"` |
+| `KontextFrameStorageKey` | string | No | — | Download path (`/api/content/file/kontext-frames/kontext_{renderId}.png`) for the FLUX.1 Kontext composited frame image (PNG), set once `ProcessKontextFrameJob` reaches `RenderStatus = "KontextReady"`. Used as the visual reference (@Image1) when Kling O1 Edit propagates the edit across the scene. |
+| `RenderMode` | string(20) | No | — | Null, `"Interactive"`, `"PromptEdit"`, `"SurfaceAnchor"` (fast path: FLUX Kontext + Kling in one job), or `"KontextStep"` (interactive: Kontext frame only, first step of the two-step workflow) |
 | `Progress` | int | Yes | `0` | 0-100. `PromptEdit` preview generation caps at 90 (not 100) by design — it isn't a terminal state |
 | `ProcessingDurationMs` | int | Yes | `0` | |
 | `LastErrorMessage` | string(2000) | No | — | Diagnostic detail when `RenderStatus = Failed` |

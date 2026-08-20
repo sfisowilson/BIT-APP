@@ -81,6 +81,89 @@ public static class VideoProbe
         return 0;
     }
 
+    /// <summary>Returns whether the video has at least one audio stream, via ffprobe. Falls back to false on failure.</summary>
+    public static bool HasAudioStream(string videoPath)
+    {
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "ffprobe",
+                    Arguments = $"-v error -select_streams a:0 -show_entries stream=codec_type -of csv=p=0 \"{videoPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                },
+            };
+            process.Start();
+            var output = process.StandardOutput.ReadToEnd().Trim();
+            process.WaitForExit(5000);
+
+            return output.Equals("audio", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Probes a video's overall bitrate (bits/sec) via ffprobe — prefers the video
+    /// stream's own bit_rate, falling back to the container-level bitrate if the stream doesn't
+    /// report one (common for some remuxed/VFR sources). Falls back to a safe 8 Mbps default
+    /// (solid quality for 1080p) if probing fails entirely.</summary>
+    public static long GetBitRate(string videoPath)
+    {
+        const long fallbackBps = 8_000_000;
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "ffprobe",
+                    Arguments = $"-v error -select_streams v:0 -show_entries stream=bit_rate -show_entries format=bit_rate -of default=noprint_wrappers=1 \"{videoPath}\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                },
+            };
+            process.Start();
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(5000);
+
+            long? streamBitRate = null, formatBitRate = null;
+            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("bit_rate=") && long.TryParse(trimmed.AsSpan(9), out var val) && val > 0)
+                {
+                    if (streamBitRate == null) streamBitRate = val;
+                    else formatBitRate = val;
+                }
+            }
+            var resolved = streamBitRate ?? formatBitRate;
+            if (resolved.HasValue && resolved.Value > 0) return resolved.Value;
+        }
+        catch { /* fall through to default */ }
+
+        return fallbackBps;
+    }
+
+    /// <summary>Builds "-b:v/-maxrate/-bufsize" ffmpeg args targeting the source video's own
+    /// bitrate instead of a fixed CRF. A fixed CRF re-encodes every clip down to a generic
+    /// "acceptable web quality" regardless of how high-quality the actual source was — this
+    /// silently threw away most of the bitrate headroom on high-bitrate professional sources
+    /// (observed: 16 Mbps source -> ~3.6 Mbps output at CRF 23, same resolution/framerate).</summary>
+    public static string GetTargetBitrateArgs(string videoPath)
+    {
+        var kbps = Math.Max(1000, GetBitRate(videoPath) / 1000);
+        return $"-b:v {kbps}k -maxrate {(long)(kbps * 1.5)}k -bufsize {kbps * 2}k";
+    }
+
     public static (int width, int height) GetDimensions(string videoPath)
     {
         if (_cache.TryGetValue(videoPath, out var cached)) return cached;

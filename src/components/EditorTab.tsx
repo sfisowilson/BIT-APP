@@ -5,9 +5,10 @@ import {
   Loader2, Eye, Layout, Image, Package, ArrowRight, Search, Cpu,
   MapPin, ChevronRight, X, Upload, RefreshCw, Download, Clock, Trash2
 } from 'lucide-react';
-import { ContentItem, SceneItem, SurfaceItem, CreativeAsset, CampaignItem, SurfaceAssetPair, RenderItem, CreatePromptRenderRequest, MIN_PROMPT_EDIT_DURATION_SECONDS, MAX_PROMPT_EDIT_DURATION_SECONDS } from '../types';
+import { ContentItem, SceneItem, SurfaceItem, CreativeAsset, CampaignItem, SurfaceAssetPair, RenderItem, CreatePromptRenderRequest, CreateSurfaceAnchorRenderRequest, MIN_PROMPT_EDIT_DURATION_SECONDS, MAX_PROMPT_EDIT_DURATION_SECONDS, type SplitMode } from '../types';
 import { SurfaceClickOverlay } from './SurfaceClickOverlay';
 import { PromptGeneratePanel } from './PromptGeneratePanel';
+import { KontextKlingPanel } from './KontextKlingPanel';
 import { confirmInteractivePlacement, createSurfaceFromClick, createSurfaceFromQuad, fetchShotsForScene } from '../apiClient';
 import type { MaskPolygon, ShotItem } from '../types';
 
@@ -34,7 +35,7 @@ interface EditorTabProps {
   campaignList: CampaignItem[];
 
   // Phase 1: AI analysis trigger from placements screen
-  handleAiSplitAnalyze?: (contentId: string, videoTitle: string) => Promise<void>;
+  handleAiSplitAnalyze?: (contentId: string, videoTitle: string, splitMode?: SplitMode) => Promise<void>;
   aiAnalyzingVideoId?: string | null;
   onDetectSurfacesForScene?: (sceneId: string, contentId: string) => Promise<void>;
   onDeleteSurface?: (surfaceId: string) => Promise<void>;
@@ -81,6 +82,14 @@ interface EditorTabProps {
   onApprovePromptSplice?: (renderId: string) => Promise<void>;
   onRejectPromptPlacement?: (renderId: string) => Promise<void>;
   activePromptRender?: RenderItem | null;
+  /** Upserts a render into the shared renderList (by id) so actions reflect immediately
+   *  without requiring a reload. Used by flows (like Kontext→Kling) that call their own
+   *  apiClient functions directly instead of going through a dedicated onSubmit/onApprove prop. */
+  onRenderUpdated?: (render: RenderItem) => void;
+
+  // Surface-Anchored mode — "Anchor & Generate" (FLUX Kontext + Kling O1, anchored on a real surface)
+  onSubmitSurfaceAnchor?: (dto: CreateSurfaceAnchorRenderRequest) => Promise<void>;
+  compositingEngine?: string;
 
   // Final assembly — combine every scene's queued render + original footage into one video
   selectedContent?: ContentItem | null;
@@ -144,6 +153,10 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   onApprovePromptSplice,
   onRejectPromptPlacement,
   activePromptRender,
+  onRenderUpdated,
+  // Surface-Anchored mode
+  onSubmitSurfaceAnchor,
+  compositingEngine,
   // Final assembly
   selectedContent,
   onStartFinalAssembly,
@@ -177,11 +190,19 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   const [aiPromptText, setAiPromptText] = React.useState('');
   const [aiPlacing, setAiPlacing] = React.useState(false);
   const [aiExplanation, setAiExplanation] = React.useState('');
-  const [assistantMode, setAssistantMode] = React.useState<'match' | 'generate'>('match');
+
+  // Single selector for which placement flow is active — replaces what used to be three separate,
+  // differently-shaped mechanisms (a toolbar toggle for Insert Product/Place Signage, a card-internal
+  // pill toggle for Match to Surface/Generate New, and a silently engine-gated Anchor & Generate
+  // panel) so there's one consistent place to see and switch between every flow.
+  const [activeFlow, setActiveFlow] = React.useState<'insert' | 'signage' | 'match' | 'generate' | 'anchor'>('insert');
+
   const [previewAssetId, setPreviewAssetId] = React.useState<string>('');
   const [selectedBlendMode, setSelectedBlendMode] = React.useState<'multiply' | 'overlay' | 'normal'>('multiply');
   const [ambientIntensity, setAmbientIntensity] = React.useState<number>(0.85);
   const [showingPlacementPanel, setShowingPlacementPanel] = React.useState<boolean>(true);
+  // Key to force KontextKlingPanel remount on "Redo Frame" / "Start Over"
+  const [kontextResetKey, setKontextResetKey] = React.useState(0);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const [submitConfirming, setSubmitConfirming] = React.useState<string>('');
   const [redetectConfirmOpen, setRedetectConfirmOpen] = React.useState(false);
@@ -193,14 +214,20 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   const [queuingId, setQueuingId] = React.useState<string | null>(null);
   const [deletingRenderId, setDeletingRenderId] = React.useState<string | null>(null);
   const [deleteRenderConfirmId, setDeleteRenderConfirmId] = React.useState<string | null>(null);
+  const [deleteAllConfirmSceneId, setDeleteAllConfirmSceneId] = React.useState<string | null>(null);
+  const [deletingAllForScene, setDeletingAllForScene] = React.useState(false);
   const [assemblingFinal, setAssemblingFinal] = React.useState(false);
 
   // ── Interactive placement state ──
-  const [interactionMode, setInteractionMode] = React.useState<'product' | 'signage'>('product');
+  // Derived from activeFlow rather than tracked separately — Insert Product/Place Signage are two
+  // of the flow tabs, and SurfaceClickOverlay only cares about 'product' vs 'signage'.
+  const interactionMode: 'product' | 'signage' = activeFlow === 'signage' ? 'signage' : 'product';
+  const isClickToPlaceFlow = activeFlow === 'insert' || activeFlow === 'signage';
   const [interactiveMask, setInteractiveMask] = React.useState<import('../types').MaskPolygon | null>(null);
   const [interactiveQuad, setInteractiveQuad] = React.useState<[import('../components/SurfaceClickOverlay').QuadPoint, import('../components/SurfaceClickOverlay').QuadPoint, import('../components/SurfaceClickOverlay').QuadPoint, import('../components/SurfaceClickOverlay').QuadPoint] | null>(null);
   const [interactiveAssetId, setInteractiveAssetId] = React.useState<string>('');
   const [interactivePlacing, setInteractivePlacing] = React.useState(false);
+  const [interactiveSurfaceDescription, setInteractiveSurfaceDescription] = React.useState<string>('');
 
   // ── Derived data ──────────────────────────────────────────────────
   const currentScene = scenesForVideo.find(s => s.id === selectedSceneId);
@@ -576,43 +603,23 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Interactive mode toggle */}
-                  <div className="flex items-center rounded-lg border border-indigo-200 overflow-hidden">
-                    <button
-                      onClick={() => { setInteractionMode('product'); setPlacementOverlayActive(true); }}
-                      className={`px-2.5 py-1 text-[10px] font-bold cursor-pointer transition-colors ${
-                        interactionMode === 'product'
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-white text-slate-600 hover:bg-indigo-50'
-                      }`}
-                    >
-                      🎯 Insert Product
-                    </button>
-                    <button
-                      onClick={() => { setInteractionMode('signage'); setPlacementOverlayActive(true); }}
-                      className={`px-2.5 py-1 text-[10px] font-bold cursor-pointer transition-colors ${
-                        interactionMode === 'signage'
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-white text-slate-600 hover:bg-emerald-50'
-                      }`}
-                    >
-                      📐 Place Signage
-                    </button>
-                  </div>
                   {/* Escape hatch — the click-to-place overlay covers the whole video including
                       native play/pause/seek controls, so this is the only way to play the video
-                      while a placement mode is selected. */}
-                  <button
-                    onClick={() => setPlacementOverlayActive(!placementOverlayActive)}
-                    title={placementOverlayActive ? 'Click-to-place is capturing clicks on the video — turn off to use play/pause/seek' : 'Video controls are active — turn on to click a point/corner on the video'}
-                    className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border cursor-pointer transition-colors ${
-                      placementOverlayActive
-                        ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'
-                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    {placementOverlayActive ? '🎯 Click-to-Place ON — click to play video instead' : '▶ Video Controls Active — click to place'}
-                  </button>
+                      while a placement mode is selected. Only relevant to the two click-driven
+                      flows (Insert Product / Place Signage) — hidden for the others. */}
+                  {isClickToPlaceFlow && (
+                    <button
+                      onClick={() => setPlacementOverlayActive(!placementOverlayActive)}
+                      title={placementOverlayActive ? 'Click-to-place is capturing clicks on the video — turn off to use play/pause/seek' : 'Video controls are active — turn on to click a point/corner on the video'}
+                      className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border cursor-pointer transition-colors ${
+                        placementOverlayActive
+                          ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100'
+                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {placementOverlayActive ? '🎯 Click-to-Place ON — click to play video instead' : '▶ Video Controls Active — click to place'}
+                    </button>
+                  )}
                   {currentScene && (
                     <button
                       onClick={() => {
@@ -633,7 +640,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     </button>
                   )}
                   {/* Approve interactive placement */}
-                  {(interactiveMask || interactiveQuad) && selectedCampaignId && (
+                  {isClickToPlaceFlow && (interactiveMask || interactiveQuad) && selectedCampaignId && (
                     <button
                       onClick={async () => {
                         if (!interactiveAssetId) return;
@@ -656,6 +663,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                               contentId: selectedVideo,
                               frameIndex: currentVideoFrame,
                               maskPolygonJson: JSON.stringify(interactiveMask.points),
+                              surfaceType: interactiveSurfaceDescription.trim() || undefined,
                             });
                             surfaceId = created.surfaceId;
                           } else {
@@ -671,6 +679,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                           });
                           setInteractiveMask(null);
                           setInteractiveQuad(null);
+                          setInteractiveSurfaceDescription('');
                         } catch (err: any) {
                           console.error('Interactive placement failed:', err);
                           setActionError(err.message || 'Failed to submit placement.');
@@ -684,8 +693,21 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                       {interactivePlacing ? 'Dispatching…' : '✅ Approve & Render'}
                     </button>
                   )}
+                  {/* Describe exactly what was selected — feeds Pikaswaps' modify_region text prompt,
+                      since the precise SAM3 mask geometry itself is never sent to Pikaswaps (it only
+                      accepts a free-text region description). Without this, every Insert Product
+                      render falls back to a generic "Product Surface" label. */}
+                  {isClickToPlaceFlow && interactiveMask && (
+                    <input
+                      type="text"
+                      value={interactiveSurfaceDescription}
+                      onChange={(e) => setInteractiveSurfaceDescription(e.target.value)}
+                      placeholder="Describe exactly what to replace (e.g. 'the flat poster face only, not the support posts')"
+                      className="bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] text-slate-800 focus:outline-none w-64"
+                    />
+                  )}
                   {/* Asset selector for interactive placement */}
-                  {(interactiveMask || interactiveQuad) && (
+                  {isClickToPlaceFlow && (interactiveMask || interactiveQuad) && (
                     <select
                       value={interactiveAssetId}
                       onChange={(e) => setInteractiveAssetId(e.target.value)}
@@ -734,6 +756,52 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     </select>
                   )}
                 </div>
+              </div>
+
+              {/* ── Placement flow selector — every flow lives here, side by side, instead of
+                  scattered across a toolbar toggle, a card-internal pill, and a silently
+                  engine-gated panel. Switching tabs never discards in-progress work in another
+                  flow (each keeps its own state); it only changes what's visible. ── */}
+              <div className="mb-4">
+                <div className="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1">
+                  {([
+                    { key: 'insert', label: '🎯 Insert Product', active: 'bg-indigo-600 text-white' },
+                    { key: 'signage', label: '📐 Place Signage', active: 'bg-emerald-600 text-white' },
+                    { key: 'match', label: '🔗 Match to Surface', active: 'bg-emerald-600 text-white' },
+                    { key: 'generate', label: '✨ Generate New', active: 'bg-fuchsia-600 text-white' },
+                    { key: 'anchor', label: '🪄 Anchor & Generate', active: 'bg-fuchsia-600 text-white' },
+                  ] as const).map(tab => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => {
+                        // Switching between Insert Product and Place Signage must not carry over
+                        // an in-progress mask/quad from the mode being left — a stale SAM3 mask
+                        // submitted under Place Signage's Planar asset type (or vice versa) would
+                        // create an inconsistent surface record.
+                        if (tab.key !== activeFlow && (activeFlow === 'insert' || activeFlow === 'signage')) {
+                          setInteractiveMask(null);
+                          setInteractiveQuad(null);
+                          setInteractiveSurfaceDescription('');
+                        }
+                        setActiveFlow(tab.key);
+                        if (tab.key === 'insert' || tab.key === 'signage') setPlacementOverlayActive(true);
+                      }}
+                      className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold cursor-pointer transition-colors whitespace-nowrap ${
+                        activeFlow === tab.key ? tab.active + ' shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1.5 px-0.5">
+                  {activeFlow === 'insert' && 'Click a point on the video to segment it with SAM3, then approve to composite an asset in via Pikaswaps. Needs: a click on the video + an asset.'}
+                  {activeFlow === 'signage' && 'Draw a 4-corner quad on a flat surface, then approve to composite an asset in via exact planar warp. Needs: 4 corner clicks + an asset.'}
+                  {activeFlow === 'match' && 'Describe which campaign assets go on which AI-detected surfaces — Gemini pairs them automatically. Needs: at least one detected surface + campaign assets.'}
+                  {activeFlow === 'generate' && 'Describe a brand-new placement in plain text — AI generates the video clip directly, no pre-detected surface required. Needs: a scene + a text prompt.'}
+                  {activeFlow === 'anchor' && 'Anchor an asset on a paused frame with FLUX Kontext, then propagate it across the scene with Kling O1. Needs: a paused frame + a selected surface\'s asset.'}
+                </p>
               </div>
 
               {/* Final assembly — combine every scene's queued render + original footage into one video */}
@@ -864,7 +932,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     currentFrame={currentVideoFrame}
                     frameRate={activeVideo.frameRate || 30}
                     mode={interactionMode}
-                    active={placementOverlayActive}
+                    active={isClickToPlaceFlow && placementOverlayActive}
                     shots={shotsForScene}
                     assetUrl={
                       interactiveAssetId
@@ -1337,43 +1405,28 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               </div>
             )}
 
-            {/* AI Placement Assistant — auto-places assets on surfaces, or generates a brand-new placement via AI video edit */}
+            {/* AI Placement Assistant — Match to Surface / Generate New. Visibility and content are
+                now driven entirely by the top flow tabs (no more internal mode pill duplicating
+                that choice). */}
+            {(activeFlow === 'match' || activeFlow === 'generate') && (
             <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-2.5 border-b border-slate-100 pb-4 mb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${assistantMode === 'match' ? 'bg-emerald-50 text-emerald-600' : 'bg-fuchsia-50 text-fuchsia-600'}`}>
-                    <Sparkles className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800 font-display flex items-center gap-1.5">
-                      AI Placement Assistant
-                    </h3>
-                    <p className="text-[11px] text-slate-400">
-                      {assistantMode === 'match'
-                        ? <>Describe which assets to place on which surfaces. <strong>Never modifies the original scene.</strong></>
-                        : <>Describe a brand-new placement — AI generates the video clip directly.</>}
-                    </p>
-                  </div>
+              <div className="flex items-center gap-2.5 border-b border-slate-100 pb-4 mb-4">
+                <div className={`h-8 w-8 rounded-lg flex items-center justify-center ${activeFlow === 'match' ? 'bg-emerald-50 text-emerald-600' : 'bg-fuchsia-50 text-fuchsia-600'}`}>
+                  <Sparkles className="h-4 w-4" />
                 </div>
-                <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setAssistantMode('match')}
-                    className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all cursor-pointer whitespace-nowrap ${assistantMode === 'match' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                  >
-                    🔗 Match to Surface
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAssistantMode('generate')}
-                    className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all cursor-pointer whitespace-nowrap ${assistantMode === 'generate' ? 'bg-white text-fuchsia-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                  >
-                    ✨ Generate New
-                  </button>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 font-display flex items-center gap-1.5">
+                    AI Placement Assistant
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    {activeFlow === 'match'
+                      ? <>Describe which assets to place on which surfaces. <strong>Never modifies the original scene.</strong></>
+                      : <>Describe a brand-new placement — AI generates the video clip directly.</>}
+                  </p>
                 </div>
               </div>
 
-              {assistantMode === 'generate' ? (
+              {activeFlow === 'generate' ? (
                 <PromptGeneratePanel
                   currentScene={currentScene}
                   campaignAssets={campaignAssets}
@@ -1470,71 +1523,16 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                 <div className="text-xs text-slate-400 italic text-center py-6">Select a scene above to use the AI Placement Assistant.</div>
               )}
             </div>
+            )}
           </div>
 
           {/* ── RIGHT (1/3): Surface details + Asset Placement + Navigate ── */}
           <div className="col-span-1 space-y-6">
 
-            {/* Surface Metadata & QA */}
-            <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 font-display">Surface Details</h3>
-              {currentSurface ? (
-                <div className="space-y-4">
-                  {/* Surface thumbnail preview */}
-                  {currentSurface.placementImageUrl && (
-                    <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-300">
-                      <img
-                        src={currentSurface.placementImageUrl}
-                        alt={`${currentSurface.surfaceType} thumbnail`}
-                        className="w-full h-32 object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                      />
-                    </div>
-                  )}
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80">
-                    <div className="text-[10px] uppercase tracking-wider text-slate-400 font-mono font-bold">Surface Type</div>
-                    <div className="text-sm font-bold text-slate-800 mt-0.5">{currentSurface.surfaceType}</div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs font-mono">
-                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80"><span className="text-slate-400">Confidence:</span><div className="text-slate-800 font-bold mt-0.5">{(currentSurface.confidenceScore * 100).toFixed(0)}%</div></div>
-                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80"><span className="text-slate-400">Depth:</span><div className="text-slate-800 font-bold mt-0.5">{currentSurface.estimatedDepth}m</div></div>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80 font-mono text-[10px] text-slate-500">
-                    <div className="border-b border-slate-200/50 pb-1 mb-1.5 font-bold uppercase tracking-wide text-slate-400">3D Orientation</div>
-                    <div>Yaw: {currentSurface.orientationVector.yaw}°</div><div>Pitch: {currentSurface.orientationVector.pitch}°</div><div>Roll: {currentSurface.orientationVector.roll}°</div>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-slate-500 font-medium">Status:</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        currentSurface.status === 'Approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                        currentSurface.status === 'Excluded' ? 'bg-red-50 text-red-700 border border-red-100' :
-                        'bg-blue-50 text-blue-700 border border-blue-100'
-                      }`}>{currentSurface.status}</span>
-                    </div>
-                    {currentSurface.exclusionReason && <p className="text-2xs text-red-600 leading-normal mt-2 italic bg-red-50 p-2 rounded border border-red-100">Exclusion: {currentSurface.exclusionReason}</p>}
-                  </div>
-                  {currentSurface.status === "Excluded" && currentSurface.exclusionReason?.includes("MReq 4") ? (
-                    <div className="p-3.5 bg-red-50 border border-red-200/60 rounded-xl text-red-700 text-xs"><Shield className="h-4 w-4 inline mr-1 text-red-600" /><strong>Security Blocklist:</strong> Face classification overrides cannot be bypassed.</div>
-                  ) : (
-                    <div className="space-y-3 pt-2">
-                      <button onClick={() => runAction(() => handleSurfaceDecision("Approved"), 'Surface approved successfully.')} className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg cursor-pointer transition-all shadow-xs"><CheckCircle className="h-3.5 w-3.5" />Approve Surface</button>
-                      <div className="pt-3 border-t border-slate-100">
-                        <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Exclusion Reason</label>
-                        <input type="text" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="e.g., Low contrast lighting" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-800 focus:outline-none focus:border-red-500/50 mb-2" />
-                        <button onClick={() => runAction(() => handleSurfaceDecision("Rejected"), 'Surface rejected successfully.')} disabled={!rejectionReason} className="w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-semibold text-xs rounded-lg cursor-pointer transition-all disabled:opacity-40"><AlertTriangle className="h-3.5 w-3.5" />Exclude Surface</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-xs text-slate-400 italic bg-slate-50 p-4 rounded-xl border border-slate-200/50 text-center">
-                  {surfacesForScene.length > 0 ? '👆 Click a highlighted region on the video player to select a surface.' : 'No surfaces to review. Run AI Scene Analysis first.'}
-                </div>
-              )}
-            </div>
-
-            {/* PHASE 2: Asset Placement Panel */}
+            {/* PHASE 2: Asset Placement Panel — the configs for whichever flow is active (asset
+                picker, AI suggest, submit/render controls) live here. Moved above Surface Details
+                since these are the controls people actually need to find and act on; Surface
+                Details below is read-only reference metadata. */}
             {currentSurface && currentSurface.status !== 'Excluded' && (
               <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
@@ -1611,6 +1609,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                         )}
                       </>
                     )}
+
 
                     {/* Submit for render — only after scene is approved */}
                     {getPlacedAsset(currentSurface.id) && currentScene && (() => {
@@ -1756,6 +1755,283 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                 )}
               </div>
             )}
+
+            {/* Anchor & Generate — merges what used to be two separate panels (a one-shot
+                "Anchor & Generate" card and this step-by-step Kontext→Kling panel) into one, via
+                the Quick mode toggle inside KontextKlingPanel. No surfaces required — pause at
+                any frame. Requires the fal-kontext-kling engine to be configured. */}
+            {activeFlow === 'anchor' && currentScene && compositingEngine !== 'fal-kontext-kling' && (
+              <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  ⚠️ Anchor & Generate requires the "fal-kontext-kling" compositing engine to be configured in Admin → Platform Settings.
+                </div>
+              </div>
+            )}
+            {activeFlow === 'anchor' && currentScene && compositingEngine === 'fal-kontext-kling' && (
+              <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
+                <h3 className="text-sm font-bold text-slate-800 font-display flex items-center gap-2 mb-4">
+                  <Sparkles className="h-4 w-4 text-fuchsia-500" />Anchor & Generate
+                </h3>
+              <KontextKlingPanel
+                key={kontextResetKey}
+                currentScene={currentScene}
+                currentSurface={currentSurface}
+                campaignAssets={campaignAssets}
+                contentId={selectedVideo || ''}
+                campaignId={selectedCampaignId}
+                currentFrame={currentVideoFrame}
+                activeRender={(() => {
+                  const candidates = renderList
+                    .filter(r => r.renderMode === 'KontextStep' && r.sceneId === currentScene?.id);
+                  // Prioritize: PreviewReady (Kling already succeeded — furthest along) > KontextReady
+                  // (frame-only, step 1) > Processing/Queued (in-flight) > Failed (dead). A stray newer
+                  // KontextReady attempt for the same scene must never hide an already-completed
+                  // PreviewReady result — that result is strictly more progressed regardless of age.
+                  const statusOrder = (s: string) =>
+                    s === 'PreviewReady' ? 0 :
+                    s === 'KontextReady' ? 1 :
+                    s === 'Processing' || s === 'Queued' ? 2 : 3;
+                  candidates.sort((a, b) =>
+                    statusOrder(a.renderStatus) - statusOrder(b.renderStatus) ||
+                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                  );
+                  return candidates[0];
+                })()}
+                onRenderCreated={(render) => {
+                  if (!render) { setKontextResetKey(k => k + 1); return; }
+                  onRenderUpdated?.(render);
+                }}
+                onSetRenderQueuedForFinal={onSetRenderQueuedForFinal}
+              />
+              </div>
+            )}
+
+            {/* Surface Metadata & QA */}
+            <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 font-display">Surface Details</h3>
+              {currentSurface ? (
+                <div className="space-y-4">
+                  {/* Surface thumbnail preview */}
+                  {currentSurface.placementImageUrl && (
+                    <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-300">
+                      <img
+                        src={currentSurface.placementImageUrl}
+                        alt={`${currentSurface.surfaceType} thumbnail`}
+                        className="w-full h-32 object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80">
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400 font-mono font-bold">Surface Type</div>
+                    <div className="text-sm font-bold text-slate-800 mt-0.5">{currentSurface.surfaceType}</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80"><span className="text-slate-400">Confidence:</span><div className="text-slate-800 font-bold mt-0.5">{(currentSurface.confidenceScore * 100).toFixed(0)}%</div></div>
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200/80"><span className="text-slate-400">Depth:</span><div className="text-slate-800 font-bold mt-0.5">{currentSurface.estimatedDepth}m</div></div>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80 font-mono text-[10px] text-slate-500">
+                    <div className="border-b border-slate-200/50 pb-1 mb-1.5 font-bold uppercase tracking-wide text-slate-400">3D Orientation</div>
+                    <div>Yaw: {currentSurface.orientationVector.yaw}°</div><div>Pitch: {currentSurface.orientationVector.pitch}°</div><div>Roll: {currentSurface.orientationVector.roll}°</div>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500 font-medium">Status:</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                        currentSurface.status === 'Approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                        currentSurface.status === 'Excluded' ? 'bg-red-50 text-red-700 border border-red-100' :
+                        'bg-blue-50 text-blue-700 border border-blue-100'
+                      }`}>{currentSurface.status}</span>
+                    </div>
+                    {currentSurface.exclusionReason && <p className="text-2xs text-red-600 leading-normal mt-2 italic bg-red-50 p-2 rounded border border-red-100">Exclusion: {currentSurface.exclusionReason}</p>}
+                  </div>
+                  {currentSurface.status === "Excluded" && currentSurface.exclusionReason?.includes("MReq 4") ? (
+                    <div className="p-3.5 bg-red-50 border border-red-200/60 rounded-xl text-red-700 text-xs"><Shield className="h-4 w-4 inline mr-1 text-red-600" /><strong>Security Blocklist:</strong> Face classification overrides cannot be bypassed.</div>
+                  ) : (
+                    <div className="space-y-3 pt-2">
+                      <button onClick={() => runAction(() => handleSurfaceDecision("Approved"), 'Surface approved successfully.')} className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg cursor-pointer transition-all shadow-xs"><CheckCircle className="h-3.5 w-3.5" />Approve Surface</button>
+                      <div className="pt-3 border-t border-slate-100">
+                        <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Exclusion Reason</label>
+                        <input type="text" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="e.g., Low contrast lighting" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-800 focus:outline-none focus:border-red-500/50 mb-2" />
+                        <button onClick={() => runAction(() => handleSurfaceDecision("Rejected"), 'Surface rejected successfully.')} disabled={!rejectionReason} className="w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 font-semibold text-xs rounded-lg cursor-pointer transition-all disabled:opacity-40"><AlertTriangle className="h-3.5 w-3.5" />Exclude Surface</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 italic bg-slate-50 p-4 rounded-xl border border-slate-200/50 text-center">
+                  {surfacesForScene.length > 0 ? '👆 Click a highlighted region on the video player to select a surface.' : 'No surfaces to review. Run AI Scene Analysis first.'}
+                </div>
+              )}
+            </div>
+
+            {/* Renders for this scene — full history (not just the single "best" one shown above),
+                so past attempts, failures, and the currently-queued render are all visible here
+                without navigating away to the separate Renders tab. */}
+            {currentScene && (() => {
+              const sceneRenders = renderList
+                .filter(r => r.sceneId === currentScene.id)
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+              if (sceneRenders.length === 0) return null;
+
+              const statusBadgeClass = (status: string) =>
+                status === 'Finished' ? 'bg-emerald-100 text-emerald-700' :
+                status === 'Failed' || status === 'Rejected' ? 'bg-red-100 text-red-700' :
+                status === 'PreviewReady' || status === 'NeedsReview' ? 'bg-amber-100 text-amber-700' :
+                'bg-blue-100 text-blue-700';
+
+              // KontextStep renders overwrite promptText with the Kling propagation prompt once
+              // one is sent — kontextPromptText (when present) is the original placement
+              // instruction and always preferred. Older renders (before that field existed) fall
+              // back to parsing promptText's {"frameNumber","prompt"} JSON shape, or just showing
+              // it as-is for non-KontextStep renders where it's already plain text.
+              const displayPrompt = (r: RenderItem): string | null => {
+                if (r.kontextPromptText) return r.kontextPromptText;
+                if (!r.promptText) return null;
+                if (r.renderMode === 'KontextStep') {
+                  try {
+                    const parsed = JSON.parse(r.promptText);
+                    if (parsed && typeof parsed.prompt === 'string') return parsed.prompt;
+                  } catch { /* not JSON — already a plain prompt string */ }
+                }
+                return r.promptText;
+              };
+
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500 font-mono">
+                      Renders for Scene #{currentScene.sceneIndex} ({sceneRenders.length})
+                    </div>
+                    {onDeleteRender && (
+                      <button
+                        type="button"
+                        disabled={deletingAllForScene}
+                        onClick={async () => {
+                          if (deleteAllConfirmSceneId !== currentScene.id) {
+                            setDeleteAllConfirmSceneId(currentScene.id);
+                            return;
+                          }
+                          setDeleteAllConfirmSceneId(null);
+                          setDeletingAllForScene(true);
+                          try {
+                            for (const r of sceneRenders) {
+                              await onDeleteRender(r.id);
+                            }
+                          } catch (err: any) {
+                            setActionError(err.message || 'Failed to delete all renders.');
+                          } finally {
+                            setDeletingAllForScene(false);
+                          }
+                        }}
+                        onBlur={() => setDeleteAllConfirmSceneId(null)}
+                        className={`inline-flex items-center gap-1 text-[9px] font-mono font-bold uppercase cursor-pointer disabled:opacity-50 ${
+                          deleteAllConfirmSceneId === currentScene.id ? 'text-red-600' : 'text-slate-400 hover:text-red-600'
+                        }`}
+                      >
+                        {deletingAllForScene ? (
+                          <><Loader2 className="h-3 w-3 animate-spin" /> Deleting...</>
+                        ) : deleteAllConfirmSceneId === currentScene.id ? (
+                          <><AlertTriangle className="h-3 w-3" /> Click to confirm delete all</>
+                        ) : (
+                          <><Trash2 className="h-3 w-3" /> Delete All</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                    {sceneRenders.map(r => {
+                      // NeedsReview is a completed, playable/downloadable output too — the asset
+                      // may only be partially placed (e.g. one shot's compositing fell back to
+                      // original footage) rather than the render having failed outright. Treating
+                      // it the same as Finished for playback/queueing matches how the two other
+                      // render-status views elsewhere in this file already handle it; this list
+                      // previously only checked 'Finished', so a NeedsReview render here had no
+                      // View link and no Queue button at all — nothing to act on.
+                      const isPlayable = r.renderStatus === 'Finished' || r.renderStatus === 'NeedsReview';
+                      const playUrl = isPlayable ? r.storageKey : r.previewStorageKey;
+                      const prompt = displayPrompt(r);
+                      return (
+                        <div key={r.id} className="px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[10px]">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-1.5 py-0.5 rounded font-bold font-mono shrink-0 ${statusBadgeClass(r.renderStatus)}`}>
+                              {r.renderStatus === 'Processing' && <Loader2 className="h-2.5 w-2.5 inline animate-spin mr-0.5" />}
+                              {r.renderStatus}
+                            </span>
+                            <span className="text-slate-400 font-mono shrink-0">{r.renderMode || 'Interactive'}</span>
+                            {r.isQueuedForFinal && (
+                              <span className="text-blue-600 font-bold shrink-0" title="Queued for final video">★</span>
+                            )}
+                            <span className="text-slate-400 font-mono ml-auto shrink-0">
+                              {new Date(r.createdAt).toLocaleTimeString()}
+                            </span>
+                            {playUrl && (
+                              <a href={playUrl} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700 font-semibold shrink-0">
+                                View
+                              </a>
+                            )}
+                            {isPlayable && onSetRenderQueuedForFinal && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  setQueuingId(r.id);
+                                  try { await onSetRenderQueuedForFinal(r.id, !r.isQueuedForFinal); }
+                                  catch (err: any) { setActionError(err.message || 'Failed to update queue status.'); }
+                                  finally { setQueuingId(null); }
+                                }}
+                                disabled={queuingId === r.id}
+                                className={`shrink-0 font-semibold disabled:opacity-50 cursor-pointer ${
+                                  r.isQueuedForFinal ? 'text-blue-600 hover:text-blue-800' : 'text-slate-500 hover:text-slate-700'
+                                }`}
+                                title="Use this render for this scene in the final combined video"
+                              >
+                                {queuingId === r.id ? <Loader2 className="h-3 w-3 inline animate-spin" /> : r.isQueuedForFinal ? 'Queued' : 'Queue'}
+                              </button>
+                            )}
+                            {r.renderStatus === 'Failed' && onRetryRender && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  setRetryingId(r.id);
+                                  try { await onRetryRender(r.id); }
+                                  catch (err: any) { setActionError(err.message || 'Failed to retry render.'); }
+                                  finally { setRetryingId(null); }
+                                }}
+                                disabled={retryingId === r.id}
+                                className="shrink-0 inline-flex items-center gap-1 text-red-600 hover:text-red-800 disabled:opacity-50 font-semibold cursor-pointer"
+                                title="Retry this failed render"
+                              >
+                                {retryingId === r.id ? <Loader2 className="h-3 w-3 inline animate-spin" /> : <><RefreshCw className="h-3 w-3" /> Retry</>}
+                              </button>
+                            )}
+                            {onDeleteRender && (
+                              <button
+                                type="button"
+                                onClick={() => setDeleteRenderConfirmId(r.id)}
+                                className="shrink-0 text-slate-400 hover:text-red-600 cursor-pointer"
+                                title="Delete this render"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                          {prompt && (
+                            <div className="mt-1 text-slate-500 italic truncate" title={prompt}>
+                              "{prompt}"
+                            </div>
+                          )}
+                          {(r.renderStatus === 'NeedsReview' || r.renderStatus === 'Failed') && r.lastErrorMessage && (
+                            <div className={`mt-1 rounded px-1.5 py-1 border ${r.renderStatus === 'Failed' ? 'text-red-700 bg-red-50 border-red-200' : 'text-amber-700 bg-amber-50 border-amber-200'}`} title={r.lastErrorMessage}>
+                              ⚠ {r.lastErrorMessage}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* PHASE 4: View renders (only after submitting at least one) */}
             {placedSurfaceCount > 0 && onNavigateToRenders && (

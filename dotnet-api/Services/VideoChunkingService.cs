@@ -196,13 +196,45 @@ public class VideoChunkingService
         var outputDir = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrEmpty(outputDir)) Directory.CreateDirectory(outputDir);
 
-        var scaleArg = "";
-        if (maxDimension.HasValue && content.Width > 0 && content.Height > 0 &&
-            (content.Width > maxDimension.Value || content.Height > maxDimension.Value))
+        // Resolve actual video dimensions — prefer DB values (set by ffprobe at upload),
+        // fall back to a quick ffprobe query on the source file itself (robust against
+        // legacy content that was uploaded before Width/Height were persisted).
+        var actualWidth = content.Width;
+        var actualHeight = content.Height;
+        if (actualWidth <= 0 || actualHeight <= 0)
         {
-            var ratio = Math.Min((double)maxDimension.Value / content.Width, (double)maxDimension.Value / content.Height);
-            var targetWidth = Math.Max(2, (int)(content.Width * ratio / 2) * 2);
-            var targetHeight = Math.Max(2, (int)(content.Height * ratio / 2) * 2);
+            try
+            {
+                var ffprobePath = ResolveFfprobePath();
+                var dimArgs = $"-v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 \"{fullSourcePath}\"";
+                using var dimProc = new Process
+                {
+                    StartInfo = new ProcessStartInfo(ffprobePath, dimArgs)
+                    {
+                        RedirectStandardOutput = true, RedirectStandardError = true,
+                        UseShellExecute = false, CreateNoWindow = true
+                    }
+                };
+                dimProc.Start();
+                var dimOutput = dimProc.StandardOutput.ReadToEnd().Trim();
+                dimProc.WaitForExit(5000);
+                var dims = dimOutput.Split(',');
+                if (dims.Length >= 2 && int.TryParse(dims[0], out var w) && w > 0)
+                {
+                    actualWidth = w;
+                    int.TryParse(dims[1], out actualHeight);
+                }
+            }
+            catch { /* leave at 0 — scale check won't trigger */ }
+        }
+
+        var scaleArg = "";
+        if (maxDimension.HasValue && actualWidth > 0 && actualHeight > 0 &&
+            (actualWidth > maxDimension.Value || actualHeight > maxDimension.Value))
+        {
+            var ratio = Math.Min((double)maxDimension.Value / actualWidth, (double)maxDimension.Value / actualHeight);
+            var targetWidth = Math.Max(2, (int)(actualWidth * ratio / 2) * 2);
+            var targetHeight = Math.Max(2, (int)(actualHeight * ratio / 2) * 2);
             scaleArg = $"-vf \"scale={targetWidth}:{targetHeight}\" ";
         }
 
@@ -215,8 +247,9 @@ public class VideoChunkingService
         var coarseSeek = Math.Max(0, startTime - 2.0);
         var fineSeek = startTime - coarseSeek;
 
+        var targetBitrateArgs = VideoProbe.GetTargetBitrateArgs(fullSourcePath);
         var args = $"-hide_banner -loglevel error -ss {coarseSeek:F3} -i \"{fullSourcePath}\" " +
-                   $"-ss {fineSeek:F3} -t {duration:F3} {scaleArg}-c:v libx264 -preset fast -crf 23 " +
+                   $"-ss {fineSeek:F3} -t {duration:F3} {scaleArg}-c:v libx264 -preset fast {targetBitrateArgs} " +
                    $"-c:a aac -b:a 128k -pix_fmt yuv420p -movflags +faststart " +
                    $"\"{outputPath}\" -y";
 
@@ -311,8 +344,11 @@ public class VideoChunkingService
     /// clips come from two different render engines with no shared encoding guarantee between
     /// them, and original-footage segments must match both. ffmpeg's concat demuxer with -c copy
     /// requires identical stream parameters across every piece, so skipping this step risks a
-    /// corrupted or desynced final output. Matches the same audio-free v1 limitation as the
-    /// single-scene splice this generalizes (RenderJobService.SpliceSceneReplacementAsync).
+    /// corrupted or desynced final output. Audio is preserved only when every segment actually
+    /// has an audio stream (source video and every replacement clip) — one silent segment mixed
+    /// with sound ones would violate that same "identical stream layout" requirement, so the whole
+    /// assembly falls back to muted in that case, same fallback as the single-scene splice this
+    /// generalizes (RenderJobService.SpliceSceneReplacementAsync).
     /// </summary>
     /// <param name="segments">Every scene in the content, in SceneIndex order, each paired with
     /// its queued render's scene clip path (or null to use the scene's original footage).</param>
@@ -327,6 +363,13 @@ public class VideoChunkingService
         var concatListPath = Path.Combine(workDir, "concat_final_assembly.txt");
         var lines = new List<string>();
 
+        var sourceHasAudio = VideoProbe.HasAudioStream(sourceVideoPath);
+        var preserveAudio = sourceHasAudio && segments.All(s =>
+            string.IsNullOrEmpty(s.replacementClipPath) || !File.Exists(s.replacementClipPath) ||
+            VideoProbe.HasAudioStream(s.replacementClipPath));
+        var audioArgs = preserveAudio ? "-c:a aac -b:a 192k -ar 48000 -ac 2" : "-an";
+        var targetBitrateArgs = VideoProbe.GetTargetBitrateArgs(sourceVideoPath);
+
         for (int i = 0; i < segments.Count; i++)
         {
             var (scene, replacementClipPath) = segments[i];
@@ -340,7 +383,7 @@ public class VideoChunkingService
             await RunFfmpegAsync(
                 $"-y -hide_banner -loglevel error {inputArgs} " +
                 $"-vf \"scale={videoWidth}:{videoHeight},setsar=1\" -r {fps:F3} " +
-                $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -an " +
+                $"-c:v libx264 -preset fast {targetBitrateArgs} -pix_fmt yuv420p {audioArgs} " +
                 $"\"{normalizedPath.Replace("\\", "/")}\"");
 
             lines.Add($"file '{normalizedPath.Replace("\\", "/")}'");
@@ -357,5 +400,52 @@ public class VideoChunkingService
 
         _logger.LogInformation("[Chunking] Final assembly: spliced {Count} scenes → {Output}", segments.Count, outputPath);
         return outputPath;
+    }
+
+    /// <summary>Resolve the full path to ffprobe. Checks PATH and common install locations.</summary>
+    private static string ResolveFfprobePath()
+    {
+        var candidates = new List<string>
+        {
+            "ffprobe", @"C:\ffmpeg\bin\ffprobe.exe",
+            @"C:\ProgramData\chocolatey\bin\ffprobe.exe",
+            @"C:\Program Files\ffmpeg\bin\ffprobe.exe",
+        };
+
+        var wingetDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            @"Microsoft\WinGet\Packages");
+        if (Directory.Exists(wingetDir))
+        {
+            try
+            {
+                var found = Directory.GetFiles(wingetDir, "ffprobe.exe", SearchOption.AllDirectories);
+                if (found.Length > 0) candidates.Add(found[0]);
+            }
+            catch { }
+        }
+
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                using var test = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = candidate, Arguments = "-version",
+                        RedirectStandardOutput = true, RedirectStandardError = true,
+                        UseShellExecute = false, CreateNoWindow = true
+                    }
+                };
+                test.Start();
+                test.WaitForExit(2000);
+                if (test.ExitCode == 0) return candidate;
+            }
+            catch { }
+        }
+
+        throw new InvalidOperationException(
+            "FFprobe (part of FFmpeg) is not installed. Install via: winget install ffmpeg");
     }
 }

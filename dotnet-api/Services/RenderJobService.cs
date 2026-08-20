@@ -81,7 +81,10 @@ public class RenderJobService
         return idx >= 0 && idx + 1 < parts.Length ? parts[idx + 1] : string.Empty;
     }
 
-    private static async Task RunFfmpegAsync(string arguments, CancellationToken ct)
+    private static Task RunFfmpegAsync(string arguments, CancellationToken ct) =>
+        RunFfmpegAsync(arguments, ct, TimeSpan.FromMinutes(5));
+
+    private static async Task RunFfmpegAsync(string arguments, CancellationToken ct, TimeSpan timeout)
     {
         using var process = new Process
         {
@@ -97,7 +100,7 @@ public class RenderJobService
         };
         process.Start();
 
-        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        using var timeoutCts = new CancellationTokenSource(timeout);
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
 
         try
@@ -360,9 +363,13 @@ public class RenderJobService
 
             try { Directory.Delete(workAbsDir, true); } catch { }
 
+            // A render where every shot failed to composite produced zero branded footage — that's a
+            // real failure, not something to merely flag for review, and must be marked "Failed" so
+            // it's both labeled correctly and eligible for retry (RetryRenderAsync only accepts
+            // "Failed" renders).
             var needsReview = trackResult.OverallStatus == "PartialCoverage" || driftIoU < 0.85 || shotsFullyFailed > 0;
             render.Progress = 100;
-            render.RenderStatus = needsReview ? "NeedsReview" : "Finished";
+            render.RenderStatus = shotsFullyFailed == totalShots ? "Failed" : needsReview ? "NeedsReview" : "Finished";
             render.CompositingEngine = "pikaswaps";
             render.QualityTier = "AI";
             render.StorageKey = $"/api/renders/{renderId}/download";
@@ -922,7 +929,512 @@ public class RenderJobService
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // Surface-Anchored Path — FLUX Kontext + Kling O1 Edit
+    //
+    // Anchors on a real detected surface: extracts its exact DetectedAtFrame, composites the
+    // asset into it via FLUX.1 Kontext (surgical inpainting), then uses that composited frame
+    // as a visual reference for Kling O1 Edit to propagate the placement across the whole scene.
+    // Same two-phase preview→approve→splice pattern as PromptEdit.
+    // ═══════════════════════════════════════════════════════════════
+
     [AutomaticRetry(Attempts = 1, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
+    [DisableConcurrentExecution(timeoutInSeconds: 1800)]
+    public async Task ProcessSurfaceAnchorJob(string renderId, CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+        using var scope = _serviceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
+        var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
+        var kontextKling = scope.ServiceProvider.GetRequiredService<FalKontextKlingCompositingService>();
+        var chunker = scope.ServiceProvider.GetRequiredService<VideoChunkingService>();
+        var platformSettings = scope.ServiceProvider.GetRequiredService<IPlatformSettingsService>();
+
+        var render = await db.Renders.FindAsync(new object[] { renderId }, cancellationToken);
+        if (render == null) return;
+
+        try
+        {
+            // Phase 1: Validate (5% → 10%)
+            render.Progress = 5; render.RenderStatus = "Processing";
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 5, "Validating");
+
+            if (string.IsNullOrEmpty(render.SurfaceId))
+                throw new InvalidOperationException("ProcessSurfaceAnchorJob requires a SurfaceId.");
+            if (string.IsNullOrEmpty(render.SceneId))
+                throw new InvalidOperationException("ProcessSurfaceAnchorJob requires a SceneId.");
+            if (string.IsNullOrEmpty(render.PromptText))
+                throw new InvalidOperationException("ProcessSurfaceAnchorJob requires PromptText.");
+
+            var content = await db.ContentItems.FindAsync(new object[] { render.ContentId }, cancellationToken);
+            var scene = await db.SceneItems.FindAsync(new object[] { render.SceneId }, cancellationToken);
+            var surface = await db.SurfaceItems.FindAsync(new object[] { render.SurfaceId }, cancellationToken);
+            var asset = await db.CreativeAssets.FindAsync(new object[] { render.AssetId }, cancellationToken);
+            if (content == null || scene == null || surface == null || asset == null)
+                throw new InvalidOperationException("Content, scene, surface, or asset not found.");
+
+            if (scene.DurationSeconds < KlingPromptEditService.MinPromptEditDurationSeconds ||
+                scene.DurationSeconds > KlingPromptEditService.MaxPromptEditDurationSeconds)
+                throw new InvalidOperationException(
+                    $"Scene duration {scene.DurationSeconds:F1}s is outside the allowed " +
+                    $"{KlingPromptEditService.MinPromptEditDurationSeconds}-{KlingPromptEditService.MaxPromptEditDurationSeconds}s window.");
+
+            var videoPath = ResolveVideoPath(content.StorageKey);
+            if (videoPath == null || !File.Exists(videoPath))
+                throw new InvalidOperationException("Source video file not found.");
+
+            var assetPath = ResolveAssetPath(asset.StorageKey);
+            if (!File.Exists(assetPath))
+                throw new InvalidOperationException("Asset file not found.");
+
+            var surfaceDescription = !string.IsNullOrEmpty(surface.SurfaceType)
+                ? surface.SurfaceType
+                : "the surface";
+
+            var detectedFrame = surface.DetectedAtFrame > 0
+                ? surface.DetectedAtFrame.Value
+                : scene.StartFrame + (scene.EndFrame - scene.StartFrame) / 2;
+
+            var videoBaseUrl = await platformSettings.GetAsync("sam3_video_base_url", "http://localhost:57220");
+
+            render.Progress = 10;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 10, "Extracting anchor frame");
+
+            // ── Phase 2: Extract the detected-at frame (10% → 15%) ──
+            var fps = content.FrameRate > 0 ? content.FrameRate : 30;
+            var workDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "tmp-renders", renderId);
+            Directory.CreateDirectory(workDir);
+            var framePath = Path.Combine(workDir, "anchor_frame.png");
+
+            var frameArgs = $"-y -hide_banner -loglevel error -i \"{videoPath.Replace("\\", "/")}\" " +
+                $"-vf \"select=eq(n\\,{detectedFrame})\" -vframes 1 \"{framePath.Replace("\\", "/")}\"";
+            await RunFfmpegAsync(frameArgs, cancellationToken);
+
+            if (!File.Exists(framePath) || new FileInfo(framePath).Length < 100)
+            {
+                var seekTime = detectedFrame / (double)fps;
+                frameArgs = $"-y -hide_banner -loglevel error -ss {seekTime:F3} -i \"{videoPath.Replace("\\", "/")}\" " +
+                    $"-vframes 1 \"{framePath.Replace("\\", "/")}\"";
+                await RunFfmpegAsync(frameArgs, cancellationToken);
+            }
+
+            if (!File.Exists(framePath) || new FileInfo(framePath).Length < 100)
+                throw new InvalidOperationException("Failed to extract the surface's detected-at frame.");
+
+            var frameUrl = $"{videoBaseUrl}/api/content/file/tmp-renders/{renderId}/anchor_frame.png";
+            var assetFileName = Path.GetFileName(assetPath);
+            var assetUrl = $"{videoBaseUrl}/api/assets/file/{assetFileName}";
+
+            render.Progress = 15;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 15, "Compositing frame with FLUX Kontext");
+
+            // ── Phase 3: FLUX Kontext — composite asset into the anchor frame (15% → 45%) ──
+            var (anchorFrameWidth, anchorFrameHeight) = VideoProbe.GetDimensions(videoPath);
+            var compositedFrameUrl = await kontextKling.CompositeFrameWithKontextAsync(
+                frameUrl, assetUrl, surfaceDescription, render.PromptText, renderId,
+                anchorFrameWidth, anchorFrameHeight, ct: cancellationToken);
+
+            if (compositedFrameUrl == null)
+                throw new InvalidOperationException("FLUX.1 Kontext did not return a composited frame.");
+
+            render.Progress = 45;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 45, "Extracting scene clip");
+
+            // ── Phase 4: Extract scene clip for Kling O1 (45% → 50%) ──
+            var sceneClipPath = Path.Combine(workDir, "scene_src.mp4");
+            await chunker.ExtractSceneClipAsync(scene, content, sceneClipPath, cancellationToken,
+                maxDimension: KlingPromptEditService.MaxPromptEditResolutionPx);
+            var sceneClipUrl = $"{videoBaseUrl}/api/content/file/tmp-renders/{renderId}/scene_src.mp4";
+
+            render.Progress = 50;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 50, "Propagating with Kling O1 Edit");
+
+            // ── Phase 5: Kling O1 Edit — propagate the composited frame across the scene (50% → 85%) ──
+            var previewPath = await kontextKling.PropagateWithKlingAsync(
+                sceneClipUrl, compositedFrameUrl, render.PromptText, renderId, cancellationToken);
+
+            if (previewPath == null)
+                throw new InvalidOperationException("Kling O1 Edit did not return a generated video.");
+
+            render.Progress = 85;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 85, "Saving preview");
+
+            // ── Phase 6: Save preview (85% → 90%) — same preview-ready pattern as PromptEdit ──
+            var rendersDir = Path.Combine(Directory.GetCurrentDirectory(), "renders");
+            Directory.CreateDirectory(rendersDir);
+            var previewDestPath = Path.Combine(rendersDir, $"BIT_Preview_{renderId}.mp4");
+            File.Copy(previewPath, previewDestPath, overwrite: true);
+
+            render.PreviewStorageKey = $"/api/renders/{renderId}/preview";
+            render.RenderStatus = "PreviewReady";
+            render.CompositingEngine = "fal-kontext-kling";
+            render.Progress = 90;
+            render.ProcessingDurationMs = (int)sw.ElapsedMilliseconds;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 90, "Preview ready — awaiting approval");
+
+            await eventLog.LogEventAsync("RenderEngine", "SURFACE_ANCHOR_PREVIEW_COMPLETE", "Info",
+                $"Surface anchor preview {renderId}: surface {surface.Id} ({surfaceDescription}), " +
+                $"scene {scene.Id} in {sw.Elapsed.TotalSeconds:F1}s");
+
+            try { Directory.Delete(workDir, true); } catch { }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[SurfaceAnchor] Render {RenderId} FAILED", renderId);
+            render.RenderStatus = "Failed";
+            render.LastErrorMessage = ex.Message;
+            await db.SaveChangesAsync(cancellationToken);
+            await eventLog.LogEventAsync("RenderEngine", "SURFACE_ANCHOR_PREVIEW_FAILED", "Warning",
+                $"Render {renderId} failed: {ex.Message}");
+            await _hubContext.Clients.All.RenderProgress(renderId, render.Progress, "Failed");
+            throw;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Surface-Anchored Path — Interactive Step 1: Kontext Frame Only
+    //
+    // Generates just the FLUX.1 Kontext composited frame (no Kling) so the
+    // user can review/redo the frame before proceeding to video propagation.
+    // Sets RenderStatus to "KontextReady" on completion.
+    // ═══════════════════════════════════════════════════════════════
+
+    [AutomaticRetry(Attempts = 1, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
+    [DisableConcurrentExecution(timeoutInSeconds: 600)]
+    public async Task ProcessKontextFrameJob(string renderId, CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+        using var scope = _serviceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
+        var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
+        var kontextKling = scope.ServiceProvider.GetRequiredService<FalKontextKlingCompositingService>();
+        var platformSettings = scope.ServiceProvider.GetRequiredService<IPlatformSettingsService>();
+
+        var render = await db.Renders.FindAsync(new object[] { renderId }, cancellationToken);
+        if (render == null) return;
+
+        try
+        {
+            render.Progress = 5; render.RenderStatus = "Processing";
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 5, "Validating");
+
+            if (string.IsNullOrEmpty(render.SceneId))
+                throw new InvalidOperationException("ProcessKontextFrameJob requires a SceneId.");
+            if (string.IsNullOrEmpty(render.AssetId))
+                throw new InvalidOperationException("ProcessKontextFrameJob requires an AssetId.");
+            if (render.RenderMode != "KontextStep")
+                throw new InvalidOperationException("ProcessKontextFrameJob requires RenderMode=KontextStep.");
+
+            var content = await db.ContentItems.FindAsync(new object[] { render.ContentId }, cancellationToken);
+            var asset = await db.CreativeAssets.FindAsync(new object[] { render.AssetId }, cancellationToken);
+            if (content == null || asset == null)
+                throw new InvalidOperationException("Content or asset not found.");
+
+            // SurfaceId is optional — the user may pause at a frame without a pre-detected surface.
+            // When absent, Kontext relies on the prompt alone for placement guidance.
+            SurfaceItem? surface = null;
+            if (!string.IsNullOrEmpty(render.SurfaceId))
+            {
+                surface = await db.SurfaceItems.FindAsync(new object[] { render.SurfaceId }, cancellationToken);
+                // Don't fail if surface was deleted — just proceed without it
+            }
+
+            var surfaceDescription = surface?.SurfaceType ?? "the surface";
+
+            var videoPath = ResolveVideoPath(content.StorageKey);
+            if (videoPath == null || !File.Exists(videoPath))
+                throw new InvalidOperationException("Source video file not found.");
+
+            var assetPath = ResolveAssetPath(asset.StorageKey);
+            if (!File.Exists(assetPath))
+                throw new InvalidOperationException("Asset file not found.");
+
+            // Read the user-chosen frame number from the render's PromptText JSON metadata,
+            // or fall back to the surface's DetectedAtFrame. The RenderService writes this as
+            // JSON when creating a KontextStep render: {"frameNumber":N,"prompt":"..."}
+            int frameNumber;
+            string kontextPrompt;
+            string compositingProvider;
+            try
+            {
+                using var metaDoc = JsonDocument.Parse(render.PromptText ?? "{}");
+                var root = metaDoc.RootElement;
+                frameNumber = root.TryGetProperty("frameNumber", out var fn) ? fn.GetInt32() :
+                    (surface != null && surface.DetectedAtFrame > 0 ? surface.DetectedAtFrame.Value : 0);
+                kontextPrompt = root.TryGetProperty("prompt", out var p) && p.ValueKind == JsonValueKind.String
+                    ? p.GetString()! : "";
+                compositingProvider = root.TryGetProperty("provider", out var pv) && pv.ValueKind == JsonValueKind.String
+                    ? pv.GetString()! : "flux-kontext";
+            }
+            catch
+            {
+                frameNumber = surface != null && surface.DetectedAtFrame > 0 ? surface.DetectedAtFrame.Value : 0;
+                frameNumber = surface.DetectedAtFrame > 0 ? surface.DetectedAtFrame.Value : 0;
+                kontextPrompt = render.PromptText ?? "";
+                compositingProvider = "flux-kontext";
+            }
+
+            if (frameNumber <= 0)
+                throw new InvalidOperationException("No frame number available — surface has no DetectedAtFrame and no frameNumber was provided.");
+
+            var fps = content.FrameRate > 0 ? content.FrameRate : 30;
+            var videoBaseUrl = await platformSettings.GetAsync("sam3_video_base_url", "http://localhost:57220");
+
+            render.Progress = 10;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 10, "Extracting anchor frame");
+
+            // ── Extract the user-chosen frame (10% → 20%) ──
+            var workDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "tmp-renders", renderId);
+            Directory.CreateDirectory(workDir);
+            var framePath = Path.Combine(workDir, "anchor_frame.png");
+
+            // Fast two-stage seek instead of `select=eq(n,...)` — that filter forces ffmpeg to
+            // decode the video from the very start to find the target frame, which for a frame
+            // far into a long video reliably blows past RunFfmpegAsync's timeout before this
+            // method's own fallback below is ever reached (the exception propagates first).
+            var seekTime = frameNumber / (double)fps;
+            var preSeek = Math.Max(0, seekTime - 2);
+            var postSeek = seekTime - preSeek;
+            var frameArgs = $"-y -hide_banner -loglevel error -ss {preSeek.ToString(System.Globalization.CultureInfo.InvariantCulture)} -i \"{videoPath.Replace("\\", "/")}\" " +
+                $"-ss {postSeek.ToString(System.Globalization.CultureInfo.InvariantCulture)} -vframes 1 \"{framePath.Replace("\\", "/")}\"";
+            await RunFfmpegAsync(frameArgs, cancellationToken);
+
+            if (!File.Exists(framePath) || new FileInfo(framePath).Length < 100)
+            {
+                // Fallback: single-seek (handles edge cases where two-stage seek lands wrong)
+                frameArgs = $"-y -hide_banner -loglevel error -ss {seekTime.ToString(System.Globalization.CultureInfo.InvariantCulture)} -i \"{videoPath.Replace("\\", "/")}\" " +
+                    $"-vframes 1 \"{framePath.Replace("\\", "/")}\"";
+                await RunFfmpegAsync(frameArgs, cancellationToken);
+            }
+
+            if (!File.Exists(framePath) || new FileInfo(framePath).Length < 100)
+                throw new InvalidOperationException("Failed to extract frame at the chosen position.");
+
+            var frameUrl = $"{videoBaseUrl}/api/content/file/tmp-renders/{renderId}/anchor_frame.png";
+            var assetFileName = Path.GetFileName(assetPath);
+            var assetUrl = $"{videoBaseUrl}/api/assets/file/{assetFileName}";
+
+            var isNanoBanana = compositingProvider == "nano-banana-pro";
+            render.Progress = 20;
+            render.CompositingEngine = isNanoBanana ? "nano-banana-pro" : "flux-kontext";
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 20, isNanoBanana ? "Compositing with Nano Banana Pro" : "Compositing with FLUX Kontext");
+
+            // ── Composite asset into the frame (20% → 50%) — FLUX Kontext or Nano Banana Pro ──
+            var effectivePrompt = string.IsNullOrWhiteSpace(kontextPrompt) ? render.PromptText ?? "" : kontextPrompt;
+            var (stepFrameWidth, stepFrameHeight) = VideoProbe.GetDimensions(videoPath);
+            string? compositedFrameUrl;
+            if (isNanoBanana)
+            {
+                compositedFrameUrl = await kontextKling.CompositeFrameWithNanoBananaAsync(
+                    frameUrl, assetUrl, surfaceDescription, effectivePrompt,
+                    renderId, stepFrameWidth, stepFrameHeight, ct: cancellationToken);
+            }
+            else
+            {
+                compositedFrameUrl = await kontextKling.CompositeFrameWithKontextAsync(
+                    frameUrl, assetUrl, surfaceDescription, effectivePrompt,
+                    renderId, stepFrameWidth, stepFrameHeight, ct: cancellationToken);
+            }
+
+            if (compositedFrameUrl == null)
+                throw new InvalidOperationException(
+                    isNanoBanana ? "Nano Banana Pro did not return a composited frame." : "FLUX.1 Kontext did not return a composited frame.");
+
+            // ── Download and persist the composited frame ──
+            render.Progress = 50;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 50, "Saving composited frame");
+
+            var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+            var compositedBytes = await http.GetByteArrayAsync(compositedFrameUrl, cancellationToken);
+            var kontextDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "kontext-frames");
+            Directory.CreateDirectory(kontextDir);
+            var kontextFileName = $"kontext_{renderId}.png";
+            var kontextFilePath = Path.Combine(kontextDir, kontextFileName);
+
+            // Save the raw provider output to a temp file, then force it to exactly match the
+            // source frame's dimensions via ffmpeg (scale+pad, no distortion). Neither FLUX
+            // Kontext's aspect-ratio enum nor Nano Banana Pro's can guarantee an exact pixel
+            // match to the source video, and a size mismatch here silently misaligns the
+            // reference frame Kling propagates from.
+            var rawCompositedPath = Path.Combine(kontextDir, $"kontext_{renderId}_raw.png");
+            await File.WriteAllBytesAsync(rawCompositedPath, compositedBytes, cancellationToken);
+            var resizeArgs = $"-y -hide_banner -loglevel error -i \"{rawCompositedPath.Replace("\\", "/")}\" " +
+                $"-vf \"scale={stepFrameWidth}:{stepFrameHeight}:force_original_aspect_ratio=decrease,pad={stepFrameWidth}:{stepFrameHeight}:(ow-iw)/2:(oh-ih)/2:color=black\" " +
+                $"\"{kontextFilePath.Replace("\\", "/")}\"";
+            await RunFfmpegAsync(resizeArgs, cancellationToken);
+            try { File.Delete(rawCompositedPath); } catch { }
+
+            if (!File.Exists(kontextFilePath) || new FileInfo(kontextFilePath).Length < 100)
+                throw new InvalidOperationException("Failed to normalize the composited frame to source dimensions.");
+
+            render.KontextFrameStorageKey = $"/api/content/file/kontext-frames/{kontextFileName}";
+            render.RenderStatus = "KontextReady";
+            render.Progress = 50;
+            render.ProcessingDurationMs = (int)sw.ElapsedMilliseconds;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 50, "Kontext frame ready — awaiting review");
+
+            await eventLog.LogEventAsync("RenderEngine", "KONTEXT_FRAME_COMPLETE", "Info",
+                $"Kontext frame {renderId}: surface {surface?.Id ?? "(none)"} ({surfaceDescription}), " +
+                $"frame {frameNumber} in {sw.Elapsed.TotalSeconds:F1}s");
+
+            try { Directory.Delete(workDir, true); } catch { }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[KontextFrame] Render {RenderId} FAILED", renderId);
+            render.RenderStatus = "Failed";
+            render.LastErrorMessage = ex.Message;
+            await db.SaveChangesAsync(cancellationToken);
+            await eventLog.LogEventAsync("RenderEngine", "KONTEXT_FRAME_FAILED", "Warning",
+                $"Render {renderId} failed: {ex.Message}");
+            await _hubContext.Clients.All.RenderProgress(renderId, render.Progress, "Failed");
+            throw;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Surface-Anchored Path — Interactive Step 2: Kling Propagation
+    //
+    // Reads the stored Kontext composited frame and propagates it across
+    // the scene via Kling O1 Edit. Sets RenderStatus to "PreviewReady".
+    // The user can redo this step with an updated prompt.
+    // ═══════════════════════════════════════════════════════════════
+
+    [AutomaticRetry(Attempts = 1, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
+    [DisableConcurrentExecution(timeoutInSeconds: 1800)]
+    public async Task ProcessKlingPropagationJob(string renderId, CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+        using var scope = _serviceProvider.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
+        var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
+        var kontextKling = scope.ServiceProvider.GetRequiredService<FalKontextKlingCompositingService>();
+        var chunker = scope.ServiceProvider.GetRequiredService<VideoChunkingService>();
+        var platformSettings = scope.ServiceProvider.GetRequiredService<IPlatformSettingsService>();
+
+        var render = await db.Renders.FindAsync(new object[] { renderId }, cancellationToken);
+        if (render == null) return;
+
+        try
+        {
+            render.Progress = 5; render.RenderStatus = "Processing";
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 5, "Validating");
+
+            if (render.RenderStatus != "Processing" && render.RenderStatus != "KontextReady")
+            {
+                // If still KontextReady, flip to Processing first
+                if (render.RenderStatus == "KontextReady")
+                {
+                    render.RenderStatus = "Processing";
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+                else
+                    throw new InvalidOperationException(
+                        $"Render {renderId} is not ready for Kling propagation (status={render.RenderStatus}). Generate the Kontext frame first.");
+            }
+
+            if (string.IsNullOrEmpty(render.SceneId))
+                throw new InvalidOperationException("ProcessKlingPropagationJob requires a SceneId.");
+            if (string.IsNullOrEmpty(render.KontextFrameStorageKey))
+                throw new InvalidOperationException("No Kontext composited frame stored — run ProcessKontextFrameJob first.");
+
+            var content = await db.ContentItems.FindAsync(new object[] { render.ContentId }, cancellationToken);
+            var scene = await db.SceneItems.FindAsync(new object[] { render.SceneId }, cancellationToken);
+            if (content == null || scene == null)
+                throw new InvalidOperationException("Content or scene not found.");
+
+            // Re-validate duration
+            if (scene.DurationSeconds < KlingPromptEditService.MinPromptEditDurationSeconds ||
+                scene.DurationSeconds > KlingPromptEditService.MaxPromptEditDurationSeconds)
+                throw new InvalidOperationException(
+                    $"Scene duration {scene.DurationSeconds:F1}s is outside the allowed " +
+                    $"{KlingPromptEditService.MinPromptEditDurationSeconds}-{KlingPromptEditService.MaxPromptEditDurationSeconds}s window.");
+
+            var videoBaseUrl = await platformSettings.GetAsync("sam3_video_base_url", "http://localhost:57220");
+
+            // Build public URL for the stored Kontext frame
+            var kontextFrameUrl = $"{videoBaseUrl}{render.KontextFrameStorageKey}";
+
+            render.Progress = 10;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 10, "Extracting scene clip");
+
+            // ── Extract scene clip (10% → 25%) ──
+            var workDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "tmp-renders", renderId);
+            Directory.CreateDirectory(workDir);
+            var sceneClipPath = Path.Combine(workDir, "scene_src.mp4");
+            await chunker.ExtractSceneClipAsync(scene, content, sceneClipPath, cancellationToken,
+                maxDimension: KlingPromptEditService.MaxPromptEditResolutionPx);
+            var sceneClipUrl = $"{videoBaseUrl}/api/content/file/tmp-renders/{renderId}/scene_src.mp4";
+
+            render.Progress = 25;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 25, "Propagating with Kling O1 Edit");
+
+            // ── Kling O1 Edit — propagate the composited frame across the scene (25% → 85%) ──
+            var klingPrompt = render.PromptText ?? "Place the product as shown in the reference frame.";
+            var previewPath = await kontextKling.PropagateWithKlingAsync(
+                sceneClipUrl, kontextFrameUrl, klingPrompt, renderId, cancellationToken);
+
+            if (previewPath == null)
+                throw new InvalidOperationException("Kling O1 Edit did not return a generated video.");
+
+            render.Progress = 85;
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 85, "Saving preview");
+
+            // ── Save preview (85% → 90%) — same PreviewReady pattern ──
+            var rendersDir = Path.Combine(Directory.GetCurrentDirectory(), "renders");
+            Directory.CreateDirectory(rendersDir);
+            var previewDestPath = Path.Combine(rendersDir, $"BIT_Preview_{renderId}.mp4");
+            File.Copy(previewPath, previewDestPath, overwrite: true);
+
+            render.PreviewStorageKey = $"/api/renders/{renderId}/preview";
+            render.RenderStatus = "PreviewReady";
+            render.Progress = 90;
+            render.ProcessingDurationMs = (int)sw.ElapsedMilliseconds;
+            render.CompositingEngine = "FalKontextKling";
+            await db.SaveChangesAsync(cancellationToken);
+            await _hubContext.Clients.All.RenderProgress(renderId, 90, "Preview ready — awaiting approval");
+
+            await eventLog.LogEventAsync("RenderEngine", "KLING_PROPAGATION_COMPLETE", "Info",
+                $"Kling propagation {renderId}: scene {scene.Id} in {sw.Elapsed.TotalSeconds:F1}s");
+
+            try { Directory.Delete(workDir, true); } catch { }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[KlingPropagation] Render {RenderId} FAILED", renderId);
+            render.RenderStatus = "Failed";
+            render.LastErrorMessage = ex.Message;
+            await db.SaveChangesAsync(cancellationToken);
+            await eventLog.LogEventAsync("RenderEngine", "KLING_PROPAGATION_FAILED", "Warning",
+                $"Render {renderId} failed: {ex.Message}");
+            await _hubContext.Clients.All.RenderProgress(renderId, render.Progress, "Failed");
+            throw;
+        }
+    }
+
+    // Attempts = 0: no automatic Hangfire retry. This job's catch block sets RenderStatus to
+    // "Failed" with the real error on any failure; a Hangfire auto-retry would then re-run the
+    // job while status is already "Failed", trip the "not awaiting approval" guard below, and
+    // silently overwrite the real failure reason with that generic message. Retries are now
+    // driven explicitly by the user (KontextKlingPanel's "Retry Approve & Merge"), which re-flips
+    // the render to "Processing" first, so no automatic retry is needed here.
+    [AutomaticRetry(Attempts = 0, OnAttemptsExceeded = AttemptsExceededAction.Fail)]
     [DisableConcurrentExecution(timeoutInSeconds: 1800)]
     public async Task ProcessPromptSpliceJob(string renderId, CancellationToken cancellationToken)
     {
@@ -968,16 +1480,26 @@ public class RenderJobService
             var workDir = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", "tmp-renders", renderId);
             Directory.CreateDirectory(workDir);
 
+            // Audio is only preserved end-to-end when BOTH the Kling clip and the original source
+            // have an audio stream — concat demuxer's "-c copy" requires identical stream layouts
+            // across every segment, so a mismatch (one silent, one not) falls back to muting
+            // everything uniformly, same as the old unconditional behavior.
+            var previewHasAudio = VideoProbe.HasAudioStream(previewPath);
+            var sourceHasAudio = VideoProbe.HasAudioStream(videoPath);
+            var preserveAudio = previewHasAudio && sourceHasAudio;
+            var audioArgs = preserveAudio ? "-c:a aac -b:a 192k -ar 48000 -ac 2" : "-an";
+
             // ── Normalize the Kling clip to match the source's resolution/fps (90% → 95%) ──
             // Kling O1's output resolution/fps won't match the source; ffmpeg concat with -c copy
             // (used below) requires matching stream parameters across every segment.
             var normalizedPath = Path.Combine(workDir, "preview_normalized.mp4");
+            var targetBitrateArgs = VideoProbe.GetTargetBitrateArgs(videoPath);
             await RunFfmpegAsync(
                 $"-y -hide_banner -loglevel error -i \"{previewPath.Replace("\\", "/")}\" " +
                 $"-vf \"scale={videoWidth}:{videoHeight},setsar=1\" -r {fps:F3} " +
-                $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -an " +
+                $"-c:v libx264 -preset fast {targetBitrateArgs} -pix_fmt yuv420p {audioArgs} " +
                 $"\"{normalizedPath.Replace("\\", "/")}\"",
-                cancellationToken);
+                cancellationToken, TimeSpan.FromMinutes(20));
 
             render.Progress = 95;
             await db.SaveChangesAsync(cancellationToken);
@@ -985,7 +1507,7 @@ public class RenderJobService
 
             // ── Splice the normalized clip into the full source in place of the original scene span (95% → 98%) ──
             var outputPath = Path.Combine(Directory.GetCurrentDirectory(), "renders", $"BIT_Render_{renderId}.mp4");
-            await SpliceSceneReplacementAsync(videoPath, normalizedPath, scene, fps, videoWidth, videoHeight, workDir, outputPath, cancellationToken);
+            await SpliceSceneReplacementAsync(videoPath, normalizedPath, scene, fps, videoWidth, videoHeight, workDir, outputPath, audioArgs, cancellationToken);
 
             // Persist the normalized scene-only clip too (StorageKey/outputPath above is the full
             // video with just this scene changed — final assembly needs the scene alone, the same
@@ -1032,15 +1554,15 @@ public class RenderJobService
     /// shot-aligned chunks, which doesn't fit "replace exactly one scene, keep everything else
     /// untouched" (this flow has no shots/tracking data to chunk against).
     ///
-    /// v1 limitation: all three segments are re-encoded audio-free (-an). ffmpeg's concat demuxer
-    /// with -c copy requires every segment to share identical stream layouts, and the Kling clip's
-    /// audio (if any) can't be guaranteed to match the source's codec/sample rate — muting
-    /// uniformly is the reliable choice for a first version. Audio preservation for prompt-edited
-    /// scenes is a documented follow-up, not silently half-implemented here.
+    /// Audio: the before/after segments (both cut from the original source) and the already-
+    /// normalized Kling clip must all share identical audio stream layouts for the concat
+    /// demuxer's "-c copy" to work — <paramref name="audioArgs"/> (computed by the caller from
+    /// whether both the source and the Kling clip actually have audio) is applied uniformly to
+    /// before/after so they match whatever the normalized clip was encoded with.
     /// </summary>
     private static async Task SpliceSceneReplacementAsync(
         string sourceVideoPath, string normalizedClipPath, SceneItem scene, double fps,
-        int videoWidth, int videoHeight, string workDir, string outputPath, CancellationToken ct)
+        int videoWidth, int videoHeight, string workDir, string outputPath, string audioArgs, CancellationToken ct)
     {
         var sceneStart = scene.StartFrame / fps;
         var sceneEnd = scene.EndFrame / fps;
@@ -1052,14 +1574,19 @@ public class RenderJobService
         var beforePath = Path.Combine(workDir, "splice_before.mp4");
         var afterPath = Path.Combine(workDir, "splice_after.mp4");
 
+        // Before/after segments are full re-encodes of everything outside the replaced scene —
+        // for a scene near the start of a long source video, "after" can mean re-encoding almost
+        // the entire video. The default 5-minute ffmpeg timeout was too short for this and caused
+        // a real splice job to be canceled mid-encode (surfacing as a misleading TaskCanceledException).
+        var targetBitrateArgs = VideoProbe.GetTargetBitrateArgs(sourceVideoPath);
         if (hasBefore)
         {
             await RunFfmpegAsync(
                 $"-y -hide_banner -loglevel error -i \"{sourceVideoPath.Replace("\\", "/")}\" -t {sceneStart:F3} " +
                 $"-vf \"scale={videoWidth}:{videoHeight},setsar=1\" -r {fps:F3} " +
-                $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -an " +
+                $"-c:v libx264 -preset fast {targetBitrateArgs} -pix_fmt yuv420p {audioArgs} " +
                 $"\"{beforePath.Replace("\\", "/")}\"",
-                ct);
+                ct, TimeSpan.FromMinutes(20));
         }
 
         if (hasAfter)
@@ -1067,9 +1594,9 @@ public class RenderJobService
             await RunFfmpegAsync(
                 $"-y -hide_banner -loglevel error -ss {sceneEnd:F3} -i \"{sourceVideoPath.Replace("\\", "/")}\" " +
                 $"-vf \"scale={videoWidth}:{videoHeight},setsar=1\" -r {fps:F3} " +
-                $"-c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -an " +
+                $"-c:v libx264 -preset fast {targetBitrateArgs} -pix_fmt yuv420p {audioArgs} " +
                 $"\"{afterPath.Replace("\\", "/")}\"",
-                ct);
+                ct, TimeSpan.FromMinutes(20));
         }
 
         var concatListPath = Path.Combine(workDir, "concat_scene_splice.txt");

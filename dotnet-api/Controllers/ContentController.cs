@@ -1,3 +1,5 @@
+using System.Text;
+using System.Text.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -29,17 +31,20 @@ namespace Afrobotics.Bit.Api.Controllers
         private readonly IHostEnvironment _env;
         private readonly IConfiguration _config;
         private readonly PostgresDbContext _db;
-        private readonly IEventLogService _eventLog;
+        // Hard ceiling for [RequestSizeLimit]/[RequestFormLimits] — these attribute values are compile-time
+        // constants and would otherwise silently clamp uploads below the admin-configurable
+        // "UploadLimits:MaxVideoBytes" setting (applied globally to Kestrel + FormOptions in Program.cs).
+        // Set high enough to never be the actual constraint; the config value is the real limit.
+        private const long UploadHardCapBytes = 1_099_511_627_776L; // 1 TB
         // Supported broadcast containers and codecs for validation
         private static readonly HashSet<string> SupportedContainers = new(StringComparer.OrdinalIgnoreCase)
             { ".mp4", ".mov", ".mxf", ".avi", ".mkv", ".webm" };
         private static readonly HashSet<string> SupportedVideoCodecs = new(StringComparer.OrdinalIgnoreCase)
             { "h264", "h265", "hevc", "prores", "dnxhd", "dnxhr", "mpeg2video", "mpeg4", "vp9", "av1", "mjpeg", "mjp2" };
 
-        public ContentController(IContentService contentService, IHostEnvironment env, IConfiguration config, PostgresDbContext db, IEventLogService eventLog)
+        public ContentController(IContentService contentService, IHostEnvironment env, IConfiguration config, PostgresDbContext db)
         {
             _contentService = contentService;
-            _eventLog = eventLog;
             _env = env;
             _config = config;
             _db = db;
@@ -54,7 +59,8 @@ namespace Afrobotics.Bit.Api.Controllers
 
         /// <summary>MReq 1: Upload video file with codec validation, metadata extraction, and proxy generation.</summary>
         [HttpPost("upload")]
-        [RequestSizeLimit(10_737_418_240)] // 10 GB default; also configurable via appsettings.json "UploadLimits:MaxVideoBytes"
+        [RequestSizeLimit(UploadHardCapBytes)]
+        [RequestFormLimits(MultipartBodyLengthLimit = UploadHardCapBytes)]
         public async Task<IActionResult> UploadVideo(
             [FromForm] string title,
             [FromForm] string resolution,
@@ -62,6 +68,7 @@ namespace Afrobotics.Bit.Api.Controllers
             [FromForm] string duration,
             [FromForm] string sourceChannel,
             [FromForm] string? campaignId,
+            [FromForm] string? probeKey,
             IFormFile? file)
         {
             // Read configurable upload limit (default 10 GB for broadcast files)
@@ -79,7 +86,44 @@ namespace Afrobotics.Bit.Api.Controllers
 
                 string storageKey;
                 string? savedFilePath = null;
-                if (file != null && file.Length > 0)
+
+                // If a probeKey was provided, reuse the pre-uploaded probe file
+                if (!string.IsNullOrWhiteSpace(probeKey))
+                {
+                    var probeDir = Path.Combine(uploadsDir, "probe");
+                    // Find the probe file matching this key (extension may vary)
+                    var probeFiles = Directory.Exists(probeDir)
+                        ? Directory.GetFiles(probeDir, $"{probeKey}.*")
+                        : Array.Empty<string>();
+
+                    if (probeFiles.Length > 0)
+                    {
+                        var probePath = probeFiles[0];
+                        var ext = Path.GetExtension(probePath);
+                        var safeName = $"{Guid.NewGuid():N}{ext}";
+                        var finalPath = Path.Combine(uploadsDir, safeName);
+
+                        // Move (not copy) the probe file to the final location
+                        System.IO.File.Move(probePath, finalPath);
+                        storageKey = $"/api/content/file/{safeName}";
+                        savedFilePath = finalPath;
+
+                        // Clean up the now-empty probe directory entry
+                        try { System.IO.File.Delete(probePath); } catch { }
+                    }
+                    else
+                    {
+                        // Probe file not found — fall through to use the uploaded file (if any)
+                        storageKey = string.Empty;
+                    }
+                }
+                else
+                {
+                    storageKey = string.Empty;
+                }
+
+                // If no probe file was used, save the uploaded file
+                if (savedFilePath == null && file != null && file.Length > 0)
                 {
                     // Validate container format
                     var ext = Path.GetExtension(file.FileName);
@@ -119,46 +163,92 @@ namespace Afrobotics.Bit.Api.Controllers
                     Directory.CreateDirectory(proxyDir);
                     var proxyName = $"{Path.GetFileNameWithoutExtension(safeName)}_proxy.mp4";
                     var proxyPath = Path.Combine(proxyDir, proxyName);
-                    // Skip if proxy already exists or is being generated
-                    if (!System.IO.File.Exists(proxyPath) && !IsProxyGenerating(proxyPath))
-                    {
-                        MarkProxyGenerating(proxyPath);
-                        BackgroundJob.Enqueue(() => GenerateProxyAsync(filePath, proxyPath));
-                    }
+                    BackgroundJob.Enqueue(() => GenerateProxyAsync(filePath, proxyPath));
                 }
-                else
+                else if (savedFilePath == null)
                 {
                     storageKey = $"s3://afrobotics-raw-ingest/{title.Replace(" ", "_").ToLower()}.mov";
                 }
+                else
+                {
+                    // Probe file was used — still validate codec and generate proxy
+                    try
+                    {
+                        var (codec, _) = ValidateVideoCodec(savedFilePath);
+                        if (!SupportedVideoCodecs.Contains(codec))
+                        {
+                            try { System.IO.File.Delete(savedFilePath); } catch { }
+                            return BadRequest(new { error = $"Unsupported video codec '{codec}'. Supported codecs: {string.Join(", ", SupportedVideoCodecs)}" });
+                        }
+                    }
+                    catch (InvalidOperationException) { /* FFprobe not available */ }
 
-                // Extract real metadata from the uploaded file via FFprobe — the authority, never trust browser values
+                    var proxyDir = Path.Combine(uploadsDir, "proxy");
+                    Directory.CreateDirectory(proxyDir);
+                    var proxyName = $"{Path.GetFileNameWithoutExtension(savedFilePath)}_proxy.mp4";
+                    var proxyPath = Path.Combine(proxyDir, proxyName);
+                    BackgroundJob.Enqueue(() => GenerateProxyAsync(savedFilePath, proxyPath));
+                }
+
+                // Extract real metadata from the uploaded file via FFprobe
                 var actualDuration = duration;
                 var actualFps = frameRate;
                 var actualResolution = resolution;
-                var actualWidth = 1920;
-                var actualHeight = 1080;
 
                 if (savedFilePath != null)
                 {
                     try
                     {
-                        (actualDuration, actualFps, actualResolution, actualWidth, actualHeight) = ExtractVideoMetadata(savedFilePath);
+                        (actualDuration, actualFps, actualResolution) = ExtractVideoMetadata(savedFilePath);
                     }
-                    catch (Exception ex)
+                    catch
                     {
-                        await _eventLog.LogEventAsync("ContentUpload", "FFPROBE_METADATA_FAILED", "Error",
-                            $"ffprobe metadata extraction failed for '{title}' ({Path.GetFileName(savedFilePath)}): " +
-                            $"{ex.GetType().Name} — {ex.Message}. Falling back to browser-supplied/default values " +
-                            $"({actualWidth}x{actualHeight} @ {actualFps}fps) — these are likely WRONG.");
+                        // FFprobe not available — use browser-provided values
                     }
+                }
+
+                // Build metadata comparison for the response
+                var submittedMetadata = new { duration, fps = frameRate, resolution };
+                var actualMetadata = new { duration = actualDuration, fps = actualFps, resolution = actualResolution };
+                var metadataChanged = actualDuration != duration ||
+                                      actualFps != frameRate ||
+                                      actualResolution != resolution;
+
+                // Parse width/height from the actual ffprobe data for the DTO
+                int contentWidth = 1920, contentHeight = 1080;
+                if (savedFilePath != null)
+                {
+                    try
+                    {
+                        var ffprobePath = ResolveFfprobePath();
+                        var dimArgs = $"-v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 \"{savedFilePath}\"";
+                        using var dimProc = new Process
+                        {
+                            StartInfo = new ProcessStartInfo(ffprobePath, dimArgs)
+                            {
+                                RedirectStandardOutput = true, RedirectStandardError = true,
+                                UseShellExecute = false, CreateNoWindow = true
+                            }
+                        };
+                        dimProc.Start();
+                        var dimOutput = dimProc.StandardOutput.ReadToEnd().Trim();
+                        dimProc.WaitForExit(5000);
+                        var dims = dimOutput.Split(',');
+                        if (dims.Length >= 2)
+                        {
+                            int.TryParse(dims[0], out contentWidth);
+                            int.TryParse(dims[1], out contentHeight);
+                        }
+                    }
+                    catch { /* use defaults */ }
                 }
 
                 var dto = new IngestVideoDto
                 {
                     Title = title,
                     Resolution = actualResolution,
-                    Width = actualWidth,
-                    Height = actualHeight,
+                    Width = contentWidth,
+                    Height = contentHeight,
                     FrameRate = actualFps,
                     Duration = actualDuration,
                     SourceChannel = sourceChannel,
@@ -167,7 +257,14 @@ namespace Afrobotics.Bit.Api.Controllers
                 };
 
                 var content = await _contentService.IngestVideoAsync(dto);
-                return Ok(content);
+
+                return Ok(new
+                {
+                    content,
+                    metadataCorrected = metadataChanged,
+                    submittedMetadata,
+                    actualMetadata
+                });
             }
             catch (ArgumentException ex)
             {
@@ -180,25 +277,122 @@ namespace Afrobotics.Bit.Api.Controllers
         }
 
         // ═══════════════════════════════════════════════════════════════
+        // Phase 1.5: Video Probe — extract metadata via ffprobe before final upload
+        // ═══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Probe an uploaded video file with ffprobe to extract accurate metadata
+        /// (duration, FPS, resolution, codec) before the user confirms and finalises the upload.
+        /// The file is saved to a temporary probe location and can be reused by the main
+        /// upload endpoint via the returned probeKey, avoiding a second upload.
+        /// </summary>
+        [HttpPost("probe")]
+        [RequestSizeLimit(UploadHardCapBytes)]
+        [RequestFormLimits(MultipartBodyLengthLimit = UploadHardCapBytes)]
+        public async Task<IActionResult> ProbeVideo(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(new { error = "Video file is required." });
+
+            var maxBytes = _config.GetValue<long>("UploadLimits:MaxVideoBytes", 10_737_418_240);
+            if (file.Length > maxBytes)
+                return BadRequest(new { error = $"File exceeds maximum upload size of {maxBytes / (1024.0 * 1024 * 1024):F1} GB." });
+
+            var ext = Path.GetExtension(file.FileName);
+            if (!SupportedContainers.Contains(ext))
+                return BadRequest(new { error = $"Unsupported container format '{ext}'. Supported: {string.Join(", ", SupportedContainers)}" });
+
+            var probeDir = Path.Combine(_env.ContentRootPath, "Uploads", "probe");
+            Directory.CreateDirectory(probeDir);
+
+            // Clean up probe files older than 2 hours
+            try
+            {
+                var cutoff = DateTime.UtcNow.AddHours(-2);
+                foreach (var oldFile in Directory.GetFiles(probeDir))
+                {
+                    if (System.IO.File.GetCreationTimeUtc(oldFile) < cutoff)
+                        System.IO.File.Delete(oldFile);
+                }
+            }
+            catch { /* best-effort cleanup */ }
+
+            var probeKey = Guid.NewGuid().ToString("N")[..12];
+            var probeFileName = $"{probeKey}{ext}";
+            var probePath = Path.Combine(probeDir, probeFileName);
+
+            await using (var stream = new FileStream(probePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            // Validate codec
+            string codec = "unknown", container = ext;
+            try
+            {
+                (codec, container) = ValidateVideoCodec(probePath);
+                if (!SupportedVideoCodecs.Contains(codec))
+                {
+                    try { System.IO.File.Delete(probePath); } catch { }
+                    return BadRequest(new { error = $"Unsupported video codec '{codec}'. Supported: {string.Join(", ", SupportedVideoCodecs)}" });
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // FFprobe not available — accept the file, codec stays "unknown"
+            }
+
+            // Extract metadata via ffprobe
+            var (duration, fps, resolution) = ExtractVideoMetadata(probePath);
+
+            // Parse width/height from the raw ffprobe output for pixel-accurate dimensions
+            int width = 1920, height = 1080;
+            try
+            {
+                var ffprobePath = ResolveFfprobePath();
+                var dimArgs = $"-v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 \"{probePath}\"";
+                using var dimProc = new Process
+                {
+                    StartInfo = new ProcessStartInfo(ffprobePath, dimArgs)
+                    {
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+                dimProc.Start();
+                var dimOutput = dimProc.StandardOutput.ReadToEnd().Trim();
+                dimProc.WaitForExit(5000);
+                var dims = dimOutput.Split(',');
+                if (dims.Length >= 2)
+                {
+                    int.TryParse(dims[0], out width);
+                    int.TryParse(dims[1], out height);
+                }
+            }
+            catch { /* use defaults */ }
+
+            return Ok(new VideoProbeResponseDto
+            {
+                ProbeKey = probeKey,
+                FileName = file.FileName,
+                Duration = duration,
+                Fps = fps,
+                Resolution = resolution,
+                Width = width,
+                Height = height,
+                Codec = codec.ToLowerInvariant(),
+                Container = container,
+                FileSize = file.Length
+            });
+        }
+
+        // ═══════════════════════════════════════════════════════════════
         // Phase 2: Chunked / Resumable Upload for Large Broadcast Files
         // ═══════════════════════════════════════════════════════════════
 
         private static readonly Dictionary<string, ChunkedUploadSession> UploadSessions = new();
-
-        // ── Proxy generation deduplication ──
-        private static readonly HashSet<string> GeneratingProxies = new(StringComparer.OrdinalIgnoreCase);
-
-        private static bool IsProxyGenerating(string proxyPath) {
-            lock (GeneratingProxies) { return GeneratingProxies.Contains(proxyPath); }
-        }
-
-        private static void MarkProxyGenerating(string proxyPath) {
-            lock (GeneratingProxies) { GeneratingProxies.Add(proxyPath); }
-        }
-
-        private static void ClearProxyGenerating(string proxyPath) {
-            lock (GeneratingProxies) { GeneratingProxies.Remove(proxyPath); }
-        }
 
         /// <summary>Initialize a chunked upload session. Returns an uploadId for subsequent chunk uploads.</summary>
         [HttpPost("upload/init")]
@@ -341,26 +535,41 @@ namespace Afrobotics.Bit.Api.Controllers
                 }
                 catch (InvalidOperationException) { /* FFprobe not available — accept */ }
 
-                // Generate proxy (skip if already exists or being generated)
+                // Generate proxy
                 var proxyDir = Path.Combine(uploadsDir, "proxy");
                 Directory.CreateDirectory(proxyDir);
                 var proxyName = $"{Path.GetFileNameWithoutExtension(safeName)}_proxy.mp4";
                 var proxyPath = Path.Combine(proxyDir, proxyName);
-                if (!System.IO.File.Exists(proxyPath) && !IsProxyGenerating(proxyPath))
-                {
-                    MarkProxyGenerating(proxyPath);
-                    BackgroundJob.Enqueue(() => GenerateProxyAsync(finalPath, proxyPath));
-                }
+                BackgroundJob.Enqueue(() => GenerateProxyAsync(finalPath, proxyPath));
 
                 // Extract metadata
-                var (actualDuration, actualFps, actualResolution, actualWidth, actualHeight) = ExtractVideoMetadata(finalPath);
+                var (actualDuration, actualFps, actualResolution) = ExtractVideoMetadata(finalPath);
+
+                // Extract pixel dimensions for the DTO
+                int cw = 1920, ch = 1080;
+                try
+                {
+                    var ffprobePath = ResolveFfprobePath();
+                    var dimArgs = $"-v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 \"{finalPath}\"";
+                    using var dp = new Process
+                    {
+                        StartInfo = new ProcessStartInfo(ffprobePath, dimArgs)
+                        { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true }
+                    };
+                    dp.Start();
+                    var dOut = dp.StandardOutput.ReadToEnd().Trim();
+                    dp.WaitForExit(5000);
+                    var ds = dOut.Split(',');
+                    if (ds.Length >= 2) { int.TryParse(ds[0], out cw); int.TryParse(ds[1], out ch); }
+                }
+                catch { }
 
                 var ingestDto = new IngestVideoDto
                 {
                     Title = dto.Title ?? Path.GetFileNameWithoutExtension(session.FileName),
                     Resolution = actualResolution,
-                    Width = actualWidth,
-                    Height = actualHeight,
+                    Width = cw,
+                    Height = ch,
                     FrameRate = actualFps,
                     Duration = actualDuration,
                     SourceChannel = dto.SourceChannel ?? "Direct Upload",
@@ -437,12 +646,6 @@ namespace Afrobotics.Bit.Api.Controllers
                 ".webp" => "image/webp",
                 _ => "application/octet-stream"
             };
-
-            // No caching — files under tmp-renders/ are overwritten in place on every retry (same
-            // renderId, same path), and an intermediary (e.g. the fal.ai-facing tunnel) caching a
-            // prior response by URL would silently serve stale bytes to fal.ai on the next attempt.
-            Response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
-            Response.Headers.Pragma = "no-cache";
 
             var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
             return File(stream, contentType, enableRangeProcessing: true);
@@ -634,7 +837,7 @@ namespace Afrobotics.Bit.Api.Controllers
 
         /// <summary>Reset content to SceneDetecting stage and enqueue the Hangfire detection pipeline.</summary>
         [HttpPost("{id}/redetect-scenes")]
-        public async Task<IActionResult> RedetectScenes(string id)
+        public async Task<IActionResult> RedetectScenes(string id, [FromBody] JsonElement? body = null)
         {
             try
             {
@@ -644,6 +847,13 @@ namespace Afrobotics.Bit.Api.Controllers
                 var storageKey = content.StorageKey;
                 if (string.IsNullOrEmpty(storageKey))
                     return BadRequest(new { error = "Scene detection requires a valid video storageKey." });
+
+                var splitMode = "scene";
+                if (body != null && body.Value.TryGetProperty("splitMode", out var sm) && sm.ValueKind == JsonValueKind.String)
+                    splitMode = sm.GetString()!;
+                var runSurfaceDetection = body == null
+                    || !body.Value.TryGetProperty("runSurfaceDetection", out var rsd)
+                    || rsd.ValueKind != JsonValueKind.False;
 
                 // If Failed or past SceneDetecting, route through Staging→Transcoding first
                 if (content.IngestionStatus == PipelineStages.Failed)
@@ -668,7 +878,7 @@ namespace Afrobotics.Bit.Api.Controllers
 
                 // Enqueue the Hangfire background job to actually run the detection pipeline
                 var jobId = BackgroundJob.Enqueue<SceneDetectionJobService>(
-                    s => s.RunDetectionPipeline(content.Id, content.Title, CancellationToken.None));
+                    s => s.RunDetectionPipeline(content.Id, content.Title, splitMode, CancellationToken.None, runSurfaceDetection));
 
                 content.DetectionJobId = jobId;
                 content.DetectionProgress = 0;
@@ -691,47 +901,43 @@ namespace Afrobotics.Bit.Api.Controllers
         }
 
         /// <summary>
-        /// Assembles one final video combining every scene: each scene's queued render
-        /// (RenderItem.IsQueuedForFinal) if it has one, original footage otherwise. Poll
-        /// GET /api/content/{id} (FinalAssemblyStatus/Progress) or listen for SignalR
-        /// DetectionProgress with jobId "final-assembly" for live status.
+        /// Assemble one final video for this content: combines every scene's queued render
+        /// (RenderItem.IsQueuedForFinal) with original footage for scenes that have none.
+        /// Enqueues FinalAssemblyJobService.ProcessFinalAssemblyJob. Poll GET /api/content/{id}
+        /// (finalAssemblyStatus/finalAssemblyProgress) or SignalR DetectionProgress with
+        /// jobId: "final-assembly" for progress.
         /// </summary>
         [HttpPost("{id}/final-assembly")]
         public async Task<IActionResult> StartFinalAssembly(string id)
         {
-            var content = await _db.ContentItems.FindAsync(id);
+            var content = await _contentService.GetContentByIdAsync(id);
             if (content == null) return NotFound(new { error = "Content not found." });
 
             if (content.FinalAssemblyStatus == "Processing")
                 return BadRequest(new { error = "Final assembly is already in progress for this content." });
 
-            var hasAnyScene = await _db.SceneItems.AnyAsync(s => s.ContentId == id);
-            if (!hasAnyScene)
+            var hasScenes = await _db.SceneItems.AnyAsync(s => s.ContentId == id);
+            if (!hasScenes)
                 return BadRequest(new { error = "This content has no scenes to assemble." });
-
-            content.FinalAssemblyStatus = "Processing";
-            content.FinalAssemblyProgress = 0;
-            content.FinalAssemblyErrorMessage = null;
-            await _db.SaveChangesAsync();
 
             BackgroundJob.Enqueue<FinalAssemblyJobService>(s => s.ProcessFinalAssemblyJob(id, CancellationToken.None));
 
-            await _eventLog.LogEventAsync("RenderEngine", "FINAL_ASSEMBLY_QUEUED", "Info", $"Final assembly queued for content '{id}'.");
-
-            return Ok(new { id, finalAssemblyStatus = content.FinalAssemblyStatus });
+            return Ok(new { id = content.Id, finalAssemblyStatus = content.FinalAssemblyStatus });
         }
 
-        /// <summary>Serves the assembled final video (see ContentItem.FinalVideoStorageKey).</summary>
+        /// <summary>Serves the assembled final video (renders/BIT_Final_{id}.mp4) produced by
+        /// ProcessFinalAssemblyJob. Matches RendersController's /download and /preview endpoints'
+        /// FileStream + range-processing pattern so the browser can seek/stream it directly.</summary>
         [HttpGet("{id}/final-video")]
-        [AllowAnonymous] // Allow direct video player stream, matching render download/preview routes
+        [AllowAnonymous] // Allow direct video player stream / download link, matching Renders' equivalents
         public async Task<IActionResult> DownloadFinalVideo(string id)
         {
-            var content = await _db.ContentItems.FindAsync(id);
+            var content = await _contentService.GetContentByIdAsync(id);
             if (content == null) return NotFound(new { error = "Content not found." });
 
             var localPath = Path.Combine(Directory.GetCurrentDirectory(), "renders", $"BIT_Final_{id}.mp4");
             if (!System.IO.File.Exists(localPath))
-                return NotFound(new { error = "Final video not found on disk." });
+                return NotFound(new { error = "Final video file not found on disk." });
 
             var stream = new FileStream(localPath, FileMode.Open, FileAccess.Read, FileShare.Read);
             return File(stream, "video/mp4", $"BIT_Final_{content.Title}.mp4", enableRangeProcessing: true);
@@ -744,18 +950,6 @@ namespace Afrobotics.Bit.Api.Controllers
             var content = await _db.ContentItems.FindAsync(contentId);
             if (content == null)
                 return NotFound(new { error = "Content not found." });
-
-            // Guard: block if any surfaces are approved (matches DeleteScene's single-scene guard)
-            var sceneIds = await _db.SceneItems.Where(s => s.ContentId == contentId).Select(s => s.Id).ToListAsync();
-            var hasApproved = await _db.SurfaceItems.AnyAsync(sf => sceneIds.Contains(sf.SceneId) && sf.Status == "Approved");
-            if (hasApproved)
-            {
-                return BadRequest(new
-                {
-                    error = "Cannot delete scenes: approved surface(s) exist. " +
-                            "Exclude or reject approved surfaces before deleting all scenes."
-                });
-            }
 
             try
             {
@@ -821,98 +1015,207 @@ namespace Afrobotics.Bit.Api.Controllers
         }
 
         /// <summary>
-        /// Extract actual duration, frame rate, resolution, width, and height from a video file using FFprobe.
-        /// Returns (duration "HH:MM:SS", fps, resolution "WxH", width, height).
+        /// Extract actual duration, frame rate, and resolution from a video file using FFprobe.
+        /// Returns (duration "HH:MM:SS", fps, resolution "WxH").
+        ///
+        /// Uses a three-tier strategy to get correct duration even for trimmed/cut clips
+        /// where the container metadata header may still report the original source length:
+        ///
+        ///   1. COUNT actual video frames (nb_read_frames / fps) — always accurate
+        ///   2. Container format=duration — fast, works for properly authored files
+        ///   3. Stream stream=duration — last-resort fallback
+        ///
+        /// Tier 1 (counted frames) is the ground truth because it reads the actual
+        /// packet stream rather than trusting header metadata.  For a 4-second clip
+        /// cut from a 42-minute source with -c copy, the header still says 42 min
+        /// but only ~120 frames exist on disk — counting catches this.
         /// </summary>
-        /// <summary>
-        /// Extract video metadata via ffprobe. Delegates to the single-field helpers below
-        /// rather than requesting all fields in one combined query — ffprobe's `-show_entries
-        /// stream=a,b,c,d` does NOT preserve the requested field order in `-of csv` output; it
-        /// returns fields in its own internal order. A prior version of this method assumed
-        /// positional order matched the request and silently mis-mapped every value (duration
-        /// read as width, width read as an unparseable fraction and defaulted to 1920, etc.) —
-        /// corrupting every uploaded video's stored width/height/fps/duration with no error.
-        /// </summary>
-        private static (string duration, int fps, string resolution, int width, int height) ExtractVideoMetadata(string filePath)
+        private static (string duration, int fps, string resolution) ExtractVideoMetadata(string filePath)
         {
-            var (width, height) = ExtractDimensionsOnly(filePath);
-            var fps = ExtractFpsOnly(filePath);
+            var ffprobePath = ResolveFfprobePath();
+
+            // ── Step 0: get FPS (needed to compute duration from frame count) ──
+            var fps = 25;
+            double fpsExact = 25.0;
+            try
+            {
+                var fpsArgs = $"-v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"";
+                using var fpsProc = new Process
+                {
+                    StartInfo = new ProcessStartInfo(ffprobePath, fpsArgs)
+                    {
+                        RedirectStandardOutput = true, RedirectStandardError = true,
+                        UseShellExecute = false, CreateNoWindow = true
+                    }
+                };
+                fpsProc.Start();
+                var fpsOutput = fpsProc.StandardOutput.ReadToEnd().Trim();
+                fpsProc.WaitForExit(3000);
+                // Output: "25/1" or "30000/1001" or "25"
+                if (fpsOutput.Contains('/'))
+                {
+                    var frac = fpsOutput.Split('/');
+                    if (frac.Length == 2 && double.TryParse(frac[0], out var num) && double.TryParse(frac[1], out var den) && den > 0)
+                        fpsExact = num / den;
+                }
+                else
+                {
+                    double.TryParse(fpsOutput, out fpsExact);
+                }
+                fps = fpsExact > 0 ? (int)Math.Round(fpsExact) : 25;
+            }
+            catch { /* use defaults */ }
             if (fps <= 0) fps = 25;
-            var duration = ExtractDurationOnly(filePath) ?? "00:05:00";
+            if (fpsExact <= 0) fpsExact = fps;
+
+            // ── Step 1: count actual frames (ground truth for trimmed clips) ──
+            // -count_frames makes ffprobe read (decode) the full stream and count packets,
+            // which for large/long files can take well over 30s. ReadToEnd() blocks until the
+            // process closes its output, so it must never be called before the timeout is
+            // enforced — otherwise a large file hangs the request indefinitely instead of
+            // falling back to the (fast) container-duration tier below.
+            int countedFrames = 0;
+            try
+            {
+                var countArgs = $"-v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"";
+                using var countProc = new Process
+                {
+                    StartInfo = new ProcessStartInfo(ffprobePath, countArgs)
+                    {
+                        RedirectStandardOutput = true, RedirectStandardError = true,
+                        UseShellExecute = false, CreateNoWindow = true
+                    },
+                    EnableRaisingEvents = true
+                };
+                var countOutput = new StringBuilder();
+                countProc.OutputDataReceived += (_, e) => { if (e.Data != null) countOutput.AppendLine(e.Data); };
+                countProc.Start();
+                countProc.BeginOutputReadLine();
+                countProc.BeginErrorReadLine(); // must drain stderr too, or a full pipe buffer can deadlock the child
+                if (countProc.WaitForExit(30_000))
+                {
+                    countProc.WaitForExit(); // let the async output handlers finish flushing
+                    int.TryParse(countOutput.ToString().Trim(), out countedFrames);
+                }
+                else
+                {
+                    try { countProc.Kill(entireProcessTree: true); } catch { }
+                    // countedFrames stays 0 — Step 3 falls back to container format duration
+                }
+            }
+            catch { /* frame counting failed — fall back to metadata below */ }
+
+            var countedDuration = countedFrames > 0 ? countedFrames / fpsExact : 0;
+
+            // ── Step 2: container format duration (fast, works for normal files) ──
+            double formatDuration = 0;
+            try
+            {
+                var fmtArgs = $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"";
+                using var fmtProc = new Process
+                {
+                    StartInfo = new ProcessStartInfo(ffprobePath, fmtArgs)
+                    {
+                        RedirectStandardOutput = true, RedirectStandardError = true,
+                        UseShellExecute = false, CreateNoWindow = true
+                    }
+                };
+                fmtProc.Start();
+                var fmtOutput = fmtProc.StandardOutput.ReadToEnd().Trim();
+                fmtProc.WaitForExit(5000);
+                double.TryParse(fmtOutput, out formatDuration);
+            }
+            catch { }
+
+            // ── Step 3: pick the right duration ──
+            double durationSeconds;
+
+            if (countedFrames > 0)
+            {
+                // We have a frame count — this is the ground truth.
+                // Only distrust it if it implies >24h of video (likely parse error).
+                if (countedDuration > 0.1 && countedDuration < 86400)
+                {
+                    durationSeconds = countedDuration;
+                }
+                else if (formatDuration > 0.1)
+                {
+                    durationSeconds = formatDuration;
+                }
+                else
+                {
+                    durationSeconds = 300; // 5 min default
+                }
+            }
+            else if (formatDuration > 0.1)
+            {
+                // Frame count failed — use format duration (right for normal files)
+                durationSeconds = formatDuration;
+            }
+            else
+            {
+                // Everything failed — try stream duration as last resort
+                try
+                {
+                    var strArgs = $"-v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 \"{filePath}\"";
+                    using var strProc = new Process
+                    {
+                        StartInfo = new ProcessStartInfo(ffprobePath, strArgs)
+                        {
+                            RedirectStandardOutput = true, RedirectStandardError = true,
+                            UseShellExecute = false, CreateNoWindow = true
+                        }
+                    };
+                    strProc.Start();
+                    var strOutput = strProc.StandardOutput.ReadToEnd().Trim();
+                    strProc.WaitForExit(5000);
+                    if (!double.TryParse(strOutput, out durationSeconds) || durationSeconds <= 0)
+                        durationSeconds = 300;
+                }
+                catch
+                {
+                    durationSeconds = 300;
+                }
+            }
+
+            // ── Get resolution ──
+            int width = 1920, height = 1080;
+            try
+            {
+                var dimArgs = $"-v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 \"{filePath}\"";
+                using var dimProc = new Process
+                {
+                    StartInfo = new ProcessStartInfo(ffprobePath, dimArgs)
+                    {
+                        RedirectStandardOutput = true, RedirectStandardError = true,
+                        UseShellExecute = false, CreateNoWindow = true
+                    }
+                };
+                dimProc.Start();
+                var dimOutput = dimProc.StandardOutput.ReadToEnd().Trim();
+                dimProc.WaitForExit(5000);
+                var dims = dimOutput.Split(',');
+                if (dims.Length >= 2)
+                {
+                    int.TryParse(dims[0], out width);
+                    int.TryParse(dims[1], out height);
+                }
+            }
+            catch { }
+
+            // Sanity bounds
+            if (durationSeconds > 86400) durationSeconds = 86400;
+            if (durationSeconds < 0.1) durationSeconds = 300;
+
+            var ts = TimeSpan.FromSeconds(durationSeconds);
+            var durationFormatted = $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+
             var resolution = $"{width}x{height}";
+            if (width >= 3840) resolution = "3840x2160 (4K)";
+            else if (width >= 1920) resolution = "1920x1080 (1080p)";
+            else if (width >= 1280) resolution = "1280x720 (720p)";
 
-            return (duration, fps, resolution, width, height);
-        }
-
-        /// <summary>Extract just width/height from a video file.</summary>
-        private static (int width, int height) ExtractDimensionsOnly(string filePath)
-        {
-            var ffprobePath = ResolveFfprobePath();
-            var args = $"-v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 \"{filePath}\"";
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo(ffprobePath, args)
-                {
-                    RedirectStandardOutput = true, RedirectStandardError = true,
-                    UseShellExecute = false, CreateNoWindow = true
-                }
-            };
-            process.Start();
-            var output = process.StandardOutput.ReadToEnd().Trim();
-            process.WaitForExit(5000);
-            var parts = output.Split(',');
-            int w = parts.Length > 0 && int.TryParse(parts[0], out var pw) ? pw : 1920;
-            int h = parts.Length > 1 && int.TryParse(parts[1], out var ph) ? ph : 1080;
-            return (w, h);
-        }
-
-        /// <summary>Extract just FPS from a video file.</summary>
-        private static int ExtractFpsOnly(string filePath)
-        {
-            var ffprobePath = ResolveFfprobePath();
-            var args = $"-v error -select_streams v:0 -show_entries stream=r_frame_rate -of csv=p=0 \"{filePath}\"";
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo(ffprobePath, args)
-                {
-                    RedirectStandardOutput = true, RedirectStandardError = true,
-                    UseShellExecute = false, CreateNoWindow = true
-                }
-            };
-            process.Start();
-            var output = process.StandardOutput.ReadToEnd().Trim();
-            process.WaitForExit(5000);
-            if (output.Contains('/'))
-            {
-                var frac = output.Split('/');
-                if (frac.Length == 2 && double.TryParse(frac[0], out var n) && double.TryParse(frac[1], out var d) && d > 0)
-                    return (int)Math.Round(n / d);
-            }
-            return int.TryParse(output, out var f) ? f : 0;
-        }
-
-        /// <summary>Extract just duration from a video file.</summary>
-        private static string? ExtractDurationOnly(string filePath)
-        {
-            var ffprobePath = ResolveFfprobePath();
-            var args = $"-v error -select_streams v:0 -show_entries stream=duration -of csv=p=0 \"{filePath}\"";
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo(ffprobePath, args)
-                {
-                    RedirectStandardOutput = true, RedirectStandardError = true,
-                    UseShellExecute = false, CreateNoWindow = true
-                }
-            };
-            process.Start();
-            var output = process.StandardOutput.ReadToEnd().Trim();
-            process.WaitForExit(5000);
-            if (double.TryParse(output, out var secs) && secs > 0)
-            {
-                var ts = TimeSpan.FromSeconds(secs);
-                return $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
-            }
-            return null;
+            return (durationFormatted, fps, resolution);
         }
 
         /// <summary>
@@ -950,13 +1253,6 @@ namespace Afrobotics.Bit.Api.Controllers
         /// </summary>
         public static async Task GenerateProxyAsync(string sourcePath, string proxyPath)
         {
-            // Skip if proxy already exists or source is missing
-            if (System.IO.File.Exists(proxyPath) || !System.IO.File.Exists(sourcePath))
-            {
-                ClearProxyGenerating(proxyPath);
-                return;
-            }
-
             try
             {
                 var ffmpegPath = ResolveFfmpegPath();
@@ -993,10 +1289,6 @@ namespace Afrobotics.Bit.Api.Controllers
             {
                 // Proxy generation is best-effort — log and continue
                 System.Diagnostics.Debug.WriteLine($"Proxy generation error: {ex.Message}");
-            }
-            finally
-            {
-                ClearProxyGenerating(proxyPath);
             }
         }
 

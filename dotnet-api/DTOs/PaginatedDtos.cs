@@ -132,7 +132,12 @@ namespace Afrobotics.Bit.Api.DTOs
         public string RenderStatus { get; set; } = string.Empty;
         public string? SceneId { get; set; }
         public string? PromptText { get; set; }
+        /// <summary>The original FLUX Kontext placement instruction, preserved separately from
+        /// PromptText (which "Redo Kling" overwrites with a Kling-only propagation prompt) —
+        /// null for non-KontextStep renders.</summary>
+        public string? KontextPromptText { get; set; }
         public string? PreviewStorageKey { get; set; }
+        public string? KontextFrameStorageKey { get; set; }
         public string? RenderMode { get; set; }
         public int Progress { get; set; }
         public int ProcessingDurationMs { get; set; }
@@ -140,6 +145,7 @@ namespace Afrobotics.Bit.Api.DTOs
         public string CompositingEngine { get; set; } = string.Empty;
         public string QualityTier { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; }
+        public bool IsQueuedForFinal { get; set; }
 
         /// <summary>ContentItem.Title — null if the source content has since been deleted.</summary>
         public string? ContentTitle { get; set; }

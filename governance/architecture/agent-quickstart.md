@@ -68,7 +68,7 @@ Valid from Completed: `SceneDetecting` (re-detect only)
 ```
 engine_detection      → "yolo" | "replicate" | "google" | "gemini" | "grounding-dino"
 engine_brand_analysis → "gemini" | "google"
-engine_compositing    → "opencv" | "pikaswaps" | "planar-warp"
+engine_compositing    → "opencv" | "pikaswaps" | "planar-warp" | "fal-kontext-kling"
 engine_tracking       → "sam3"
 ```
 No "basic" fallback exists — an unset or unrecognized value makes `EngineFactory` throw.

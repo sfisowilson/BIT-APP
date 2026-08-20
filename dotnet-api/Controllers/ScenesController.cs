@@ -33,15 +33,17 @@ namespace Afrobotics.Bit.Api.Controllers
         private readonly ISurfaceDetectionService _surfaceDetection;
         private readonly IEventLogService _eventLog;
         private readonly VideoChunkingService _chunker;
+        private readonly ShotClusteringService _clusterService;
         private static readonly Regex DurationRegex = new(@"^(\d{2}):([0-5]\d):([0-5]\d)$", RegexOptions.Compiled);
 
-        public ScenesController(PostgresDbContext context, IContentService contentService, ISurfaceDetectionService surfaceDetection, IEventLogService eventLog, VideoChunkingService chunker)
+        public ScenesController(PostgresDbContext context, IContentService contentService, ISurfaceDetectionService surfaceDetection, IEventLogService eventLog, VideoChunkingService chunker, ShotClusteringService clusterService)
         {
             _context = context;
             _contentService = contentService;
             _surfaceDetection = surfaceDetection;
             _eventLog = eventLog;
             _chunker = chunker;
+            _clusterService = clusterService;
         }
 
         /// <summary>MReq 2: AI scene modification with contextual response based on actual scene data.</summary>
@@ -98,6 +100,11 @@ namespace Afrobotics.Bit.Api.Controllers
             string videoTitle = body.TryGetProperty("videoTitle", out var vt) && vt.ValueKind != JsonValueKind.Null
                 ? vt.GetString()!
                 : "untitled";
+            var splitMode = body.TryGetProperty("splitMode", out var sm) && sm.ValueKind == JsonValueKind.String
+                ? sm.GetString()!
+                : "scene";
+            var runSurfaceDetection = !body.TryGetProperty("runSurfaceDetection", out var rsd)
+                || rsd.ValueKind != JsonValueKind.False;
 
             if (string.IsNullOrEmpty(contentId))
                 return BadRequest(new { error = "contentId is required." });
@@ -126,7 +133,7 @@ namespace Afrobotics.Bit.Api.Controllers
             // Enqueue the Hangfire job only after the transition succeeds — enqueuing first risks
             // a dangling, untracked job if the transition then throws (as PipelineStages enforces).
             var jobId = BackgroundJob.Enqueue<SceneDetectionJobService>(
-                s => s.RunDetectionPipeline(contentId, videoTitle, CancellationToken.None));
+                s => s.RunDetectionPipeline(contentId, videoTitle, splitMode, CancellationToken.None, runSurfaceDetection));
 
             content.DetectionJobId = jobId;
             content.DetectionProgress = 0;
@@ -435,6 +442,37 @@ namespace Afrobotics.Bit.Api.Controllers
             await _context.SaveChangesAsync();
 
             return Ok(new { success = true, id, message = "Scene and all child entities deleted." });
+        }
+
+        /// <summary>
+        /// Fuse two or more consecutive scenes into one — the manual, user-driven alternative to
+        /// SAM3 clustering. Typically used after "Cut" split mode, where every camera cut is its
+        /// own scene with no AI grouping. Blocks (400) if any selected scene has an approved
+        /// surface or a finished/queued-for-final render, or if the selection isn't consecutive.
+        /// </summary>
+        [HttpPost("scenes/merge")]
+        public async Task<IActionResult> MergeScenes([FromBody] DTOs.MergeScenesDto dto)
+        {
+            try
+            {
+                var merged = await _clusterService.MergeScenesAsync(dto.SceneIds);
+                await _eventLog.LogEventAsync("Scene", "SCENES_MERGED", "Info",
+                    $"Merged {dto.SceneIds.Count} scenes into {merged.Id} (frames {merged.StartFrame}-{merged.EndFrame}).");
+                return Ok(merged);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                await _eventLog.LogEventAsync("Scene", "SCENES_MERGE_ERROR", "Error", $"{ex.GetType().Name} — {ex.Message}");
+                return StatusCode(500, new { error = ex.Message });
+            }
         }
 
         /// <summary>

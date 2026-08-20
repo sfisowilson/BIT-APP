@@ -79,7 +79,8 @@ public class ShotClusteringService
                 SceneIndex = sceneIdx++,
                 StartFrame = firstShot.StartFrame,
                 EndFrame = lastShot.EndFrame,
-                DurationSeconds = (lastShot.EndFrame - firstShot.StartFrame)
+                // EndFrame is inclusive — see the equivalent note in ShotDetectionPipeline.cs.
+                DurationSeconds = (lastShot.EndFrame - firstShot.StartFrame + 1)
                     / await GetFrameRateAsync(contentId, ct),
                 QaStatus = "Unchecked",
             };
@@ -106,6 +107,110 @@ public class ShotClusteringService
         ValidateContiguity(scenes, shots, contentId);
 
         return scenes;
+    }
+
+    /// <summary>
+    /// Fuse two or more consecutive scenes into one — the manual, user-driven alternative to
+    /// SAM3 clustering. All shots, surfaces, and renders belonging to the merged-away scenes are
+    /// reparented onto the new scene; the old SceneItems are deleted and SceneIndex is renumbered
+    /// sequentially (by StartFrame) for the whole content item.
+    /// </summary>
+    public async Task<SceneItem> MergeScenesAsync(List<string> sceneIds, CancellationToken ct = default)
+    {
+        if (sceneIds == null || sceneIds.Distinct().Count() < 2)
+            throw new ArgumentException("Select at least two distinct scenes to merge.");
+
+        sceneIds = sceneIds.Distinct().ToList();
+
+        var scenes = await _db.SceneItems.Where(s => sceneIds.Contains(s.Id)).ToListAsync(ct);
+        if (scenes.Count != sceneIds.Count)
+            throw new ArgumentException("One or more scenes not found.");
+
+        var contentId = scenes[0].ContentId;
+        if (scenes.Any(s => s.ContentId != contentId))
+            throw new ArgumentException("All selected scenes must belong to the same content item.");
+
+        scenes = scenes.OrderBy(s => s.StartFrame).ToList();
+
+        // Contiguity check: the selection must exactly match the run of scenes between the
+        // first and last selected scene (by StartFrame) for this content — no gaps allowed.
+        var allScenesForContent = await _db.SceneItems
+            .Where(s => s.ContentId == contentId)
+            .OrderBy(s => s.StartFrame)
+            .ToListAsync(ct);
+        var firstIdx = allScenesForContent.FindIndex(s => s.Id == scenes[0].Id);
+        var lastIdx = allScenesForContent.FindIndex(s => s.Id == scenes[^1].Id);
+        var spanned = allScenesForContent.Skip(firstIdx).Take(lastIdx - firstIdx + 1).ToList();
+        if (spanned.Count != scenes.Count || !spanned.Select(s => s.Id).ToHashSet().SetEquals(sceneIds))
+            throw new ArgumentException("Selected scenes must be consecutive, with no other scene between them.");
+
+        // Guard: mirrors DeleteScene's rule — don't let a merge silently disturb an approved
+        // placement decision or a render already committed to the final assembly queue.
+        var hasApprovedSurface = await _db.SurfaceItems
+            .AnyAsync(sf => sceneIds.Contains(sf.SceneId) && sf.Status == "Approved", ct);
+        if (hasApprovedSurface)
+            throw new InvalidOperationException(
+                "Cannot merge: one or more selected scenes has an approved surface. Exclude or reject it first.");
+
+        var hasCommittedRender = await _db.Renders
+            .AnyAsync(r => r.SceneId != null && sceneIds.Contains(r.SceneId) &&
+                (r.RenderStatus == "Finished" || r.IsQueuedForFinal), ct);
+        if (hasCommittedRender)
+            throw new InvalidOperationException(
+                "Cannot merge: one or more selected scenes has a finished or queued-for-final render. " +
+                "Remove it from the final video queue (or delete it) first.");
+
+        var first = scenes[0];
+        var last = scenes[^1];
+        var fps = await GetFrameRateAsync(contentId, ct);
+
+        var mergedScene = new SceneItem
+        {
+            Id = $"sc-{Guid.NewGuid()}",
+            ContentId = contentId,
+            SceneIndex = first.SceneIndex, // temporary — renumbered below
+            StartFrame = first.StartFrame,
+            EndFrame = last.EndFrame,
+            // EndFrame is inclusive — see the equivalent note in ShotDetectionPipeline.cs.
+            DurationSeconds = (last.EndFrame - first.StartFrame + 1) / fps,
+            QaStatus = "Unchecked",
+        };
+        // Three separate SaveChangesAsync calls, deliberately not batched into one — EF Core's
+        // automatic statement ordering got this wrong when everything was queued together in a
+        // single SaveChangesAsync: it ran the "UPDATE Shots SET SceneId=<merged>" and even the
+        // "DELETE FROM SceneItems" (old scenes) statements BEFORE the "INSERT INTO SceneItems"
+        // for the new merged scene had executed, tripping FK_Shots_SceneItems_SceneId (a shot
+        // can't reference a scene row that doesn't exist in the DB yet). Splitting into ordered
+        // steps removes any ambiguity for EF to get wrong.
+        _db.SceneItems.Add(mergedScene);
+        await _db.SaveChangesAsync(ct);
+
+        // Reparent children BEFORE removing the old scenes — SceneItem → SurfaceItem cascades
+        // on delete, which would wipe candidate surfaces still pointing at the old scene ids.
+        var shotsToReparent = await _db.Shots.Where(sh => sh.SceneId != null && sceneIds.Contains(sh.SceneId)).ToListAsync(ct);
+        foreach (var sh in shotsToReparent) sh.SceneId = mergedScene.Id;
+
+        var surfacesToReparent = await _db.SurfaceItems.Where(sf => sceneIds.Contains(sf.SceneId)).ToListAsync(ct);
+        foreach (var sf in surfacesToReparent) sf.SceneId = mergedScene.Id;
+
+        var rendersToReparent = await _db.Renders.Where(r => r.SceneId != null && sceneIds.Contains(r.SceneId)).ToListAsync(ct);
+        foreach (var r in rendersToReparent) r.SceneId = mergedScene.Id;
+
+        await _db.SaveChangesAsync(ct);
+
+        _db.SceneItems.RemoveRange(scenes);
+        await _db.SaveChangesAsync(ct);
+
+        // Renumber SceneIndex sequentially by StartFrame across the whole content item.
+        var remaining = await _db.SceneItems.Where(s => s.ContentId == contentId).OrderBy(s => s.StartFrame).ToListAsync(ct);
+        for (int i = 0; i < remaining.Count; i++) remaining[i].SceneIndex = i;
+        await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "[ShotCluster] Merged {Count} scenes ({SceneIds}) into {MergedId} for content {ContentId}",
+            scenes.Count, string.Join(",", sceneIds), mergedScene.Id, contentId);
+
+        return mergedScene;
     }
 
     // ── Contiguity-aware clustering ──

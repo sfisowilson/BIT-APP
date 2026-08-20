@@ -29,6 +29,14 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = maxUploadBytes;
 });
 
+// ASP.NET Core's multipart form parser (which binds IFormFile) has its own default cap of 128MB,
+// separate from Kestrel's MaxRequestBodySize above — without this, uploads larger than 128MB get
+// their connection torn down mid-read regardless of the Kestrel limit or any [RequestSizeLimit].
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = maxUploadBytes;
+});
+
 // Add services to the container.
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -125,6 +133,7 @@ builder.Services.AddScoped<IInvoiceService, InvoiceService>();
 // ── Phase 1: Engine implementations & Factory ──
 builder.Services.AddScoped<GeminiDetectionService>();
 builder.Services.AddScoped<GeminiPlacementService>();
+builder.Services.AddScoped<GeminiKontextPromptService>();
 builder.Services.AddScoped<FalAiSam2Service>();
 builder.Services.AddScoped<FalAiSam3Service>();
 builder.Services.AddScoped<FalAiImageEmbedService>();
@@ -139,6 +148,7 @@ builder.Services.AddScoped<GeminiBrandAnalysisService>();
 builder.Services.AddScoped<OpenCvCompositingService>();
 builder.Services.AddScoped<PikaswapsCompositingService>();
 builder.Services.AddScoped<PlanarWarpCompositingService>();
+builder.Services.AddScoped<FalKontextKlingCompositingService>();
 builder.Services.AddScoped<VideoChunkingService>();
 builder.Services.AddScoped<KlingPromptEditService>();
 

@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 namespace Afrobotics.Bit.Api.Services;
 
 /// <summary>
-/// Calls fal.ai Kling O1 Edit Video for prompt-driven AI video generation — the "AI Placement
+/// Calls fal.ai Kling O3 Pro Edit Video for prompt-driven AI video generation — the "AI Placement
 /// Assistant → Generate New" flow. Unlike the click/quad-based Insert Product and Place Signage
 /// flows, this needs no detected/drawn surface at all: the model infers placement purely from a
 /// free-text instruction plus a reference asset image.
@@ -20,7 +20,7 @@ namespace Afrobotics.Bit.Api.Services;
 /// Input: source scene clip URL + brand asset image URL + free-text placement prompt.
 /// Output: edited video with the asset placed as described, motion structure preserved.
 ///
-/// Endpoint: https://queue.fal.run/fal-ai/kling-video/o1/video-to-video/edit
+/// Endpoint: https://queue.fal.run/fal-ai/kling-video/o3/pro/video-to-video/edit
 /// Real model constraints (not configurable): 3.0–10.05s input duration, 720–2160px resolution.
 /// </summary>
 public class KlingPromptEditService
@@ -30,17 +30,17 @@ public class KlingPromptEditService
     private readonly IEventLogService _eventLog;
     private readonly HttpClient _http;
 
-    private const string DefaultEndpoint = "https://queue.fal.run/fal-ai/kling-video/o1/video-to-video/edit";
+    private const string DefaultEndpoint = "https://queue.fal.run/fal-ai/kling-video/o3/pro/video-to-video/edit";
     private static readonly TimeSpan MaxPollTime = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(10);
 
-    /// <summary>Kling O1's real, hard input-duration constraints — a scene outside this window
+    /// <summary>Kling O3 Pro's real, hard input-duration constraints — a scene outside this window
     /// cannot be sent to this endpoint at all. Referenced by RenderService/RenderJobService's
     /// "allowed length" gate rather than duplicated as separate literals.</summary>
     public const double MinPromptEditDurationSeconds = 3.0;
     public const double MaxPromptEditDurationSeconds = 10.05;
 
-    /// <summary>Kling O1's hard max resolution on either axis (confirmed via a live 422:
+    /// <summary>Kling O3 Pro's hard max resolution on either axis (confirmed via a live 422:
     /// "Video dimensions are too large. Maximum width is 2160 pixels."). The source scene clip
     /// must be downscaled to fit before submission — see ProcessPromptPreviewJob.</summary>
     public const int MaxPromptEditResolutionPx = 2160;

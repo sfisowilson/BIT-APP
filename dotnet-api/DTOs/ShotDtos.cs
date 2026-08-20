@@ -12,3 +12,14 @@ public class ShotDto
     /// <summary>Relative URL to the shot's keyframe JPEG, or null if not extracted.</summary>
     public string? KeyframeUrl { get; set; }
 }
+
+/// <summary>Request to fuse two or more consecutive scenes into one — the manual, user-driven
+/// alternative to SAM3 clustering, typically used after "Cut" split mode (one scene per camera
+/// cut, no AI grouping).</summary>
+public class MergeScenesDto
+{
+    /// <summary>IDs of the scenes to merge. Must be at least 2, all belonging to the same
+    /// content item, and consecutive (no other scene between them) — order doesn't matter,
+    /// the service re-sorts by StartFrame.</summary>
+    public List<string> SceneIds { get; set; } = new();
+}

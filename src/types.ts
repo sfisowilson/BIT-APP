@@ -1,3 +1,7 @@
+/** Detection split mode: "scene" clusters shots into semantically meaningful scenes (default);
+ *  "cut" maps every camera cut 1:1 to a scene (no AI embedding/clustering). */
+export type SplitMode = "scene" | "cut";
+
 export interface ContentItem {
   id: string;
   title: string;
@@ -33,6 +37,29 @@ export interface ContentItem {
   finalAssemblyUpdatedAt?: string | null;
 }
 
+/** Response from POST /api/content/probe — ffprobe-extracted video metadata. */
+export interface VideoProbeResult {
+  probeKey: string;
+  fileName: string;
+  duration: string;       // "HH:MM:SS"
+  fps: number;
+  resolution: string;     // e.g. "1920x1080 (1080p)"
+  width: number;
+  height: number;
+  codec: string;
+  container: string;
+  fileSize: number;
+}
+
+/** Metadata comparison for showing diff between browser-detected and ffprobe values. */
+export interface MetadataComparison {
+  field: 'duration' | 'fps' | 'resolution';
+  label: string;
+  browserValue: string | number;
+  ffprobeValue: string | number;
+  mismatch: boolean;
+}
+
 export interface SceneItem {
   id: string;
   contentId: string;
@@ -45,6 +72,8 @@ export interface SceneItem {
   aiStatus?: "idle" | "processing" | "completed" | "failed";
   aiOutputDescription?: string;
   aiModelUsed?: string;
+  /** Relative URL to the scene's thumbnail JPEG (extracted at its middle frame), e.g. "/api/content/file/thumbnails/scene-sc-abc.jpg". Null if not yet generated. */
+  thumbnailPath?: string | null;
 }
 
 /** Shape returned by the .NET API (JSON strings for complex types) */
@@ -193,19 +222,26 @@ export interface RenderItem {
   assetId: string;
   exportPreset: string;
   storageKey: string;
-  renderStatus: "Queued" | "Processing" | "Finished" | "Failed" | "NeedsReview" | "PreviewReady" | "Rejected";
+  renderStatus: "Queued" | "Processing" | "Finished" | "Failed" | "NeedsReview" | "PreviewReady" | "Rejected" | "KontextReady";
   progress: number;
   processingDurationMs: number;
   lastErrorMessage?: string;
   createdAt: string;
   /** Scene this render targets — always resolved by the backend (directly for "PromptEdit" renders, via surfaceId for Interactive ones). Null only if unresolvable (e.g. deleted surface). */
   sceneId?: string | null;
-  /** User's free-text placement instruction for a "PromptEdit" render. */
+  /** User's free-text placement instruction for a "PromptEdit" render. For "KontextStep" renders,
+   *  this gets overwritten with the Kling propagation prompt once one is sent — see kontextPromptText. */
   promptText?: string | null;
+  /** The original FLUX Kontext placement instruction for a "KontextStep" render — preserved
+   *  separately from promptText so it survives a later Kling-prompt update. Null for renders
+   *  created before this field existed, or for non-KontextStep renders. */
+  kontextPromptText?: string | null;
   /** Download path for the not-yet-approved AI-generated preview clip, set once renderStatus reaches "PreviewReady". */
   previewStorageKey?: string | null;
-  /** Undefined/"Interactive" (click/quad placement) vs "PromptEdit" (free-text AI video generation). */
-  renderMode?: "Interactive" | "PromptEdit" | null;
+  /** Download path for the FLUX.1 Kontext composited frame image (PNG), set once renderStatus reaches "KontextReady". This is the frame that Kling uses as its visual reference. */
+  kontextFrameStorageKey?: string | null;
+  /** Undefined/"Interactive" (click/quad placement) vs "PromptEdit" (free-text AI video generation) vs "SurfaceAnchor" (fast path: FLUX Kontext + Kling, all in one job) vs "KontextStep" (interactive: Kontext frame only, first step). */
+  renderMode?: "Interactive" | "PromptEdit" | "SurfaceAnchor" | "KontextStep" | null;
   /** ContentItem.Title — null if the source content has since been deleted. */
   contentTitle?: string | null;
   /** SceneItem.SceneIndex for the resolved scene — null if unresolvable. */
@@ -236,6 +272,59 @@ export interface CreatePromptRenderRequest {
   assetId: string;
   promptText: string;
   exportPreset?: string;
+}
+
+/** Request to dispatch a surface-anchored render (the "Anchor & Generate" flow).
+ * Anchors placement on a real detected surface (its exact DetectedAtFrame + Gemini SurfaceType),
+ * composites the asset into that frame via FLUX.1 Kontext, then propagates across the full scene
+ * via Kling O1 Edit with the composited frame as a visual reference. */
+export interface CreateSurfaceAnchorRenderRequest {
+  contentId: string;
+  sceneId: string;
+  surfaceId: string;
+  campaignId: string;
+  assetId: string;
+  promptText: string;
+  exportPreset?: string;
+}
+
+/** Request to generate just the FLUX.1 Kontext composited frame (Step 1 of interactive Kontext→Kling).
+ * The user pauses on a specific frameNumber; Kontext composites the asset into that frame.
+ * No Kling is called — the user reviews the frame before proceeding. */
+export interface CreateKontextFrameRequest {
+  contentId: string;
+  sceneId: string;
+  surfaceId: string;
+  campaignId: string;
+  assetId: string;
+  /** The exact frame number the user paused on. */
+  frameNumber: number;
+  promptText: string;
+  exportPreset?: string;
+  /** Which image model composites the frame: "flux-kontext" (default) or "nano-banana-pro". */
+  provider?: 'flux-kontext' | 'nano-banana-pro';
+}
+
+/** Request to propagate a stored Kontext frame through Kling O1 Edit (Step 2 of interactive Kontext→Kling).
+ * The render must be in "KontextReady" status. An optional updated promptText can be provided. */
+export interface PropagateKlingRequest {
+  /** Optional updated placement prompt. If empty, reuses the original prompt from the Kontext step. */
+  promptText?: string;
+}
+
+/** Request Gemini's suggested rewrite of a rough Kontext placement idea, grounded in the actual
+ * scene frame and asset image. Read-only — does not create or modify any render. */
+export interface SuggestKontextPromptRequest {
+  contentId: string;
+  frameNumber: number;
+  assetId: string;
+  surfaceId?: string;
+  roughPrompt: string;
+}
+
+export interface SuggestKontextPromptResponse {
+  suggestedPrompt: string;
+  modelUsed: string;
 }
 
 export interface EventLog {

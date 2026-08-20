@@ -41,11 +41,15 @@ public class SceneDetectionJobService
     public async Task RunDetectionPipeline(
         string contentId,
         string videoTitle,
-        CancellationToken cancellationToken)
+        string splitMode,
+        CancellationToken cancellationToken,
+        bool runSurfaceDetection = true)
     {
         // Broadcast start of detection
+        var modeLabel = string.Equals(splitMode, "cut", StringComparison.OrdinalIgnoreCase)
+            ? "cut" : "scene";
         await _hubContext.Clients.All.DetectionProgress(
-            contentId, 1, "Starting", null);
+            contentId, 1, $"Starting ({modeLabel} split)", null);
 
         using var scope = _serviceProvider.CreateScope();
         var shotPipeline = scope.ServiceProvider.GetRequiredService<ShotDetectionPipeline>();
@@ -56,12 +60,12 @@ public class SceneDetectionJobService
             // ── Phase 1: Shot detection → embedding → clustering (1% → 30%) ──
             await _hubContext.Clients.All.DetectionProgress(
                 contentId, 2, "Detecting shots", null);
-            await shotPipeline.RunAsync(contentId, cancellationToken);
+            await shotPipeline.RunAsync(contentId, splitMode, cancellationToken);
 
             // ── Phase 2: Surface detection per scene (30% → 100%) ──
             await _hubContext.Clients.All.DetectionProgress(
                 contentId, 30, "Detecting surfaces", null);
-            await surfacePipeline.RunAsync(contentId, cancellationToken);
+            await surfacePipeline.RunAsync(contentId, cancellationToken, runSurfaceDetection);
 
             // Broadcast completion
             await _hubContext.Clients.All.DetectionProgress(

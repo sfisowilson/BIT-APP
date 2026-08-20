@@ -38,18 +38,23 @@ public class SurfaceDetectionPipeline
     /// Run the full detection pipeline for a content item.
     /// Called as a Hangfire background job.
     /// </summary>
-    public async Task RunAsync(string contentId, CancellationToken ct)
+    public async Task RunAsync(string contentId, CancellationToken ct, bool runSurfaceDetection = true)
     {
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
         var contentService = scope.ServiceProvider.GetRequiredService<IContentService>();
-        var gemini = scope.ServiceProvider.GetRequiredService<GeminiDetectionService>();
+        var engineFactory = scope.ServiceProvider.GetRequiredService<IEngineFactory>();
         var sam2 = scope.ServiceProvider.GetRequiredService<FalAiSam2Service>();
         var settings = scope.ServiceProvider.GetRequiredService<IPlatformSettingsService>();
         var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
 
         var content = await db.ContentItems.FindAsync(contentId);
         if (content == null) return;
+
+        // Resolved once per run (not per scene) — the configured engine_detection setting
+        // doesn't change mid-run. Was previously hardcoded to GeminiDetectionService,
+        // silently ignoring engine_detection entirely.
+        var surfaceDetection = await engineFactory.GetSurfaceDetectionEngineAsync();
 
         try
         {
@@ -91,11 +96,6 @@ public class SurfaceDetectionPipeline
                 throw new InvalidOperationException($"Cannot resolve video path for {contentId}");
             }
 
-            // Get actual video dimensions from the file — used for all scene processing
-            var (runVidW, runVidH) = await GetVideoDimensionsAsync(videoPath, ct);
-            if (runVidW <= 0) runVidW = content.Width > 0 ? content.Width : 1920;
-            if (runVidH <= 0) runVidH = content.Height > 0 ? content.Height : 1080;
-
             var totalScenes = scenes.Count;
             var surfaceCount = 0;
             var failedScenes = 0;
@@ -120,9 +120,14 @@ public class SurfaceDetectionPipeline
                     content.DetectionProgress = 44;
                     await db.SaveChangesAsync(ct);
 
-                    var surfaces = await DetectSurfacesAcrossSceneAsync(
-                        sceneItem, videoPath, gemini, sam2, settings,
-                        runVidW, runVidH, ct);
+                    // Gemini surface detection is the expensive part of this pipeline (up to
+                    // maxFrames sampled frames per scene, each a Gemini call + rate-limit delay).
+                    // Skipping it lets users get scene/shot cuts quickly and run surface
+                    // detection later per-scene via RunSurfaceDetectionForSceneAsync instead.
+                    var surfaces = runSurfaceDetection
+                        ? await DetectSurfacesAcrossSceneAsync(
+                            sceneItem, videoPath, surfaceDetection, sam2, settings, ct)
+                        : new List<SurfaceItem>();
 
                     content.DetectionProgress = 48;
                     await db.SaveChangesAsync(ct);
@@ -225,7 +230,7 @@ public class SurfaceDetectionPipeline
     {
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
-        var gemini = scope.ServiceProvider.GetRequiredService<GeminiDetectionService>();
+        var engineFactory = scope.ServiceProvider.GetRequiredService<IEngineFactory>();
         var settings = scope.ServiceProvider.GetRequiredService<IPlatformSettingsService>();
         var eventLog = scope.ServiceProvider.GetRequiredService<IEventLogService>();
 
@@ -247,11 +252,6 @@ public class SurfaceDetectionPipeline
             await db.SaveChangesAsync(ct);
             return;
         }
-
-        // Get actual video dimensions from the file itself via ffprobe — always correct
-        var (vidW, vidH) = await GetVideoDimensionsAsync(videoPath, ct);
-        if (vidW <= 0) vidW = content.Width > 0 ? content.Width : 1920;
-        if (vidH <= 0) vidH = content.Height > 0 ? content.Height : 1080;
 
         try
         {
@@ -276,7 +276,8 @@ public class SurfaceDetectionPipeline
                         sceneItem.SceneIndex, sceneItem.StartFrame, sceneItem.EndFrame, realDuration, realFps, maxValidFrame);
                     sceneItem.StartFrame = Math.Max(0, Math.Min(sceneItem.StartFrame, maxValidFrame - 1));
                     sceneItem.EndFrame = Math.Min(sceneItem.EndFrame, maxValidFrame);
-                    sceneItem.DurationSeconds = Math.Max(0.5, (sceneItem.EndFrame - sceneItem.StartFrame) / realFps);
+                    // EndFrame is inclusive — see the equivalent note in ShotDetectionPipeline.cs.
+                    sceneItem.DurationSeconds = Math.Max(0.5, (sceneItem.EndFrame - sceneItem.StartFrame + 1) / realFps);
                     await db.SaveChangesAsync(ct);
                 }
             }
@@ -284,8 +285,9 @@ public class SurfaceDetectionPipeline
             // Multi-frame sampling across the scene's full duration (not just one frame) —
             // see DetectSurfacesAcrossSceneAsync. sam2: null preserves this path's existing
             // behavior (no mask refinement here; only the bulk pipeline does that).
+            var surfaceDetection = await engineFactory.GetSurfaceDetectionEngineAsync();
             var surfaces = await DetectSurfacesAcrossSceneAsync(
-                sceneItem, videoPath, gemini, sam2: null, settings, vidW, vidH, ct);
+                sceneItem, videoPath, surfaceDetection, sam2: null, settings, ct);
 
             foreach (var surface in surfaces)
             {
@@ -350,11 +352,9 @@ public class SurfaceDetectionPipeline
     private async Task<List<SurfaceItem>> DetectSurfacesAcrossSceneAsync(
         SceneItem sceneItem,
         string videoPath,
-        GeminiDetectionService gemini,
+        ISurfaceDetectionService surfaceDetection,
         FalAiSam2Service? sam2,
         IPlatformSettingsService settings,
-        int vidW,
-        int vidH,
         CancellationToken ct)
     {
         var sampleInterval = 2.0;
@@ -374,10 +374,6 @@ public class SurfaceDetectionPipeline
         _logger.LogInformation("[Pipeline] Sampling {Count} frames across scene {Index} ({Duration:F1}s, frames {Start}-{End})",
             sampleFrames.Count, sceneItem.SceneIndex, sceneItem.DurationSeconds, sceneItem.StartFrame, sceneItem.EndFrame);
 
-        var scaleFactor = Math.Min(1024.0 / vidW, 1024.0 / vidH);
-        var scaledW = (int)(vidW * scaleFactor);
-        var scaledH = (int)(vidH * scaleFactor);
-
         var allDetections = new List<(int frameNumber, SurfaceDetectionResult detection)>();
 
         foreach (var frame in sampleFrames)
@@ -390,9 +386,8 @@ public class SurfaceDetectionPipeline
                 continue;
             }
 
-            var results = await gemini.DetectFromBase64Async(
-                sceneItem.ContentId, sceneItem.SceneIndex, frameBase64, frame, sceneItem.EndFrame,
-                scaledW, scaledH, vidW, vidH, ct);
+            var results = await surfaceDetection.DetectAsync(
+                sceneItem.ContentId, sceneItem.SceneIndex, frame, frame, ct);
 
             if (sam2 != null && results.Count > 0)
             {
@@ -441,7 +436,7 @@ public class SurfaceDetectionPipeline
 
         if (allDetections.Count == 0)
         {
-            _logger.LogInformation("[Pipeline] Gemini found no surfaces in scene {Index}", sceneItem.SceneIndex);
+            _logger.LogInformation("[Pipeline] No surfaces found in scene {Index}", sceneItem.SceneIndex);
             return new List<SurfaceItem>();
         }
 
@@ -705,32 +700,6 @@ public class SurfaceDetectionPipeline
         {
             return (30, 60); // safe fallback
         }
-    }
-
-    /// <summary>Get actual video width/height via ffprobe — works for any video format, any aspect ratio.</summary>
-    private static async Task<(int width, int height)> GetVideoDimensionsAsync(string videoPath, CancellationToken ct)
-    {
-        try
-        {
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "ffprobe",
-                    Arguments = $"-v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 \"{videoPath}\"",
-                    UseShellExecute = false, CreateNoWindow = true,
-                    RedirectStandardOutput = true, RedirectStandardError = true,
-                },
-            };
-            process.Start();
-            var output = await process.StandardOutput.ReadToEndAsync();
-            await process.WaitForExitAsync();
-            var parts = output.Trim().Split(',');
-            if (parts.Length >= 2 && int.TryParse(parts[0], out var w) && int.TryParse(parts[1], out var h))
-                return (w, h);
-        }
-        catch { }
-        return (0, 0);
     }
 
     private static double ParseDuration(string? duration)

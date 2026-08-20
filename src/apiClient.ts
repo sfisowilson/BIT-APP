@@ -5,7 +5,7 @@
  * so relative URLs work in both dev and production.
  */
 
-import type { DetectionJob, JobsListResponse, ShotItem, InvoiceSummary } from './types';
+import type { DetectionJob, JobsListResponse, ShotItem, InvoiceSummary, SplitMode, SceneItem } from './types';
 
 const TOKEN_KEY = 'bit_token';
 const USER_KEY = 'bit_user';
@@ -252,8 +252,13 @@ export async function retranscode(
 /** Re-run scene detection for a content item. Returns jobId for polling. */
 export async function redetectScenes(
   contentId: string,
+  splitMode: SplitMode = "scene",
+  runSurfaceDetection: boolean = true,
 ): Promise<{ jobId: string; id: string; ingestionStatus: string; message: string }> {
-  const r = await fetchWithAuth(`/api/content/${contentId}/redetect-scenes`, { method: 'POST' });
+  const r = await fetchWithAuth(`/api/content/${contentId}/redetect-scenes`, {
+    method: 'POST',
+    body: JSON.stringify({ splitMode, runSurfaceDetection }),
+  });
   if (!r.ok) {
     const data = await r.json();
     throw new Error(data.error || 'Failed to restart scene detection.');
@@ -262,19 +267,25 @@ export async function redetectScenes(
 }
 
 /**
- * Queue the full shot-aware detection pipeline: FFmpeg shot-cut detection → SAM3 keyframe
- * embedding → clustering shots into scenes (a scene may span multiple cuts) → surface
- * detection per clustered scene. This is the pipeline that makes "AI Split Analyze" actually
- * produce meaningful scenes with surfaces, as opposed to detectScenesOnly's raw 1:1 FFmpeg
- * cuts with no surfaces.
+ * Queue the full shot-aware detection pipeline: FFmpeg shot-cut detection → (optionally)
+ * SAM3 keyframe embedding → clustering shots into scenes (a scene may span multiple cuts)
+ * → surface detection per scene.
+ *
+ * @param splitMode "scene" (default) clusters shots via SAM3 embeddings; "cut" creates
+ *   one scene per camera cut with no AI embedding or clustering.
+ * @param runSurfaceDetection When false, skips the Gemini surface-detection step (the slowest
+ *   part of the pipeline — up to several Gemini calls per scene) and only detects scene/shot
+ *   cuts. Surfaces can be detected later per-scene via detectSurfacesForScene.
  */
 export async function aiSplitAnalyze(
   contentId: string,
   videoTitle: string,
+  splitMode: SplitMode = "scene",
+  runSurfaceDetection: boolean = true,
 ): Promise<{ jobId: string; contentId: string; message: string }> {
   const r = await fetchWithAuth('/api/video/ai-split-analyze', {
     method: 'POST',
-    body: JSON.stringify({ contentId, videoTitle }),
+    body: JSON.stringify({ contentId, videoTitle, splitMode, runSurfaceDetection }),
   });
   if (!r.ok) {
     const data = await r.json();
@@ -318,6 +329,23 @@ export async function deleteAllScenes(contentId: string): Promise<{ success: boo
   if (!r.ok) {
     const data = await r.json();
     throw new Error(data.error || 'Failed to delete all scenes.');
+  }
+  return r.json();
+}
+
+/**
+ * Fuse two or more consecutive scenes into one — the manual, user-driven alternative to AI
+ * (SAM3) clustering. Typically used after "Cut" split mode. Fails (400) if the selection isn't
+ * consecutive, or if any selected scene has an approved surface or a finished/queued-for-final render.
+ */
+export async function mergeScenes(sceneIds: string[]): Promise<SceneItem> {
+  const r = await fetchWithAuth('/api/scenes/merge', {
+    method: 'POST',
+    body: JSON.stringify({ sceneIds }),
+  });
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({ error: 'Failed to merge scenes.' }));
+    throw new Error(data.error || 'Failed to merge scenes.');
   }
   return r.json();
 }
@@ -599,6 +627,11 @@ import type {
   CreateSurfaceResponse,
   RenderItem,
   CreatePromptRenderRequest,
+  CreateSurfaceAnchorRenderRequest,
+  CreateKontextFrameRequest,
+  PropagateKlingRequest,
+  SuggestKontextPromptRequest,
+  SuggestKontextPromptResponse,
 } from './types';
 
 export type {
@@ -660,6 +693,117 @@ export async function submitPromptPlacement(dto: CreatePromptRenderRequest): Pro
   return r.json();
 }
 
+/**
+ * Dispatch a surface-anchored render (the "Anchor & Generate" flow).
+ * Anchors placement on a real detected surface — FLUX.1 Kontext composites the asset into the
+ * surface's detected-at frame, then Kling O1 Edit propagates across the full scene.
+ */
+export async function submitSurfaceAnchorRender(dto: CreateSurfaceAnchorRenderRequest): Promise<RenderItem> {
+  const r = await fetchWithAuth('/api/renders/surface-anchor', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to dispatch surface anchor render.' }));
+    throw new Error(err.error || 'Failed to dispatch surface anchor render.');
+  }
+  return r.json();
+}
+
+/**
+ * Asks Gemini to rewrite a rough Kontext placement idea into a precise instruction, grounded in
+ * the actual scene frame and asset image. Read-only — doesn't create or modify any render.
+ */
+export async function suggestKontextPrompt(dto: SuggestKontextPromptRequest): Promise<SuggestKontextPromptResponse> {
+  const r = await fetchWithAuth('/api/renders/suggest-kontext-prompt', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to get a prompt suggestion.' }));
+    throw new Error(err.error || 'Failed to get a prompt suggestion.');
+  }
+  return r.json();
+}
+
+/**
+ * Step 1 of the interactive Kontext→Kling workflow. Generates just the FLUX.1 Kontext
+ * composited frame (no Kling) so the user can review/redo the frame before proceeding.
+ * Returns the render in "Queued" status; poll for renderStatus "KontextReady".
+ */
+export async function submitKontextFrame(dto: CreateKontextFrameRequest): Promise<RenderItem> {
+  const r = await fetchWithAuth('/api/renders/surface-anchor/kontext-frame', {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to dispatch Kontext frame.' }));
+    throw new Error(err.error || 'Failed to dispatch Kontext frame.');
+  }
+  return r.json();
+}
+
+/**
+ * Alternative to submitKontextFrame: upload a reference frame you already have instead of
+ * generating one with FLUX.1 Kontext. Creates the render directly in "KontextReady" status.
+ */
+export async function uploadKontextFrame(params: {
+  contentId: string;
+  sceneId: string;
+  surfaceId?: string;
+  campaignId: string;
+  assetId: string;
+  frameNumber: number;
+  promptText?: string;
+  file: File;
+}): Promise<RenderItem> {
+  const formData = new FormData();
+  formData.append('contentId', params.contentId);
+  formData.append('sceneId', params.sceneId);
+  if (params.surfaceId) formData.append('surfaceId', params.surfaceId);
+  formData.append('campaignId', params.campaignId);
+  formData.append('assetId', params.assetId);
+  formData.append('frameNumber', String(params.frameNumber));
+  if (params.promptText) formData.append('promptText', params.promptText);
+  formData.append('file', params.file);
+
+  const token = getToken();
+  const r = await fetch('/api/renders/surface-anchor/upload-kontext-frame', {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: formData,
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to upload reference frame.' }));
+    throw new Error(err.error || 'Failed to upload reference frame.');
+  }
+  return r.json();
+}
+
+/**
+ * Step 2 of the interactive Kontext→Kling workflow. Propagates the stored Kontext frame
+ * through Kling O1 Edit. The render must be in "KontextReady" status.
+ */
+export async function propagateKling(renderId: string, dto: PropagateKlingRequest): Promise<RenderItem> {
+  const r = await fetchWithAuth(`/api/renders/${renderId}/propagate-kling`, {
+    method: 'POST',
+    body: JSON.stringify(dto),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({ error: 'Failed to dispatch Kling propagation.' }));
+    throw new Error(err.error || 'Failed to dispatch Kling propagation.');
+  }
+  return r.json();
+}
+
+/** Returns the active compositing engine key (e.g. "opencv", "fal-kontext-kling"). */
+export async function fetchCompositingEngine(): Promise<string> {
+  const r = await fetchWithAuth('/api/compositing/engine');
+  if (!r.ok) return 'opencv';
+  const data = await r.json();
+  return data.engine || 'opencv';
+}
+
 /** Approve a PreviewReady prompt-placement render — splices it into the full source video. */
 export async function approvePromptSplice(renderId: string): Promise<RenderItem> {
   const r = await fetchWithAuth(`/api/renders/${renderId}/approve-splice`, {
@@ -715,4 +859,64 @@ export async function createSurfaceFromQuad(dto: CreateSurfaceFromQuadRequest): 
     throw new Error(err.error || 'Failed to create surface.');
   }
   return r.json();
+}
+
+// ─── Video Probe API ────────────────────────────────────────────────────
+
+import type { VideoProbeResult } from './types';
+
+/**
+ * Upload a video file to the probe endpoint for ffprobe metadata extraction.
+ * The file is saved server-side and can be reused by the main upload via the
+ * returned probeKey — no need to upload the file twice.
+ *
+ * @param file  The video file to probe.
+ * @param onProgress  Optional callback receiving 0-100 upload percentage.
+ * @returns  ffprobe-extracted metadata: duration, FPS, resolution, codec, etc.
+ */
+export function probeVideoFile(
+  file: File,
+  onProgress?: (pct: number) => void,
+): Promise<VideoProbeResult> {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/content/probe');
+
+    const token = getToken();
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    xhr.upload.addEventListener('progress', (evt) => {
+      if (evt.lengthComputable && onProgress) {
+        onProgress(Math.round((evt.loaded / evt.total) * 100));
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      try {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data as VideoProbeResult);
+        } else {
+          reject(new Error(data.error || `Probe failed (HTTP ${xhr.status}).`));
+        }
+      } catch {
+        reject(new Error('Failed to parse probe response.'));
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      reject(new Error('Network error during probe. Check your connection.'));
+    });
+
+    xhr.addEventListener('abort', () => {
+      reject(new Error('Probe aborted.'));
+    });
+
+    xhr.send(formData);
+  });
 }

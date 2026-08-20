@@ -41,8 +41,12 @@ public class ShotDetectionPipeline
     /// <summary>
     /// Full pipeline for a content item: detect shots, embed keyframes, cluster into scenes.
     /// </summary>
-    public async Task RunAsync(string contentId, CancellationToken ct = default)
+    /// <param name="splitMode">"scene" (default) clusters shots into scenes via SAM3 embeddings;
+    /// "cut" maps every camera cut 1:1 to a scene (no embedding or clustering).</param>
+    public async Task RunAsync(string contentId, string splitMode = "scene", CancellationToken ct = default)
     {
+        var isCutMode = string.Equals(splitMode, "cut", StringComparison.OrdinalIgnoreCase);
+
         using var scope = _serviceProvider.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PostgresDbContext>();
         var embedService = scope.ServiceProvider.GetRequiredService<FalAiImageEmbedService>();
@@ -60,13 +64,26 @@ public class ShotDetectionPipeline
         // Reports progress within the 2%→30% band SceneDetectionJobService brackets this
         // method with — writes to the DB (for polling clients) and broadcasts via SignalR
         // (for live push). Monotonic: never reports backwards or re-reports the same percent.
+        // Also called concurrently during the embedding phase (FalAiImageEmbedService.EmbedBatchAsync
+        // runs its onProgress callback from multiple parallel tasks), so the whole body is locked —
+        // EF Core's DbContext isn't thread-safe, and without this, concurrent SaveChangesAsync calls
+        // on the shared `db` instance would throw.
         var lastReportedPercent = 2;
+        using var progressLock = new SemaphoreSlim(1, 1);
         async Task ReportProgress(int percent, string status)
         {
-            if (percent <= lastReportedPercent) return;
-            lastReportedPercent = percent;
-            content.DetectionProgress = percent;
-            await db.SaveChangesAsync(ct);
+            await progressLock.WaitAsync(ct);
+            try
+            {
+                if (percent <= lastReportedPercent) return;
+                lastReportedPercent = percent;
+                content.DetectionProgress = percent;
+                await db.SaveChangesAsync(ct);
+            }
+            finally
+            {
+                progressLock.Release();
+            }
             try
             {
                 await _hubContext.Clients.All.DetectionProgress(contentId, percent, status, null);
@@ -78,7 +95,7 @@ public class ShotDetectionPipeline
         }
 
         // ── Phase 1: Detect shot boundaries via FFmpeg ──
-        var shots = DetectShots(content);
+        var shots = await DetectShotsAsync(content, ct);
         _logger.LogInformation("[ShotPipeline] Detected {Count} shots", shots.Count);
 
         if (shots.Count == 0) return;
@@ -118,6 +135,39 @@ public class ShotDetectionPipeline
             db.Shots.Add(shot);
         }
         await db.SaveChangesAsync(ct);
+
+        // ── Cut mode: create 1 SceneItem per ShotItem (1:1 mapping, no AI clustering) ──
+        if (isCutMode)
+        {
+            await ReportProgress(6, $"Creating {shots.Count} cut scenes (1:1)");
+            var fps = content.FrameRate > 0 && content.FrameRate <= 240 ? content.FrameRate : 30;
+            for (int i = 0; i < shots.Count; i++)
+            {
+                var shot = shots[i];
+                var scene = new SceneItem
+                {
+                    Id = $"sc-{Guid.NewGuid()}",
+                    ContentId = contentId,
+                    SceneIndex = i,
+                    StartFrame = shot.StartFrame,
+                    EndFrame = shot.EndFrame,
+                    // EndFrame is inclusive (the last frame belonging to the scene), so the frame
+                    // count is EndFrame - StartFrame + 1 — omitting the +1 under-counts duration by
+                    // exactly one frame, which final assembly (VideoChunkingService.SpliceFinalAssemblyAsync)
+                    // uses directly as ffmpeg's -t, silently dropping the scene's last frame.
+                    DurationSeconds = (shot.EndFrame - shot.StartFrame + 1) / (fps > 0 ? fps : 30),
+                    QaStatus = "Unchecked",
+                };
+                db.SceneItems.Add(scene);
+                shot.SceneId = scene.Id;
+                await ReportProgress(6 + (int)(24.0 * (i + 1) / shots.Count),
+                    $"Creating cut scenes ({i + 1}/{shots.Count})");
+            }
+            await db.SaveChangesAsync(ct);
+            _logger.LogInformation("[ShotPipeline] Cut mode: created {Count} scenes from {ShotCount} shots for {ContentId}",
+                shots.Count, shots.Count, contentId);
+            return;
+        }
 
         // ── Phase 2: Extract keyframes ──
         var videoPath = ResolveVideoPath(content);
@@ -180,7 +230,7 @@ public class ShotDetectionPipeline
 
     // ── Shot detection via FFmpeg ──
 
-    private static List<ShotItem> DetectShots(ContentItem content)
+    private static async Task<List<ShotItem>> DetectShotsAsync(ContentItem content, CancellationToken ct)
     {
         var fileName = content.StorageKey?.Replace("/api/content/file/", "") ?? "";
         var videoPath = Path.Combine(Directory.GetCurrentDirectory(), "Uploads", fileName);
@@ -205,8 +255,29 @@ public class ShotDetectionPipeline
                 },
             };
             process.Start();
-            var stderr = process.StandardError.ReadToEnd();
-            process.WaitForExit(120_000);
+
+            // This is a full-file decode (scene-change scoring reads every frame), so it can
+            // legitimately take a while for a large/long video — but ReadToEnd() blocks until
+            // ffmpeg closes its output, which happens only when the process exits. Read both
+            // streams asynchronously so a full pipe buffer can't deadlock ffmpeg, and enforce
+            // the timeout by killing the process rather than relying on a WaitForExit call that
+            // never gets a chance to run until after the blocking read already returned.
+            var readStdout = process.StandardOutput.ReadToEndAsync(ct);
+            var readStderr = process.StandardError.ReadToEndAsync(ct);
+
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+            try
+            {
+                await process.WaitForExitAsync(linkedCts.Token);
+            }
+            catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+            {
+                if (!process.HasExited) { try { process.Kill(entireProcessTree: true); } catch { } }
+            }
+
+            var stderr = await readStderr;
+            await readStdout;
 
             var regex = new Regex(@"pts_time:([\d\.]+)");
             foreach (Match m in regex.Matches(stderr))

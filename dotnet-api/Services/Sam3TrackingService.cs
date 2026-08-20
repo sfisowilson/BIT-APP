@@ -183,6 +183,38 @@ public class Sam3TrackingService : ISurfaceTrackingService
             // frames[] shape and the flat rle[]/metadata[] shape); only fall back to the async
             // queue.fal.run poll/fetch flow if that yields nothing and a request_id is present
             // (queueBase, e.g. when the sync host redirects a slow call into the queue).
+            try
+            {
+                using var diagDoc = JsonDocument.Parse(submitJson);
+                var diagRoot = diagDoc.RootElement.Clone();
+                var sb = new StringBuilder();
+                sb.Append('{');
+                bool first = true;
+                foreach (var prop in diagRoot.EnumerateObject())
+                {
+                    if (!first) sb.Append(',');
+                    first = false;
+                    sb.Append($"\"{prop.Name}\":");
+                    if (prop.Name == "rle" && prop.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        // The RLE counts strings are huge (thousands of chars) and drown out
+                        // everything else in a truncated log — summarize instead of dumping them.
+                        sb.Append($"[<{prop.Value.GetArrayLength()} rle strings, lengths: ");
+                        sb.Append(string.Join(",", prop.Value.EnumerateArray().Select(e => e.GetString()?.Length ?? 0)));
+                        sb.Append(">]");
+                    }
+                    else
+                    {
+                        sb.Append(prop.Value.GetRawText());
+                    }
+                }
+                sb.Append('}');
+                await _eventLog.LogEventAsync("SAM3", "RLE_RESULT_RAW", "Info", Truncate(sb.ToString(), 3000));
+            }
+            catch (Exception diagEx)
+            {
+                await _eventLog.LogEventAsync("SAM3", "RLE_RESULT_RAW", "Warning", $"Diagnostic parse failed: {diagEx.Message}");
+            }
             var frames = ParseFramesFromResultJson(submitJson);
 
             if (frames == null || frames.Count == 0)

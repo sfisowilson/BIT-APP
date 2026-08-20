@@ -46,7 +46,8 @@
 |---|---|---|---|
 | `GET` | `/api/content` | Query: `ContentFilterParams { page, pageSize, ... }` | `PaginatedResult<ContentItem>` |
 | `GET` | `/api/content/{id}` | — | `ContentItem` |
-| `POST` | `/api/content/upload` | Form: `title`, `resolution`, `frameRate`, `duration`, `sourceChannel`, `campaignId?`, `file` | `ContentItem` |
+| `POST` | `/api/content/upload` | Form: `title`, `resolution`, `frameRate`, `duration`, `sourceChannel`, `campaignId?`, `probeKey?`, `file` | `{ content: ContentItem, metadataCorrected: boolean, submittedMetadata: { duration, fps, resolution }, actualMetadata: { duration, fps, resolution } }` — If `probeKey` is provided (from a prior `POST /api/content/probe` call), the pre-uploaded file is reused and the `file` field may be omitted. The response includes a `metadataCorrected` flag and both metadata sets when ffprobe-derived values differ from submitted values. |
+| `POST` | `/api/content/probe` | Multipart: `file` | `VideoProbeResponseDto { probeKey, fileName, duration, fps, resolution, width, height, codec, container, fileSize }` — Uploads the file to a temporary probe location, runs ffprobe to extract accurate metadata, and returns a `probeKey` that can be passed to `/api/content/upload` to reuse the file without a second upload. Probe files are auto-cleaned after 2 hours. |
 | `POST` | `/api/content/{id}/transition` | `{ targetStage, errorMessage? }` | `{ success, id, ingestionStatus, message }` |
 | `POST` | `/api/content/{id}/retranscode` | — | `{ success, id, ingestionStatus, message }` |
 | `POST` | `/api/content/{id}/redetect-scenes` | — | `{ jobId, id, ingestionStatus, message }` — Enqueues Hangfire detection pipeline |
@@ -73,6 +74,7 @@
 | `DELETE` | `/api/scenes/{id}` | — | `{ success, id, message }` — Delete a single scene and all child surfaces/ad-slots/approvals. Blocks if any surface is Approved (400). |
 | `GET` | `/api/scenes/{id}/clip` | — | `video/mp4` file download — FFmpeg-extracted clip of the scene's frame range from source video |
 | `GET` | `/api/scenes/{sceneId}/shots` | — | `ShotDto[] { id, shotIndex, startFrame, endFrame, keyframeTimestamp, keyframeUrl }` — Shots (camera cuts) making up the scene, ordered by `shotIndex`. A scene can span multiple shots; empty array if the scene predates shot clustering. |
+| `POST` | `/api/scenes/merge` | `MergeScenesDto { sceneIds: string[] }` | `SceneItem` — Fuses 2+ consecutive scenes into one; the manual, user-driven alternative to SAM3 clustering (typically used after "Cut" split mode). Reparents child `ShotItem`/`SurfaceItem`/`RenderItem` rows to the new scene, deletes the old scenes, and renumbers `SceneIndex` for the whole content item. `400` if the selection isn't consecutive (no gaps), or if any selected scene has an Approved surface or a Finished/queued-for-final render. |
 
 ---
 

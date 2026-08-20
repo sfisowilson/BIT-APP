@@ -438,6 +438,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
                   <option value="opencv">OpenCV — FFmpeg overlay + blend (single-frame preview)</option>
                   <option value="planar-warp">Planar Warp — Deterministic homography (flat signage, pixel-perfect)</option>
                   <option value="pikaswaps">Pikaswaps — fal.ai text-driven AI swap (3D products)</option>
+                  <option value="fal-kontext-kling">FLUX Kontext + Kling O1 — Frame-accurate AI placement with video propagation</option>
                 </select>
                 <p className="text-[9px] text-slate-400 mt-1">
                   Interactive placements (click-to-place in the Editor) route to Planar Warp or Pikaswaps automatically based on placement type — this setting only affects the legacy single-frame compositing preview.

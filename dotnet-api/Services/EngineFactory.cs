@@ -89,9 +89,10 @@ public class EngineFactory : IEngineFactory
             "opencv" => _serviceProvider.GetRequiredService<OpenCvCompositingService>(),
             "pikaswaps" => _serviceProvider.GetRequiredService<PikaswapsCompositingService>(),
             "planar-warp" => _serviceProvider.GetRequiredService<PlanarWarpCompositingService>(),
+            "fal-kontext-kling" => _serviceProvider.GetRequiredService<FalKontextKlingCompositingService>(),
             _ => throw new InvalidOperationException(
                 $"No valid compositing engine configured (engine_compositing='{key}'). " +
-                "Set the 'engine_compositing' Platform Setting to one of: opencv, pikaswaps, planar-warp."),
+                "Set the 'engine_compositing' Platform Setting to one of: opencv, pikaswaps, planar-warp, fal-kontext-kling."),
         };
     }
 
@@ -162,9 +163,10 @@ public class EngineFactory : IEngineFactory
             "opencv" => scope.ServiceProvider.GetRequiredService<OpenCvCompositingService>(),
             "pikaswaps" => scope.ServiceProvider.GetRequiredService<PikaswapsCompositingService>(),
             "planar-warp" => scope.ServiceProvider.GetRequiredService<PlanarWarpCompositingService>(),
+            "fal-kontext-kling" => scope.ServiceProvider.GetRequiredService<FalKontextKlingCompositingService>(),
             _ => throw new InvalidOperationException(
                 $"No valid compositing engine configured (engine_compositing='{engineKey}'). " +
-                "Set the 'engine_compositing' Platform Setting to one of: opencv, pikaswaps, planar-warp."),
+                "Set the 'engine_compositing' Platform Setting to one of: opencv, pikaswaps, planar-warp, fal-kontext-kling."),
         };
     }
 

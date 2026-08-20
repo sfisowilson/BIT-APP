@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -41,8 +41,10 @@ import {
   AlarmItem, 
   SurfaceAssetPair,
   CreatePromptRenderRequest,
+  CreateSurfaceAnchorRenderRequest,
+  type SplitMode,
 } from './types';
-import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, fetchPublic, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession, retranscode, redetectScenes, aiSplitAnalyze, detectSurfacesForScene, deleteScene, deleteAllScenes, deleteSurface, deleteAllSurfaces, resetPipeline, refreshToken, fetchStatsSummary, fetchSurfacesBatch, retryRender, setRenderQueuedForFinal, deleteRender, startFinalAssembly, confirmInteractivePlacement, submitPromptPlacement, approvePromptSplice, rejectPromptPlacement, fetchCampaignSummary, type StatsSummary } from './apiClient';
+import { login as apiLogin, fetchWithAuth as apiFetchWithAuth, fetchPublic, getToken, setToken, clearToken, getSavedUser, setSavedUser, type UserSession, retranscode, redetectScenes, aiSplitAnalyze, detectSurfacesForScene, deleteScene, deleteAllScenes, mergeScenes, deleteSurface, deleteAllSurfaces, resetPipeline, refreshToken, fetchStatsSummary, fetchSurfacesBatch, retryRender, setRenderQueuedForFinal, deleteRender, startFinalAssembly, confirmInteractivePlacement, submitPromptPlacement, submitSurfaceAnchorRender, fetchCompositingEngine, approvePromptSplice, rejectPromptPlacement, fetchCampaignSummary, type StatsSummary } from './apiClient';
 import { useChunkedUpload } from './hooks/useChunkedUpload';
 import { useSignalR, type DetectionProgressEvent, type RenderProgressEvent, type ContentStatusEvent, type AlarmEvent, type NotificationEvent } from './hooks/useSignalR';
 
@@ -130,6 +132,7 @@ export default function App() {
   const [contentList, setContentList] = useState<ContentItem[]>([]);
   const [aiAnalyzingVideoId, setAiAnalyzingVideoId] = useState<string | null>(null);
   const [isPipelineActionPending, setIsPipelineActionPending] = useState<string | null>(null);
+  const [splitMode, setSplitMode] = useState<SplitMode>("scene");
   const [sceneRefreshKey, setSceneRefreshKey] = useState(0); // incremented to force scene refresh on detection complete
   const [detectionPhaseLabel, setDetectionPhaseLabel] = useState<Record<string, string>>({}); // live-only, keyed by contentId
   const [statsSummary, setStatsSummary] = useState<StatsSummary | null>(null);
@@ -149,8 +152,11 @@ export default function App() {
   const [campaignList, setCampaignList] = useState<CampaignItem[]>([]);
   const [assetList, setAssetList] = useState<CreativeAsset[]>([]);
   const [renderList, setRenderList] = useState<RenderItem[]>([]);
+  const [compositingEngine, setCompositingEngine] = useState<string>('opencv');
   const [hasApprovedPlacements, setHasApprovedPlacements] = useState(false);
   const [activePromptRenderId, setActivePromptRenderId] = useState<string | null>(null);
+  // Debounce timer for the render-progress-driven full refetch (see onRenderProgress below).
+  const renderRefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [logList, setLogList] = useState<EventLog[]>([]);
   const [alarmList, setAlarmList] = useState<AlarmItem[]>([]);
 
@@ -183,15 +189,16 @@ export default function App() {
   const [newAssetFile, setNewAssetFile] = useState<File | null>(null);
 
   const [newVideoTitle, setNewVideoTitle] = useState<string>('');
-  const [newVideoRes, setNewVideoRes] = useState<string>('1920x1080 (1080p)');
-  const [newVideoFps, setNewVideoFps] = useState<number>(50);
-  const [newVideoDuration, setNewVideoDuration] = useState<string>('00:05:00');
-  const [newVideoChannel, setNewVideoChannel] = useState<string>('SuperSport Variety');
+  const [newVideoRes, setNewVideoRes] = useState<string>('');
+  const [newVideoFps, setNewVideoFps] = useState<number | ''>('');
+  const [newVideoDuration, setNewVideoDuration] = useState<string>('');
+  const [newVideoChannel, setNewVideoChannel] = useState<string>('');
   const [newVideoFile, setNewVideoFile] = useState<File | null>(null);
   const [ingestError, setIngestError] = useState<string | null>(null);
   const [ingesting, setIngesting] = useState<boolean>(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0); // 0-100
   const [chunkProgress, setChunkProgress] = useState<string>(''); // e.g. "12/48 chunks"
+  const [probeKey, setProbeKey] = useState<string | null>(null);
   const chunkedUpload = useChunkedUpload({ chunkSizeMB: 25, maxConcurrent: 3 });
 
   // Alarm simulation
@@ -516,6 +523,14 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, activeView, selectedCampaignId]);
 
+  // Fetch the active compositing engine key once on auth — gates engine-specific UI panels.
+  useEffect(() => {
+    if (token) {
+      fetchCompositingEngine().then(setCompositingEngine).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
   // ── SignalR — real-time push for detection/render progress, content status, alarms & logs ──
   // All live updates flow through here; no polling needed.
   const { connectionState: _signalRState } = useSignalR({
@@ -555,14 +570,18 @@ export default function App() {
           ? { ...r, progress: e.percent, renderStatus: e.status === 'Failed' ? 'Failed' : e.percent >= 100 ? 'Finished' : r.renderStatus }
           : r
       ));
-      // A full refetch picks up fields the progress push doesn't carry (previewStorageKey,
-      // lastErrorMessage, etc.) — needed on completion, on failure (ProcessPromptPreviewJob /
-      // ProcessPromptSpliceJob push status "Failed" from their catch blocks so a stuck
-      // "Processing" view doesn't sit unresolved), and for prompt-placement jobs specifically
-      // since they cap at 90% for "PreviewReady" rather than ever reaching 100%.
-      if (e.percent >= 100 || e.status === 'Failed' || (e.renderId === activePromptRenderId && e.percent >= 85)) {
-        fetchOperationalData();
-      }
+      // A full (debounced) refetch on every progress tick — necessary because different render
+      // pipelines finish at different non-100% "checkpoint" percentages that this local
+      // optimistic update can't represent on its own (missing fields like previewStorageKey/
+      // kontextFrameStorageKey/lastErrorMessage, and RenderStatus itself): PromptEdit caps at
+      // 90% for "PreviewReady", and the Kontext→Kling interactive flow's frame-only step caps at
+      // 50% for "KontextReady" (its Kling-propagation step also caps at 90% for "PreviewReady").
+      // Enumerating each job type's specific checkpoint here (the previous approach) silently
+      // missed KontextStep's 50% checkpoint, leaving that panel stuck on its "Compositing..."
+      // spinner even after the backend had finished — debouncing on every event is the actually-
+      // correct general fix rather than growing this into a per-render-mode checklist.
+      if (renderRefetchTimerRef.current) clearTimeout(renderRefetchTimerRef.current);
+      renderRefetchTimerRef.current = setTimeout(() => { fetchOperationalData(); }, 1200);
     },
     onContentStatusChanged: (e: ContentStatusEvent) => {
       setContentList(prev => prev.map(c =>
@@ -928,11 +947,12 @@ export default function App() {
         setChunkProgress(chunkedUpload.state.chunkProgress);
 
         setNewVideoTitle('');
-        setNewVideoDuration('00:05:00');
+        setNewVideoDuration('');
         setNewVideoFile(null);
-        setNewVideoRes('1920x1080 (1080p)');
-        setNewVideoFps(50);
-        setNewVideoChannel('SuperSport Variety');
+        setNewVideoRes('');
+        setNewVideoFps('');
+        setNewVideoChannel('');
+        setProbeKey(null);
         setIngesting(false);
         setUploadProgress(0);
         setChunkProgress('');
@@ -957,7 +977,10 @@ export default function App() {
     if (selectedCampaignId) {
       formData.append('campaignId', selectedCampaignId);
     }
-    if (newVideoFile) {
+    if (probeKey) {
+      formData.append('probeKey', probeKey);
+      // No need to send file again — backend uses the probe file
+    } else if (newVideoFile) {
       formData.append('file', newVideoFile);
     }
 
@@ -982,12 +1005,24 @@ export default function App() {
         try {
           const data = JSON.parse(xhr.responseText);
           if (xhr.status >= 200 && xhr.status < 300) {
+            // Check if backend corrected metadata (ffprobe differed from submitted)
+            if (data.metadataCorrected) {
+              console.info(
+                'Metadata auto-corrected by ffprobe:',
+                '\n  Submitted:', data.submittedMetadata,
+                '\n  Actual:   ', data.actualMetadata,
+              );
+              // The content was saved with actual ffprobe values.
+              // Future enhancement: show a toast/notification to the user.
+            }
+
             setNewVideoTitle('');
-            setNewVideoDuration('00:05:00');
+            setNewVideoDuration('');
             setNewVideoFile(null);
-            setNewVideoRes('1920x1080 (1080p)');
-            setNewVideoFps(50);
-            setNewVideoChannel('SuperSport Variety');
+            setNewVideoRes('');
+            setNewVideoFps('');
+            setNewVideoChannel('');
+            setProbeKey(null);
             setIngesting(false);
             setUploadProgress(0);
             fetchAllData();
@@ -1152,7 +1187,7 @@ export default function App() {
   // Handle AI video splitting: full shot-aware pipeline (shot detection → clustering into
   // scenes → surface detection per scene), so a scene can span multiple camera cuts and
   // surfaces are ready without a separate per-scene trigger.
-  const handleAiSplitAnalyze = async (contentId: string, videoTitle: string) => {
+  const handleAiSplitAnalyze = async (contentId: string, videoTitle: string, mode: SplitMode = "scene", runSurfaceDetection: boolean = true) => {
     if (!contentId || !videoTitle) return;
     setAiAnalyzingVideoId(contentId);
     setSelectedVideo(contentId);
@@ -1166,7 +1201,7 @@ export default function App() {
     try {
       // Queue the full shot-aware pipeline — SignalR DetectionProgress pushes live updates.
       // onDetectionProgress callback handles completion + scene refresh.
-      await aiSplitAnalyze(contentId, videoTitle);
+      await aiSplitAnalyze(contentId, videoTitle, mode, runSurfaceDetection);
       // The backend flips ingestionStatus to SceneDetecting synchronously before returning —
       // reflect that immediately instead of waiting for the next fetch/SignalR round trip,
       // otherwise the progress bar (gated on ingestionStatus) has nothing to show yet.
@@ -1186,14 +1221,14 @@ export default function App() {
   // ── Pipeline Re-Run Handlers ──────────────────────────────────────────
 
   /** Re-run scene detection (from Completed or SceneDetecting stage). */
-  const handleRedetectScenes = async (contentId: string, videoTitle: string) => {
+  const handleRedetectScenes = async (contentId: string, videoTitle: string, mode: SplitMode = "scene", runSurfaceDetection: boolean = true) => {
     if (!contentId) return;
     setIsPipelineActionPending(contentId);
     setAiAnalyzingVideoId(contentId);
     setSelectedVideo(contentId);
     try {
       // Queue re-detect — SignalR DetectionProgress pushes live updates.
-      await redetectScenes(contentId);
+      await redetectScenes(contentId, mode, runSurfaceDetection);
       // Same reasoning as handleAiSplitAnalyze: reflect the synchronous server-side
       // status flip immediately so the progress bar shows up right away.
       setContentList(prev => prev.map(c =>
@@ -1268,6 +1303,34 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Delete scene error:', err);
+      throw err;
+    }
+  };
+
+  /**
+   * Fuse two or more consecutive scenes into one (manual alternative to AI clustering — typically
+   * used after "Cut" split mode). Blocked server-side if the selection isn't consecutive, or if
+   * any selected scene has an approved surface or a finished/queued-for-final render. Refetches
+   * the full scene list afterward since a merge renumbers SceneIndex for the whole content item,
+   * not just the merged scenes.
+   */
+  const handleMergeScenes = async (sceneIds: string[], contentId: string) => {
+    try {
+      await mergeScenes(sceneIds);
+      const refreshed = await fetchWithAuth(`/api/content/${contentId}/scenes`).then(r => r.json());
+      setScenesForVideo(refreshed);
+      if (sceneIds.includes(selectedSceneId)) {
+        setSelectedSceneId('');
+        setSurfacesForScene([]);
+        setSelectedSurfaceId('');
+      }
+      setSurfacesByScene(prev => {
+        const next = { ...prev };
+        for (const id of sceneIds) delete next[id];
+        return next;
+      });
+    } catch (err: any) {
+      console.error('Merge scenes error:', err);
       throw err;
     }
   };
@@ -1431,9 +1494,24 @@ export default function App() {
     setRenderList(prev => [render, ...prev.filter(r => r.id !== render.id)]);
   };
 
+  const handleSubmitSurfaceAnchor = async (dto: CreateSurfaceAnchorRenderRequest) => {
+    const render = await submitSurfaceAnchorRender(dto);
+    setRenderList(prev => [render, ...prev.filter(r => r.id !== render.id)]);
+  };
+
   const handleApprovePromptSplice = async (renderId: string) => {
     const render = await approvePromptSplice(renderId);
     setRenderList(prev => prev.map(r => (r.id === render.id ? render : r)));
+  };
+
+  /** Upserts a render into renderList by id — used by flows (Kontext→Kling) that call
+   *  apiClient functions directly rather than going through a dedicated handler above. */
+  const handleRenderUpdated = (render: RenderItem) => {
+    setRenderList(prev =>
+      prev.some(r => r.id === render.id)
+        ? prev.map(r => (r.id === render.id ? render : r))
+        : [render, ...prev]
+    );
   };
 
   const handleRejectPromptPlacement = async (renderId: string) => {
@@ -2090,14 +2168,19 @@ export default function App() {
                     selectedCampaignId={selectedCampaignId}
                     campaignList={campaignList.map(c => ({ id: c.id, name: c.name }))}
                     onDataChanged={fetchAllData}
+                    probeKey={probeKey}
+                    setProbeKey={setProbeKey}
                     onRetranscode={handleRetranscode}
                     onRedetectScenes={handleRedetectScenes}
                     onResetPipeline={handleResetPipeline}
                     isPipelineActionPending={isPipelineActionPending}
+                    splitMode={splitMode}
+                    setSplitMode={setSplitMode}
                     onDetectSurfacesForScene={handleDetectSurfacesForScene}
                     detectionPhaseLabel={detectionPhaseLabel}
                     onDeleteScene={handleDeleteScene}
                     onDeleteAllScenes={handleDeleteAllScenes}
+                    onMergeScenes={handleMergeScenes}
                   />
                 )}
 
@@ -2154,7 +2237,10 @@ export default function App() {
                     userRole={user?.role}
                     // AI Placement Assistant — Generate New mode
                     onSubmitPromptPlacement={handleSubmitPromptPlacement}
+                    onSubmitSurfaceAnchor={handleSubmitSurfaceAnchor}
+                    compositingEngine={compositingEngine}
                     onApprovePromptSplice={handleApprovePromptSplice}
+                    onRenderUpdated={handleRenderUpdated}
                     onRejectPromptPlacement={handleRejectPromptPlacement}
                     activePromptRender={
                       // Derived from the server-fetched renderList (not just activePromptRenderId)

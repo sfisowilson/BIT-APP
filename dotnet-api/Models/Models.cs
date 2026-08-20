@@ -457,6 +457,24 @@ namespace Afrobotics.Bit.Api.Models
         /// <summary>Download path for the not-yet-approved AI-generated preview clip, set once ProcessPromptPreviewJob reaches RenderStatus "PreviewReady". Null until then / for Interactive renders.</summary>
         public string? PreviewStorageKey { get; set; }
 
+        /// <summary>
+        /// Download path for the FLUX.1 Kontext composited frame image (PNG), set once
+        /// ProcessKontextFrameJob completes (RenderStatus "KontextReady"). This is the frame
+        /// that Kling O1 Edit uses as its visual reference image (@Image1). Null until the
+        /// Kontext step completes.
+        /// </summary>
+        public string? KontextFrameStorageKey { get; set; }
+
+        /// <summary>
+        /// The original FLUX.1 Kontext placement instruction — set once when the KontextStep render
+        /// is first dispatched and never overwritten afterward, unlike PromptText (which the "Redo
+        /// Kling" flow replaces with an updated *Kling* propagation prompt). Kept separately so a
+        /// chunked long-scene propagation can regenerate a fresh, chunk-local composited reference
+        /// frame later without losing the user's actual placement instructions.
+        /// </summary>
+        [MaxLength(1000)]
+        public string? KontextPromptText { get; set; }
+
         /// <summary>Null or "Interactive" (click/quad-based placement, the original two flows) vs "PromptEdit" (free-text AI video generation, no surface). Existing rows are all null/"Interactive".</summary>
         [MaxLength(20)]
         public string? RenderMode { get; set; }
