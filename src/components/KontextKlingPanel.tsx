@@ -118,6 +118,42 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
     setSuggestion(null);
   }, [currentScene?.id, activeRender?.id]);
 
+  const handlePropagateKling = async () => {
+    if (!activeRender?.id) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      // Leaving this blank must NOT send a generic filler prompt — the backend then keeps
+      // reusing the original, specific placement prompt (e.g. "place the X logo on the Y
+      // billboard face") set during the Kontext frame step, which is what actually keeps Kling
+      // focused on just the brand. A hardcoded generic prompt was tried here and made Kling add
+      // unrelated scene elements instead, because it overwrote that specific guidance.
+      const dto: PropagateKlingRequest = {
+        promptText: klingPrompt.trim() || undefined,
+      };
+      const render = await propagateKling(activeRender.id, dto);
+      onRenderCreated(render);
+    } catch (err: any) {
+      setError(err.message || 'Failed to propagate with Kling.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Quick mode: once the Kontext frame lands, skip the review-frame pause and propagate
+  // immediately — same net effect as the old one-shot "Anchor & Generate" flow. Must stay
+  // above the early `if (!currentScene) / if (currentFrame <= 0) return` guards below —
+  // a hook placed after a conditional return runs on some renders and not others, which is
+  // exactly what triggers React's "rendered more hooks than previous render" crash (#310).
+  React.useEffect(() => {
+    if (!quickMode) return;
+    if (!isKontextReady || !activeRender) return;
+    if (autoPropagatedRenderId.current === activeRender.id) return;
+    autoPropagatedRenderId.current = activeRender.id;
+    handlePropagateKling();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickMode, isKontextReady, activeRender?.id]);
+
   const handleSuggestPrompt = async () => {
     if (!assetId || !promptText.trim()) {
       setError('Select an asset and write a rough placement idea first.');
@@ -208,39 +244,6 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
       setUploadingFrame(false);
     }
   };
-
-  const handlePropagateKling = async () => {
-    if (!activeRender?.id) return;
-    setSubmitting(true);
-    setError('');
-    try {
-      // Leaving this blank must NOT send a generic filler prompt — the backend then keeps
-      // reusing the original, specific placement prompt (e.g. "place the X logo on the Y
-      // billboard face") set during the Kontext frame step, which is what actually keeps Kling
-      // focused on just the brand. A hardcoded generic prompt was tried here and made Kling add
-      // unrelated scene elements instead, because it overwrote that specific guidance.
-      const dto: PropagateKlingRequest = {
-        promptText: klingPrompt.trim() || undefined,
-      };
-      const render = await propagateKling(activeRender.id, dto);
-      onRenderCreated(render);
-    } catch (err: any) {
-      setError(err.message || 'Failed to propagate with Kling.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Quick mode: once the Kontext frame lands, skip the review-frame pause and propagate
-  // immediately — same net effect as the old one-shot "Anchor & Generate" flow.
-  React.useEffect(() => {
-    if (!quickMode) return;
-    if (!isKontextReady || !activeRender) return;
-    if (autoPropagatedRenderId.current === activeRender.id) return;
-    autoPropagatedRenderId.current = activeRender.id;
-    handlePropagateKling();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quickMode, isKontextReady, activeRender?.id]);
 
   const handleQueue = async () => {
     if (!activeRender?.id || !onSetRenderQueuedForFinal) return;
