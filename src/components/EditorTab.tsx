@@ -195,7 +195,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   // differently-shaped mechanisms (a toolbar toggle for Insert Product/Place Signage, a card-internal
   // pill toggle for Match to Surface/Generate New, and a silently engine-gated Anchor & Generate
   // panel) so there's one consistent place to see and switch between every flow.
-  const [activeFlow, setActiveFlow] = React.useState<'insert' | 'signage' | 'match' | 'generate' | 'anchor'>('insert');
+  const [activeFlow, setActiveFlow] = React.useState<'insert' | 'signage' | 'match' | 'generate' | 'anchor'>('anchor');
 
   const [previewAssetId, setPreviewAssetId] = React.useState<string>('');
   const [selectedBlendMode, setSelectedBlendMode] = React.useState<'multiply' | 'overlay' | 'normal'>('multiply');
@@ -685,9 +685,9 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               <div className="mb-4">
                 <div className="flex flex-wrap gap-1 bg-slate-100 rounded-lg p-1">
                   {([
-                    { key: 'insert', label: '🎯 Insert Product', active: 'bg-indigo-600 text-white' },
-                    { key: 'signage', label: '📐 Place Signage', active: 'bg-emerald-600 text-white' },
-                    { key: 'match', label: '🔗 Match to Surface', active: 'bg-emerald-600 text-white' },
+                    // Insert Product / Place Signage / Match to Surface hidden for now (per
+                    // request) — not removed, just not shown as tabs. Still fully reachable by
+                    // setting activeFlow programmatically if needed later.
                     { key: 'generate', label: '✨ Generate New', active: 'bg-fuchsia-600 text-white' },
                     { key: 'anchor', label: '🪄 Anchor & Generate', active: 'bg-fuchsia-600 text-white' },
                   ] as const).map(tab => (
@@ -705,7 +705,6 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                           setInteractiveSurfaceDescription('');
                         }
                         setActiveFlow(tab.key);
-                        if (tab.key === 'insert' || tab.key === 'signage') setPlacementOverlayActive(true);
                       }}
                       className={`px-2.5 py-1.5 rounded-md text-[10px] font-bold cursor-pointer transition-colors whitespace-nowrap ${
                         activeFlow === tab.key ? tab.active + ' shadow-sm' : 'bg-transparent text-slate-500 hover:text-slate-700'
