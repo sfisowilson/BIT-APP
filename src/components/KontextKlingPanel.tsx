@@ -553,12 +553,55 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
           </label>
           <textarea
             value={promptText}
-            onChange={(e) => setPromptText(e.target.value)}
+            onChange={(e) => { setPromptText(e.target.value); setSuggestion(null); }}
             placeholder="Adjust your placement instructions..."
             rows={2}
             className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs resize-none"
           />
         </div>
+
+        {/* Gemini prompt suggestion — available here too, not just before the first generation.
+            Previously this only existed in the initial setup step, so refining a placement after
+            seeing the first result meant either writing the new prompt by hand or discarding the
+            whole attempt via "Start Over" just to get the suggest button back. */}
+        <button
+          type="button"
+          disabled={suggesting || !assetId || !promptText.trim()}
+          onClick={handleSuggestPrompt}
+          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-40 cursor-pointer"
+        >
+          {suggesting ? (
+            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Asking Gemini...</>
+          ) : (
+            <><Wand2 className="h-3.5 w-3.5" /> Suggest with Gemini</>
+          )}
+        </button>
+
+        {suggestion && (
+          <div className="space-y-1.5 bg-blue-50/50 border border-blue-100 rounded-lg p-2.5">
+            <div className="text-[9px] uppercase tracking-wider font-bold text-blue-700 font-mono">
+              Gemini looked at the frame + asset — pick which prompt to use
+            </div>
+            <button
+              type="button"
+              onClick={() => setSuggestion(null)}
+              className={`w-full text-left p-2 rounded-lg border text-[10px] cursor-pointer transition-colors ${
+                promptText === suggestion.original ? 'border-blue-400 bg-white' : 'border-slate-200 bg-white hover:border-blue-300'
+              }`}
+            >
+              <span className="font-bold text-slate-500 font-mono uppercase text-[9px] block mb-0.5">Your original</span>
+              {suggestion.original}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setPromptText(suggestion.suggested); setSuggestion(null); }}
+              className="w-full text-left p-2 rounded-lg border border-blue-300 bg-white hover:border-blue-400 text-[10px] cursor-pointer transition-colors"
+            >
+              <span className="font-bold text-blue-600 font-mono uppercase text-[9px] block mb-0.5">Gemini's suggestion — click to use</span>
+              {suggestion.suggested}
+            </button>
+          </div>
+        )}
 
         {/* Compositing model — switch and regenerate to A/B compare against the frame above. */}
         <div>
