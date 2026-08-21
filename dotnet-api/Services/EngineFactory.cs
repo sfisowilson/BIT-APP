@@ -16,6 +16,18 @@ public class EngineFactory : IEngineFactory
     private static readonly SemaphoreSlim CacheLock = new(1, 1);
     private static bool _keysLoaded;
 
+    // Each key's own correct default — must NOT be collapsed into a single shared fallback
+    // (the previous version reused whichever caller's fallback happened to trigger the first
+    // cache-population pass for every key, so e.g. calling GetSurfaceDetectionEngine() first
+    // could silently cache engine_tracking as "replicate" instead of "sam3").
+    private static readonly Dictionary<string, string> DefaultEngineKeys = new()
+    {
+        ["engine_detection"] = "replicate",
+        ["engine_brand_analysis"] = "gemini",
+        ["engine_compositing"] = "opencv",
+        ["engine_tracking"] = "sam3",
+    };
+
     public EngineFactory(IServiceProvider serviceProvider, ILogger<EngineFactory> logger)
     {
         _serviceProvider = serviceProvider;
@@ -34,9 +46,12 @@ public class EngineFactory : IEngineFactory
             {
                 using var scope = _serviceProvider.CreateScope();
                 var settings = scope.ServiceProvider.GetRequiredService<IPlatformSettingsService>();
-                foreach (var sk in new[] { "engine_detection", "engine_brand_analysis", "engine_compositing", "engine_tracking" })
+                foreach (var (sk, defaultValue) in DefaultEngineKeys)
                 {
-                    CachedKeys[sk] = settings.GetAsync(sk).GetAwaiter().GetResult() ?? fallback;
+                    // Pass each key's own default straight into GetAsync — its own parameter
+                    // default is "" (empty string), not null, so a subsequent `?? fallback`
+                    // here would never actually trigger for a missing/empty DB row.
+                    CachedKeys[sk] = settings.GetAsync(sk, defaultValue).GetAwaiter().GetResult();
                 }
                 _keysLoaded = true;
                 _logger.LogInformation("[EngineFactory] Engine keys cached from DB");
