@@ -27,6 +27,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
     try {
       const res = await fetchWithAuth('/api/admin/settings');
       const data = await res.json();
+      // engine_tracking's dropdown has only one real option (sam3) and displays it via a
+      // `|| 'sam3'` fallback when empty — which means the field can look correctly selected
+      // while actually being empty in state, and there's no way to fix that by interacting
+      // with a single-option <select> (browsers only fire onChange on an actual selection
+      // change). Normalize it into state on load so Save always persists the real value.
+      if (!data.engine_tracking) data.engine_tracking = 'sam3';
       setSettings(data);
     } catch (err) {
       console.error('Failed to load settings', err);
