@@ -72,7 +72,7 @@ export const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
         {/* Stats Grid */}
         <div className="grid grid-cols-4 gap-3 mt-5">
           {[
-            { icon: DollarSign, label: 'Budget', value: `$${campaign.totalBudget.toLocaleString()}` },
+            { icon: DollarSign, label: 'Budget', value: `R${campaign.totalBudget.toLocaleString()}` },
             { icon: MapPin, label: 'Region', value: campaign.targetRegion },
             { icon: Package, label: 'Assets', value: `${assets.length} staged` },
             { icon: Cpu, label: 'Renders', value: `${renders.length} jobs` },

@@ -254,7 +254,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                       <span className="flex items-center gap-1 text-blue-600 font-semibold">
                         <Package className="h-3 w-3" /> {assetCount}
                       </span>
-                      <span className="font-bold text-slate-700">${camp.totalBudget.toLocaleString()}</span>
+                      <span className="font-bold text-slate-700">R{camp.totalBudget.toLocaleString()}</span>
                     </div>
                   </div>
                   {isSelected && (
@@ -310,7 +310,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="bg-slate-50 rounded-lg p-2">
                   <p className="text-[10px] text-slate-500">Budget</p>
-                  <p className="text-xs font-bold text-slate-800">${selectedCampaign.totalBudget.toLocaleString()}</p>
+                  <p className="text-xs font-bold text-slate-800">R{selectedCampaign.totalBudget.toLocaleString()}</p>
                 </div>
                 <div className="bg-slate-50 rounded-lg p-2">
                   <p className="text-[10px] text-slate-500">Region</p>

@@ -2037,7 +2037,7 @@ export default function App() {
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Budget (USD)</label>
+                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Budget (ZAR)</label>
                             <input type="number" value={newCampaignBudget} onChange={(e) => setNewCampaignBudget(e.target.value)}
                               placeholder="e.g., 15000"
                               className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors" required />
@@ -2083,7 +2083,7 @@ export default function App() {
                                 <div className="flex items-center gap-3 mt-3 text-[10px] text-slate-500">
                                   <span>{c.targetRegion}</span>
                                   <span>{assetCount} assets</span>
-                                  <span className="font-bold">${c.totalBudget.toLocaleString()}</span>
+                                  <span className="font-bold">R{c.totalBudget.toLocaleString()}</span>
                                 </div>
                               </button>
                             );
@@ -2277,7 +2277,7 @@ export default function App() {
                     <div className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm text-left space-y-2">
                       <div className="text-xs font-mono text-slate-600 flex justify-between">
                         <span>Campaign Budget:</span>
-                        <span className="font-bold">${campaignList.find(c => c.id === selectedCampaignId)?.totalBudget.toLocaleString()}</span>
+                        <span className="font-bold">R{campaignList.find(c => c.id === selectedCampaignId)?.totalBudget.toLocaleString()}</span>
                       </div>
                       <div className="text-xs font-mono text-slate-600 flex justify-between">
                         <span>Assets Staged:</span>
