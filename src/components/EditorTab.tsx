@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import {
   Tv, Play, Shield, CheckCircle, AlertTriangle, Sparkles, Wand2,
   Loader2, Eye, Layout, Image, Package, ArrowRight, Search, Cpu,
-  MapPin, ChevronRight, X, Upload, RefreshCw, Download, Clock, Trash2
+  MapPin, ChevronRight, ChevronDown, X, Upload, RefreshCw, Download, Clock, Trash2, Copy, Check
 } from 'lucide-react';
 import { ContentItem, SceneItem, SurfaceItem, CreativeAsset, CampaignItem, SurfaceAssetPair, RenderItem, CreatePromptRenderRequest, CreateSurfaceAnchorRenderRequest, MIN_PROMPT_EDIT_DURATION_SECONDS, MAX_PROMPT_EDIT_DURATION_SECONDS, type SplitMode } from '../types';
 import { SurfaceClickOverlay } from './SurfaceClickOverlay';
@@ -212,6 +212,8 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   const [deletingAllSurfaces, setDeletingAllSurfaces] = React.useState(false);
   const [retryingId, setRetryingId] = React.useState<string | null>(null);
   const [queuingId, setQueuingId] = React.useState<string | null>(null);
+  const [expandedPromptId, setExpandedPromptId] = React.useState<string | null>(null);
+  const [copiedPromptId, setCopiedPromptId] = React.useState<string | null>(null);
   const [deletingRenderId, setDeletingRenderId] = React.useState<string | null>(null);
   const [deleteRenderConfirmId, setDeleteRenderConfirmId] = React.useState<string | null>(null);
   const [deleteAllConfirmSceneId, setDeleteAllConfirmSceneId] = React.useState<string | null>(null);
@@ -2041,8 +2043,31 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                             )}
                           </div>
                           {prompt && (
-                            <div className="mt-1 text-slate-500 italic truncate" title={prompt}>
-                              "{prompt}"
+                            <div className="mt-1 flex items-start gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedPromptId(expandedPromptId === r.id ? null : r.id)}
+                                className={`flex-1 min-w-0 text-left text-slate-500 italic cursor-pointer hover:text-slate-700 ${expandedPromptId === r.id ? 'whitespace-pre-wrap break-words' : 'truncate'}`}
+                                title={expandedPromptId === r.id ? 'Click to collapse' : 'Click to view the full prompt'}
+                              >
+                                "{prompt}"
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  await navigator.clipboard.writeText(prompt);
+                                  setCopiedPromptId(r.id);
+                                  setTimeout(() => setCopiedPromptId(id => id === r.id ? null : id), 1500);
+                                }}
+                                className="shrink-0 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                title="Copy full prompt"
+                              >
+                                {copiedPromptId === r.id ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                              </button>
+                              <ChevronDown
+                                onClick={() => setExpandedPromptId(expandedPromptId === r.id ? null : r.id)}
+                                className={`shrink-0 h-3 w-3 text-slate-400 cursor-pointer transition-transform ${expandedPromptId === r.id ? 'rotate-180' : ''}`}
+                              />
                             </div>
                           )}
                           {(r.renderStatus === 'NeedsReview' || r.renderStatus === 'Failed') && r.lastErrorMessage && (
