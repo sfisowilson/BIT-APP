@@ -7,9 +7,8 @@ import {
   Video, 
   Tv, 
   Cpu, 
-  Activity, 
-  FileText, 
-  AlertTriangle, 
+  Activity,
+  AlertTriangle,
   RefreshCw,
   Lock,
   Unlock,
@@ -58,6 +57,7 @@ import { AdminConsoleTab } from './components/AdminConsoleTab';
 import { CampaignSelector } from './components/CampaignSelector';
 import { CampaignSidebar, type SidebarView } from './components/CampaignSidebar';
 import { CampaignDashboard } from './components/CampaignDashboard';
+import { CampaignReportsView } from './components/CampaignReportsView';
 import { AnalyticsTab } from './components/AnalyticsTab';
 import { JobsTab } from './components/JobsTab';
 import { BitLogo } from './components/BitLogo';
@@ -2228,76 +2228,14 @@ export default function App() {
                   />
                 )}
 
-                {activeView === 'reports' && (() => {
-                  const campaignContent = contentList.filter(v => v.campaignId === selectedCampaignId);
-                  const campaignRenders = renderList.filter(r => r.campaignId === selectedCampaignId);
-                  const statusBadgeClass = (status: string) =>
-                    status === 'Finished' ? 'bg-emerald-100 text-emerald-700' :
-                    status === 'Failed' || status === 'Rejected' ? 'bg-red-100 text-red-700' :
-                    status === 'PreviewReady' || status === 'NeedsReview' ? 'bg-amber-100 text-amber-700' :
-                    'bg-brand-100 text-brand-700';
-                  return (
-                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto py-8 space-y-6" key="reports">
-                    <div className="text-center">
-                      <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                      <h3 className="text-lg font-bold text-slate-800 font-display">Campaign Reports</h3>
-                      <p className="text-sm text-slate-500 mt-2">Video technical details and render history for this campaign.</p>
-                    </div>
-                    <div className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm text-left space-y-2">
-                      <div className="text-xs font-mono text-slate-600 flex justify-between">
-                        <span>Assets Staged:</span>
-                        <span className="font-bold">{assetList.filter(a => a.campaignId === selectedCampaignId).length}</span>
-                      </div>
-                      <div className="text-xs font-mono text-slate-600 flex justify-between">
-                        <span>Renders Completed:</span>
-                        <span className="font-bold">{campaignRenders.filter(r => r.renderStatus === 'Finished').length}</span>
-                      </div>
-                      <div className="text-xs font-mono text-slate-600 flex justify-between">
-                        <span>Total Processing Time:</span>
-                        <span className="font-bold">{(campaignRenders.reduce((sum, r) => sum + r.processingDurationMs, 0) / 1000).toFixed(1)}s</span>
-                      </div>
-                    </div>
-
-                    {/* Per-video technical details + every rendered item for that clip */}
-                    {campaignContent.map(video => {
-                      const videoRenders = campaignRenders.filter(r => r.contentId === video.id)
-                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                      return (
-                        <div key={video.id} className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 text-left">
-                          <h4 className="text-sm font-bold text-slate-800 mb-3">{video.title}</h4>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] font-mono mb-4">
-                            <div className="bg-slate-50 rounded-lg p-2"><div className="text-slate-400">Resolution</div><div className="font-bold text-slate-700">{video.resolution || '—'}</div></div>
-                            <div className="bg-slate-50 rounded-lg p-2"><div className="text-slate-400">Frame Rate</div><div className="font-bold text-slate-700">{video.frameRate ? `${video.frameRate} fps` : '—'}</div></div>
-                            <div className="bg-slate-50 rounded-lg p-2"><div className="text-slate-400">Duration</div><div className="font-bold text-slate-700">{video.duration || '—'}</div></div>
-                            <div className="bg-slate-50 rounded-lg p-2"><div className="text-slate-400">Source</div><div className="font-bold text-slate-700">{video.sourceChannel || '—'}</div></div>
-                          </div>
-                          <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400 font-mono mb-2">
-                            Rendered Items ({videoRenders.length})
-                          </div>
-                          {videoRenders.length === 0 ? (
-                            <div className="text-xs text-slate-400 italic">No renders yet for this video.</div>
-                          ) : (
-                            <div className="space-y-1.5">
-                              {videoRenders.map(r => (
-                                <div key={r.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 text-[10px]">
-                                  <span className={`px-1.5 py-0.5 rounded font-bold font-mono shrink-0 ${statusBadgeClass(r.renderStatus)}`}>{r.renderStatus}</span>
-                                  <span className="text-slate-400 font-mono shrink-0">{r.renderMode || 'Interactive'}</span>
-                                  {r.sceneIndex != null && <span className="text-slate-400 font-mono shrink-0">Scene #{r.sceneIndex}</span>}
-                                  <span className="text-slate-400 font-mono shrink-0">{(r.processingDurationMs / 1000).toFixed(1)}s</span>
-                                  <span className="text-slate-400 font-mono ml-auto shrink-0">{new Date(r.createdAt).toLocaleString()}</span>
-                                  {(r.storageKey || r.previewStorageKey) && (
-                                    <a href={r.storageKey || r.previewStorageKey || undefined} target="_blank" rel="noreferrer" className="text-brand-500 hover:text-brand-700 font-semibold shrink-0">View</a>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </motion.div>
-                  );
-                })()}
+                {activeView === 'reports' && (
+                  <CampaignReportsView
+                    campaign={campaignList.find(c => c.id === selectedCampaignId)}
+                    contentList={contentList.filter(v => v.campaignId === selectedCampaignId)}
+                    renderList={renderList.filter(r => r.campaignId === selectedCampaignId)}
+                    assetList={assetList.filter(a => a.campaignId === selectedCampaignId)}
+                  />
+                )}
               </>
             )}
           </AnimatePresence>
