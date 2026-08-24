@@ -1565,7 +1565,14 @@ public class RenderJobService
         int videoWidth, int videoHeight, string workDir, string outputPath, string audioArgs, CancellationToken ct)
     {
         var sceneStart = scene.StartFrame / fps;
-        var sceneEnd = scene.EndFrame / fps;
+        // EndFrame is inclusive (the last frame belonging to the scene) — the "after" segment
+        // must start one frame past it, not AT it. Seeking -ss to EndFrame/fps lands exactly on
+        // the scene's own last frame's timestamp, so the "after" segment (cut from the original,
+        // un-composited source) captured that same last frame instead of the generated clip's
+        // version of it — the scene's last frame reverted to unbranded footage in the final
+        // spliced output. Same inclusive/exclusive mismatch as the DurationSeconds bug fixed
+        // earlier, just surfacing in the splice step instead of the duration field.
+        var sceneEnd = (scene.EndFrame + 1) / fps;
         var totalDuration = VideoProbe.GetDurationSeconds(sourceVideoPath);
 
         var hasBefore = sceneStart > 0.05;

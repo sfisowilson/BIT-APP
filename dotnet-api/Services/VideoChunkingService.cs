@@ -191,7 +191,10 @@ public class VideoChunkingService
 
         var fps = content.FrameRate > 0 && content.FrameRate <= 240 ? content.FrameRate : 50;
         var startTime = (double)scene.StartFrame / fps;
-        var duration = (double)(scene.EndFrame - scene.StartFrame) / fps;
+        // EndFrame is inclusive — omitting the +1 extracts a clip one frame short of the real
+        // scene, which for the Kling O1 pipeline means the AI model never even receives the
+        // scene's true last frame to composite, regardless of anything downstream.
+        var duration = (double)(scene.EndFrame - scene.StartFrame + 1) / fps;
 
         var outputDir = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrEmpty(outputDir)) Directory.CreateDirectory(outputDir);
