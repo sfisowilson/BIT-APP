@@ -25,13 +25,11 @@ export const CampaignSelector: React.FC<CampaignSelectorProps> = ({
   const listRef = useRef<HTMLUListElement>(null);
   const selected = campaigns.find(c => c.id === selectedId);
 
-  // Filter campaigns by name or naming code
+  // Filter campaigns by name
   const filteredCampaigns = useMemo(() => {
     if (!filter.trim()) return campaigns;
     const q = filter.toLowerCase();
-    return campaigns.filter(
-      c => c.name.toLowerCase().includes(q) || c.namingStructureCode.toLowerCase().includes(q)
-    );
+    return campaigns.filter(c => c.name.toLowerCase().includes(q));
   }, [campaigns, filter]);
 
   // Close on outside click
@@ -166,7 +164,6 @@ export const CampaignSelector: React.FC<CampaignSelectorProps> = ({
                       }`} />
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-bold text-slate-800 truncate" title={c.name}>{c.name}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">{c.namingStructureCode}</div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <span className="text-[10px] text-slate-400 font-mono">{assetCounts[c.id] || 0}</span>

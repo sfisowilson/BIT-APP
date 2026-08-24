@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import {
-  Package, Film, Tv, Cpu, FileText, DollarSign, MapPin,
+  Package, Film, Tv, Cpu, FileText, Clock,
   Calendar, Plus, ArrowRight, Play, Download, X
 } from 'lucide-react';
 import { CampaignItem, CreativeAsset, RenderItem, ContentItem } from '../types';
@@ -58,7 +58,6 @@ export const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                 campaign.status === 'Active' ? 'bg-emerald-50 text-emerald-600' :
                 campaign.status === 'Draft' ? 'bg-brand-50 text-brand-600' : 'bg-slate-100 text-slate-500'
               }`}>{campaign.status}</span>
-              <span className="text-[10px] text-slate-400 font-mono">{campaign.namingStructureCode}</span>
             </div>
             <h2 className="text-xl font-extrabold text-slate-900 font-display">{campaign.name}</h2>
           </div>
@@ -72,10 +71,10 @@ export const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
         {/* Stats Grid */}
         <div className="grid grid-cols-4 gap-3 mt-5">
           {[
-            { icon: DollarSign, label: 'Budget', value: `R${campaign.totalBudget.toLocaleString()}` },
-            { icon: MapPin, label: 'Region', value: campaign.targetRegion },
+            { icon: Film, label: 'Videos', value: `${contentList.length} ingested` },
             { icon: Package, label: 'Assets', value: `${assets.length} staged` },
             { icon: Cpu, label: 'Renders', value: `${renders.length} jobs` },
+            { icon: Clock, label: 'Processing Time', value: `${(renders.reduce((sum, r) => sum + r.processingDurationMs, 0) / 1000).toFixed(1)}s` },
           ].map((stat, idx) => {
             const Icon = stat.icon;
             return (

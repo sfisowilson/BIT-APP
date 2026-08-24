@@ -180,8 +180,8 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
           </h4>
           <p className="mt-1 text-brand-700 leading-normal">
             {selectedCampaignId
-              ? <>Managing creative assets for <strong>{selectedCampaign?.name}</strong> ({selectedCampaign?.namingStructureCode}). Stage brand overlays and assign them to this campaign.</>
-              : <><strong>Select a campaign</strong> to view and manage its creative assets. Create advertiser campaigns with strict naming codes, then stage brand overlays and assign them to campaigns. Unassigned assets appear in the staging area.</>
+              ? <>Managing creative assets for <strong>{selectedCampaign?.name}</strong>. Stage brand overlays and assign them to this campaign.</>
+              : <><strong>Select a campaign</strong> to view and manage its creative assets. Stage brand overlays and assign them to campaigns. Unassigned assets appear in the staging area.</>
             }
           </p>
         </div>
@@ -245,17 +245,12 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                       </div>
                     </div>
                     <h4 className="text-sm font-bold text-slate-800 font-display mt-2">{camp.name}</h4>
-                    <p className="text-2xs text-slate-500 mt-1 font-mono">Code: {camp.namingStructureCode}</p>
                   </div>
-                  
-                  <div className="mt-3 pt-3 border-t border-slate-200/50 flex items-center justify-between text-2xs text-slate-500">
-                    <span>Region: {camp.targetRegion}</span>
-                    <div className="flex items-center gap-3">
-                      <span className="flex items-center gap-1 text-brand-600 font-semibold">
-                        <Package className="h-3 w-3" /> {assetCount}
-                      </span>
-                      <span className="font-bold text-slate-700">R{camp.totalBudget.toLocaleString()}</span>
-                    </div>
+
+                  <div className="mt-3 pt-3 border-t border-slate-200/50 flex items-center justify-end text-2xs text-slate-500">
+                    <span className="flex items-center gap-1 text-brand-600 font-semibold">
+                      <Package className="h-3 w-3" /> {assetCount}
+                    </span>
                   </div>
                   {isSelected && (
                     <div className="mt-2 text-[10px] text-brand-600 font-semibold flex items-center gap-1">
@@ -296,7 +291,6 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 font-display">{selectedCampaign.name}</h3>
-                    <p className="text-[10px] text-slate-500 font-mono">{selectedCampaign.namingStructureCode}</p>
                   </div>
                 </div>
                 <button
@@ -307,15 +301,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                   ✕ Deselect
                 </button>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-slate-50 rounded-lg p-2">
-                  <p className="text-[10px] text-slate-500">Budget</p>
-                  <p className="text-xs font-bold text-slate-800">R{selectedCampaign.totalBudget.toLocaleString()}</p>
-                </div>
-                <div className="bg-slate-50 rounded-lg p-2">
-                  <p className="text-[10px] text-slate-500">Region</p>
-                  <p className="text-xs font-bold text-slate-800 truncate" title={selectedCampaign.targetRegion}>{selectedCampaign.targetRegion}</p>
-                </div>
+              <div className="grid grid-cols-1 gap-2 text-center">
                 <div className="bg-slate-50 rounded-lg p-2">
                   <p className="text-[10px] text-slate-500">Assets</p>
                   <p className="text-xs font-bold text-brand-600">{campaignAssetsTotalCount}</p>
@@ -568,7 +554,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                         >
                           <option value="" disabled>Select campaign...</option>
                           {campaignList.map(c => (
-                            <option key={c.id} value={c.id}>{c.name} ({c.namingStructureCode})</option>
+                            <option key={c.id} value={c.id}>{c.name}</option>
                           ))}
                         </select>
                       </div>

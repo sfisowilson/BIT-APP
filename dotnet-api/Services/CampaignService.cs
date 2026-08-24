@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -55,11 +56,16 @@ namespace Afrobotics.Bit.Api.Services
 
         public async Task<CampaignItem> CreateCampaignAsync(CreateCampaignDto dto)
         {
-            // Per MReq 1: scene-code is 8 or 10 uppercase alphanumeric chars, underscore, brand identifier
-            var namingRegex = new Regex(@"^[A-Z0-9]{8,10}_[A-Z0-9]+$");
-            if (!namingRegex.IsMatch(dto.NamingStructureCode))
+            // Naming code, region, and budget are optional now (deprioritized per client request) —
+            // only validate the naming code's format if one was actually supplied, matching how
+            // UpdateCampaignAsync already treats it as optional-but-validated-when-present.
+            if (!string.IsNullOrEmpty(dto.NamingStructureCode))
             {
-                throw new ArgumentException("Naming structure violation! Code must match: 8- or 10-character scene-code, underscore, brand identifier (e.g. UZ01EP12_COKE or GEN23EP100_UNIL).");
+                var namingRegex = new Regex(@"^[A-Z0-9]{8,10}_[A-Z0-9]+$");
+                if (!namingRegex.IsMatch(dto.NamingStructureCode))
+                {
+                    throw new ArgumentException("Naming structure violation! Code must match: 8- or 10-character scene-code, underscore, brand identifier (e.g. UZ01EP12_COKE or GEN23EP100_UNIL).");
+                }
             }
 
             var campaign = new CampaignItem
@@ -78,9 +84,16 @@ namespace Afrobotics.Bit.Api.Services
             await _campaignRepository.AddAsync(campaign);
             await _campaignRepository.SaveChangesAsync();
 
+            var detailsLine = string.Join(" | ", new[]
+            {
+                !string.IsNullOrEmpty(campaign.NamingStructureCode) ? $"Code: {campaign.NamingStructureCode}" : null,
+                !string.IsNullOrEmpty(campaign.TargetRegion) ? $"Region: {campaign.TargetRegion}" : null,
+                campaign.TotalBudget.HasValue ? $"Budget: {campaign.TotalBudget:C}" : null,
+            }.Where(s => s != null));
+
             _email.Enqueue(_config?["Smtp:FromEmail"] ?? "noreply@afrobotics.co.za",
                 $"Campaign Created — {campaign.Name}",
-                $"Campaign '{campaign.Name}' ({campaign.NamingStructureCode}) has been created.\n\nRegion: {campaign.TargetRegion}\nBudget: {campaign.TotalBudget:C}",
+                $"Campaign '{campaign.Name}' has been created." + (detailsLine.Length > 0 ? $"\n\n{detailsLine}" : ""),
                 "CampaignCreated");
 
             return campaign;

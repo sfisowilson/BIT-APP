@@ -310,20 +310,20 @@ namespace Afrobotics.Bit.Api.Models
         [MaxLength(200)]
         public string Name { get; set; } = string.Empty;
         
-        [Required]
-        public string NamingStructureCode { get; set; } = string.Empty; // MReq 10 Regex match validation
-        
+        // Naming code, target region, and budget are deprioritized per client request — kept
+        // nullable rather than removed so existing data survives and the fields can come back
+        // later without a schema change. Not required at creation time anymore.
+        public string? NamingStructureCode { get; set; }
+
         [Required]
         public DateTime ScheduleStart { get; set; }
-        
+
         [Required]
         public DateTime ScheduleEnd { get; set; }
-        
-        [Required]
-        public string TargetRegion { get; set; } = string.Empty;
-        
-        [Required]
-        public decimal TotalBudget { get; set; }
+
+        public string? TargetRegion { get; set; }
+
+        public decimal? TotalBudget { get; set; }
         
         [Required]
         public string Status { get; set; } = "Draft"; // Draft, Active, Completed, Paused

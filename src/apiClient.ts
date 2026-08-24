@@ -5,7 +5,7 @@
  * so relative URLs work in both dev and production.
  */
 
-import type { DetectionJob, JobsListResponse, ShotItem, InvoiceSummary, SplitMode, SceneItem } from './types';
+import type { DetectionJob, JobsListResponse, ShotItem, SplitMode, SceneItem } from './types';
 
 const TOKEN_KEY = 'bit_token';
 const USER_KEY = 'bit_user';
@@ -602,17 +602,6 @@ export interface CampaignSummary {
 
 export async function fetchCampaignSummary(campaignId: string): Promise<CampaignSummary> {
   const r = await fetchWithAuth(`/api/campaigns/${campaignId}/summary`);
-  return r.json();
-}
-
-/** Real, backend-calculated campaign invoice (exposure seconds × viability multiplier + render
- * processing costs + VAT) — see dotnet-api/Services/InvoiceService.cs. */
-export async function fetchCampaignInvoice(campaignId: string): Promise<InvoiceSummary> {
-  const r = await fetchWithAuth(`/api/campaigns/${campaignId}/invoice`);
-  if (!r.ok) {
-    const err = await r.json().catch(() => ({ error: 'Failed to load invoice.' }));
-    throw new Error(err.error || 'Failed to load invoice.');
-  }
   return r.json();
 }
 

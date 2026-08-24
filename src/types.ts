@@ -156,11 +156,12 @@ export function parseSurfaceItem(raw: SurfaceItemResponse): SurfaceItem {
 export interface CampaignItem {
   id: string;
   name: string;
-  namingStructureCode: string;
+  // Deprioritized per client request — optional, kept for existing data, no longer collected.
+  namingStructureCode?: string;
   scheduleStart: string;
   scheduleEnd: string;
-  targetRegion: string;
-  totalBudget: number;
+  targetRegion?: string;
+  totalBudget?: number;
   status: "Draft" | "Active" | "Completed" | "Paused";
   createdAt: string;
 }

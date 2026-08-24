@@ -58,7 +58,6 @@ import { AdminConsoleTab } from './components/AdminConsoleTab';
 import { CampaignSelector } from './components/CampaignSelector';
 import { CampaignSidebar, type SidebarView } from './components/CampaignSidebar';
 import { CampaignDashboard } from './components/CampaignDashboard';
-import { InvoicePanel } from './components/InvoicePanel';
 import { AnalyticsTab } from './components/AnalyticsTab';
 import { JobsTab } from './components/JobsTab';
 import { BitLogo } from './components/BitLogo';
@@ -178,9 +177,6 @@ export default function App() {
 
   // Form Submissions
   const [newCampaignName, setNewCampaignName] = useState<string>('');
-  const [newCampaignCode, setNewCampaignCode] = useState<string>('');
-  const [newCampaignBudget, setNewCampaignBudget] = useState<string>('');
-  const [newCampaignRegion, setNewCampaignRegion] = useState<string>('SADC Region');
   const [campaignError, setCampaignError] = useState<string | null>(null);
 
   const [newAssetName, setNewAssetName] = useState<string>('');
@@ -764,12 +760,7 @@ export default function App() {
       const res = await fetchWithAuth('/api/campaigns', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newCampaignName,
-          namingStructureCode: newCampaignCode,
-          totalBudget: Number(newCampaignBudget),
-          targetRegion: newCampaignRegion
-        })
+        body: JSON.stringify({ name: newCampaignName })
       });
 
       const data = await res.json();
@@ -779,8 +770,6 @@ export default function App() {
       }
 
       setNewCampaignName('');
-      setNewCampaignCode('');
-      setNewCampaignBudget('');
       fetchAllData();
     } catch (err) {
       console.error(err);
@@ -2019,38 +2008,13 @@ export default function App() {
                         <Plus className="h-4 w-4 text-brand-600" />
                         Create New Campaign
                       </h3>
-                      <p className="text-xs text-slate-500 mb-5">Define campaign schedules, regions and budgets.</p>
+                      <p className="text-xs text-slate-500 mb-5">Name your campaign to get started.</p>
                       <form onSubmit={(e) => { e.preventDefault(); handleCreateCampaign(e); }} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Campaign Name</label>
-                            <input type="text" value={newCampaignName} onChange={(e) => setNewCampaignName(e.target.value)}
-                              placeholder="e.g., Coke Zero Summer"
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors" required />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Naming Code</label>
-                            <input type="text" value={newCampaignCode} onChange={(e) => setNewCampaignCode(e.target.value)}
-                              placeholder="e.g., UZ01EP12_COKE"
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors" required />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Budget (ZAR)</label>
-                            <input type="number" value={newCampaignBudget} onChange={(e) => setNewCampaignBudget(e.target.value)}
-                              placeholder="e.g., 15000"
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors" required />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Target Region</label>
-                            <select value={newCampaignRegion} onChange={(e) => setNewCampaignRegion(e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors">
-                              <option value="SADC Region">SADC Region (Southern Africa)</option>
-                              <option value="East Africa proxy">East Africa Broadcast proxy</option>
-                              <option value="Global Streaming stream">Global Streaming streams</option>
-                            </select>
-                          </div>
+                        <div>
+                          <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Campaign Name</label>
+                          <input type="text" value={newCampaignName} onChange={(e) => setNewCampaignName(e.target.value)}
+                            placeholder="e.g., Coke Zero Summer"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors" required />
                         </div>
                         {campaignError && (
                           <p className="text-2xs text-red-600 font-semibold font-mono bg-red-50 p-2.5 rounded-lg border border-red-100">{campaignError}</p>
@@ -2079,11 +2043,8 @@ export default function App() {
                                   c.status === 'Active' ? 'bg-emerald-500' : c.status === 'Draft' ? 'bg-brand-500' : 'bg-slate-400'
                                 }`} />
                                 <h3 className="text-sm font-bold text-slate-800">{c.name}</h3>
-                                <p className="text-[10px] text-slate-400 font-mono mt-1">{c.namingStructureCode}</p>
                                 <div className="flex items-center gap-3 mt-3 text-[10px] text-slate-500">
-                                  <span>{c.targetRegion}</span>
                                   <span>{assetCount} assets</span>
-                                  <span className="font-bold">R{c.totalBudget.toLocaleString()}</span>
                                 </div>
                               </button>
                             );
@@ -2267,34 +2228,76 @@ export default function App() {
                   />
                 )}
 
-                {activeView === 'reports' && (
-                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl mx-auto py-8 space-y-6" key="reports">
+                {activeView === 'reports' && (() => {
+                  const campaignContent = contentList.filter(v => v.campaignId === selectedCampaignId);
+                  const campaignRenders = renderList.filter(r => r.campaignId === selectedCampaignId);
+                  const statusBadgeClass = (status: string) =>
+                    status === 'Finished' ? 'bg-emerald-100 text-emerald-700' :
+                    status === 'Failed' || status === 'Rejected' ? 'bg-red-100 text-red-700' :
+                    status === 'PreviewReady' || status === 'NeedsReview' ? 'bg-amber-100 text-amber-700' :
+                    'bg-brand-100 text-brand-700';
+                  return (
+                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto py-8 space-y-6" key="reports">
                     <div className="text-center">
                       <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
                       <h3 className="text-lg font-bold text-slate-800 font-display">Campaign Reports</h3>
-                      <p className="text-sm text-slate-500 mt-2">Billing, exposure analytics, and audit logs for this campaign.</p>
+                      <p className="text-sm text-slate-500 mt-2">Video technical details and render history for this campaign.</p>
                     </div>
                     <div className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm text-left space-y-2">
-                      <div className="text-xs font-mono text-slate-600 flex justify-between">
-                        <span>Campaign Budget:</span>
-                        <span className="font-bold">R{campaignList.find(c => c.id === selectedCampaignId)?.totalBudget.toLocaleString()}</span>
-                      </div>
                       <div className="text-xs font-mono text-slate-600 flex justify-between">
                         <span>Assets Staged:</span>
                         <span className="font-bold">{assetList.filter(a => a.campaignId === selectedCampaignId).length}</span>
                       </div>
                       <div className="text-xs font-mono text-slate-600 flex justify-between">
                         <span>Renders Completed:</span>
-                        <span className="font-bold">{renderList.filter(r => r.renderStatus === 'Finished' && r.campaignId === selectedCampaignId).length}</span>
+                        <span className="font-bold">{campaignRenders.filter(r => r.renderStatus === 'Finished').length}</span>
                       </div>
                       <div className="text-xs font-mono text-slate-600 flex justify-between">
                         <span>Total Processing Time:</span>
-                        <span className="font-bold">{(renderList.filter(r => r.campaignId === selectedCampaignId).reduce((sum, r) => sum + r.processingDurationMs, 0) / 1000).toFixed(1)}s</span>
+                        <span className="font-bold">{(campaignRenders.reduce((sum, r) => sum + r.processingDurationMs, 0) / 1000).toFixed(1)}s</span>
                       </div>
                     </div>
-                    {selectedCampaignId && <InvoicePanel campaignId={selectedCampaignId} />}
+
+                    {/* Per-video technical details + every rendered item for that clip */}
+                    {campaignContent.map(video => {
+                      const videoRenders = campaignRenders.filter(r => r.contentId === video.id)
+                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                      return (
+                        <div key={video.id} className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 text-left">
+                          <h4 className="text-sm font-bold text-slate-800 mb-3">{video.title}</h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] font-mono mb-4">
+                            <div className="bg-slate-50 rounded-lg p-2"><div className="text-slate-400">Resolution</div><div className="font-bold text-slate-700">{video.resolution || '—'}</div></div>
+                            <div className="bg-slate-50 rounded-lg p-2"><div className="text-slate-400">Frame Rate</div><div className="font-bold text-slate-700">{video.frameRate ? `${video.frameRate} fps` : '—'}</div></div>
+                            <div className="bg-slate-50 rounded-lg p-2"><div className="text-slate-400">Duration</div><div className="font-bold text-slate-700">{video.duration || '—'}</div></div>
+                            <div className="bg-slate-50 rounded-lg p-2"><div className="text-slate-400">Source</div><div className="font-bold text-slate-700">{video.sourceChannel || '—'}</div></div>
+                          </div>
+                          <div className="text-[10px] uppercase tracking-wider font-bold text-slate-400 font-mono mb-2">
+                            Rendered Items ({videoRenders.length})
+                          </div>
+                          {videoRenders.length === 0 ? (
+                            <div className="text-xs text-slate-400 italic">No renders yet for this video.</div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {videoRenders.map(r => (
+                                <div key={r.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 text-[10px]">
+                                  <span className={`px-1.5 py-0.5 rounded font-bold font-mono shrink-0 ${statusBadgeClass(r.renderStatus)}`}>{r.renderStatus}</span>
+                                  <span className="text-slate-400 font-mono shrink-0">{r.renderMode || 'Interactive'}</span>
+                                  {r.sceneIndex != null && <span className="text-slate-400 font-mono shrink-0">Scene #{r.sceneIndex}</span>}
+                                  <span className="text-slate-400 font-mono shrink-0">{(r.processingDurationMs / 1000).toFixed(1)}s</span>
+                                  <span className="text-slate-400 font-mono ml-auto shrink-0">{new Date(r.createdAt).toLocaleString()}</span>
+                                  {(r.storageKey || r.previewStorageKey) && (
+                                    <a href={r.storageKey || r.previewStorageKey || undefined} target="_blank" rel="noreferrer" className="text-brand-500 hover:text-brand-700 font-semibold shrink-0">View</a>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </motion.div>
-                )}
+                  );
+                })()}
               </>
             )}
           </AnimatePresence>
