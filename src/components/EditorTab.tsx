@@ -214,6 +214,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
   const [queuingId, setQueuingId] = React.useState<string | null>(null);
   const [expandedPromptId, setExpandedPromptId] = React.useState<string | null>(null);
   const [copiedPromptId, setCopiedPromptId] = React.useState<string | null>(null);
+  const [viewingRenderUrl, setViewingRenderUrl] = React.useState<string | null>(null);
   const [deletingRenderId, setDeletingRenderId] = React.useState<string | null>(null);
   const [deleteRenderConfirmId, setDeleteRenderConfirmId] = React.useState<string | null>(null);
   const [deleteAllConfirmSceneId, setDeleteAllConfirmSceneId] = React.useState<string | null>(null);
@@ -1993,8 +1994,23 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                               {new Date(r.createdAt).toLocaleTimeString()}
                             </span>
                             {playUrl && (
-                              <a href={playUrl} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700 font-semibold shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setViewingRenderUrl(playUrl)}
+                                className="text-blue-500 hover:text-blue-700 font-semibold shrink-0 cursor-pointer"
+                                title="Preview this render inline"
+                              >
                                 View
+                              </button>
+                            )}
+                            {playUrl && (
+                              <a
+                                href={playUrl}
+                                download
+                                className="shrink-0 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                title="Download this render"
+                              >
+                                <Download className="h-3 w-3" />
                               </a>
                             )}
                             {isPlayable && onSetRenderQueuedForFinal && (
@@ -2091,6 +2107,40 @@ export const EditorTab: React.FC<EditorTabProps> = ({
             )}
           </div>
         </div>
+
+        {/* ── Render preview modal — "View" used to just open the raw file URL in a new tab,
+            which browsers often treat as a download instead of actually playing it inline. ── */}
+        {viewingRenderUrl && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-6"
+            onClick={() => setViewingRenderUrl(null)}
+          >
+            <div className="relative max-w-4xl w-full" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setViewingRenderUrl(null)}
+                className="absolute -top-10 right-0 text-white/70 hover:text-white cursor-pointer"
+                aria-label="Close preview"
+              >
+                <X className="h-6 w-6" />
+              </button>
+              <video
+                key={viewingRenderUrl}
+                src={viewingRenderUrl}
+                controls
+                autoPlay
+                className="w-full max-h-[80vh] rounded-xl bg-black shadow-2xl"
+              />
+              <a
+                href={viewingRenderUrl}
+                download
+                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs rounded-lg cursor-pointer transition-all"
+              >
+                <Download className="h-3.5 w-3.5" /> Download
+              </a>
+            </div>
+          </div>
+        )}
 
         {/* ── Re-run Detection Confirmation Modal ── */}
         {redetectConfirmOpen && (
