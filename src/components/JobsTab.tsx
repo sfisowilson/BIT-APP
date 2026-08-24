@@ -24,12 +24,12 @@ interface JobsTabProps {
 /** Map job states to colors and icons for visual display */
 const STATE_STYLE: Record<string, { color: string; bg: string; icon: React.FC<{ className?: string }> }> = {
   Enqueued:    { color: 'text-slate-500', bg: 'bg-slate-50', icon: Circle },
-  Processing:  { color: 'text-blue-600',  bg: 'bg-blue-50',  icon: Loader2 },
+  Processing:  { color: 'text-brand-600',  bg: 'bg-brand-50',  icon: Loader2 },
   Paused:      { color: 'text-amber-600', bg: 'bg-amber-50', icon: Pause },
   Succeeded:   { color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle },
   Failed:      { color: 'text-red-600',    bg: 'bg-red-50',    icon: XCircle },
   Cancelled:   { color: 'text-slate-400',  bg: 'bg-slate-50',  icon: XCircle },
-  SceneDetecting: { color: 'text-blue-600', bg: 'bg-blue-50',  icon: Loader2 },
+  SceneDetecting: { color: 'text-brand-600', bg: 'bg-brand-50',  icon: Loader2 },
   Completed:   { color: 'text-emerald-600', bg: 'bg-emerald-50', icon: CheckCircle },
 };
 

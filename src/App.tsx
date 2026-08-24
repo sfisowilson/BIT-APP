@@ -1641,7 +1641,7 @@ export default function App() {
               </p>
             </div>
             
-            <div className="mt-8 pt-6 border-t border-white/10 text-[10px] text-blue-200/80 font-mono">
+            <div className="mt-8 pt-6 border-t border-white/10 text-[10px] text-brand-200/80 font-mono">
               <div>Secure SSO Environment</div>
               <div>System Version: BIT-v1.2.0-Prod</div>
             </div>
@@ -1651,7 +1651,7 @@ export default function App() {
           <div className="md:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-8 flex flex-col justify-between">
             <div>
               <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
-                <Lock className="h-5 w-5 text-blue-500" /> Secure Sign In
+                <Lock className="h-5 w-5 text-brand-500" /> Secure Sign In
               </h3>
               <p className="text-xs text-slate-400 mb-6">Enter your authorized administrative or operational credentials.</p>
 
@@ -1670,7 +1670,7 @@ export default function App() {
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     placeholder="e.g. admin@afrobotics.co.za"
-                    className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-lg text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                    className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-lg text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all"
                     required
                   />
                 </div>
@@ -1681,20 +1681,20 @@ export default function App() {
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     placeholder="••••••••••••"
-                    className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-lg text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                    className="w-full px-3.5 py-2.5 bg-slate-950/80 border border-slate-800 rounded-lg text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all"
                     required
                   />
                 </div>
                 <button
                   type="submit"
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer shadow-md hover:shadow-blue-500/10"
+                  className="w-full py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer shadow-md hover:shadow-brand-500/10"
                 >
                   Sign In to Console
                 </button>
               </form>
 
               <p className="text-xs text-slate-500 text-center mt-4">
-                <span onClick={() => setShowForgotPassword(!showForgotPassword)} className="cursor-pointer hover:text-blue-400 underline">
+                <span onClick={() => setShowForgotPassword(!showForgotPassword)} className="cursor-pointer hover:text-brand-400 underline">
                   Forgot password?
                 </span>
               </p>
@@ -1704,9 +1704,9 @@ export default function App() {
                   <p className="text-xs text-slate-400">Enter your email to receive a reset link.</p>
                   <div className="flex gap-2">
                     <input type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)}
-                      placeholder="your@email.com" className="flex-1 px-3 py-2 bg-slate-950/80 border border-slate-800 rounded-lg text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-blue-500" />
+                      placeholder="your@email.com" className="flex-1 px-3 py-2 bg-slate-950/80 border border-slate-800 rounded-lg text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-brand-500" />
                     <button onClick={handleForgotPassword} disabled={forgotSending}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg cursor-pointer transition-colors disabled:opacity-50 shrink-0">
+                      className="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-lg cursor-pointer transition-colors disabled:opacity-50 shrink-0">
                       {forgotSending ? 'Sending...' : 'Send Link'}
                     </button>
                   </div>
@@ -1750,7 +1750,7 @@ export default function App() {
                     key={cred.role}
                     type="button"
                     onClick={() => handleLogin(undefined, { email: cred.email, pass: cred.pass })}
-                    className="p-2.5 bg-slate-950/40 border border-slate-800 hover:bg-slate-850 hover:border-blue-500 rounded-xl text-left cursor-pointer transition-all flex flex-col justify-between"
+                    className="p-2.5 bg-slate-950/40 border border-slate-800 hover:bg-slate-850 hover:border-brand-500 rounded-xl text-left cursor-pointer transition-all flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-center justify-between gap-1 mb-1">
@@ -1829,7 +1829,7 @@ export default function App() {
                 {/* Theme Switcher Button */}
                 <button 
                   onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} 
-                  className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-all border border-slate-200 dark:border-slate-700" 
+                  className="p-2 rounded-lg text-slate-400 hover:text-brand-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-all border border-slate-200 dark:border-slate-700" 
                   title={theme === 'light' ? "Switch to Dark Mode" : "Switch to Light Mode"}
                 >
                   {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
@@ -1851,7 +1851,7 @@ export default function App() {
                   <LogOut className="h-4 w-4" />
                 </button>
 
-                <a href="mailto:support@brandinserts.tech" className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 cursor-pointer transition-all border border-slate-200" title="Contact Support">
+                <a href="mailto:support@brandinserts.tech" className="p-2 rounded-lg text-slate-400 hover:text-brand-500 hover:bg-brand-50 cursor-pointer transition-all border border-slate-200" title="Contact Support">
                   <HelpCircle className="h-4 w-4" />
                 </a>
               </div>
@@ -1874,7 +1874,7 @@ export default function App() {
             <select
               value={requestedRole}
               onChange={e => setRequestedRole(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-3 focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-3 focus:outline-none focus:border-brand-500"
             >
               {['Admin', 'Editor', 'Advertiser'].filter(r => r !== user?.role).map(r => (
                 <option key={r} value={r}>{r}</option>
@@ -1885,7 +1885,7 @@ export default function App() {
               onChange={e => setRoleRequestReason(e.target.value)}
               placeholder="Reason for request (optional)..."
               rows={2}
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-3 resize-none focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs mb-3 resize-none focus:outline-none focus:border-brand-500"
             />
             {roleRequestMsg && (
               <div className={`text-[10px] font-bold mb-3 px-3 py-1.5 rounded-lg ${roleRequestMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
@@ -1894,18 +1894,18 @@ export default function App() {
             )}
             <button
               onClick={handleRequestRole}
-              className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs cursor-pointer transition-colors"
+              className="w-full py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-lg text-xs cursor-pointer transition-colors"
             >
               Submit Request
             </button>
             <div className="mt-4 pt-3 border-t border-slate-100">
               <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono mb-2">Change Password</h4>
               <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)}
-                placeholder="Current password" className="w-full px-2 py-1.5 bg-slate-50 border rounded text-xs mb-2 focus:outline-none focus:border-blue-500" />
+                placeholder="Current password" className="w-full px-2 py-1.5 bg-slate-50 border rounded text-xs mb-2 focus:outline-none focus:border-brand-500" />
               <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                placeholder="New password" className="w-full px-2 py-1.5 bg-slate-50 border rounded text-xs mb-2 focus:outline-none focus:border-blue-500" />
+                placeholder="New password" className="w-full px-2 py-1.5 bg-slate-50 border rounded text-xs mb-2 focus:outline-none focus:border-brand-500" />
               <button onClick={handleChangePassword} disabled={changingPassword}
-                className="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded text-xs cursor-pointer transition-colors disabled:opacity-50">
+                className="w-full py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded text-xs cursor-pointer transition-colors disabled:opacity-50">
                 {changingPassword ? 'Changing...' : 'Change Password'}
               </button>
               {passwordChangeMsg && (
@@ -1945,7 +1945,7 @@ export default function App() {
                 <p className="text-xs text-slate-400 mb-6">Move your mouse or press any key to stay signed in.</p>
                 <button
                   onClick={() => { resetTimer(); }}
-                  className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-xl cursor-pointer transition-colors"
+                  className="w-full px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm rounded-xl cursor-pointer transition-colors"
                 >
                   I'm Still Here
                 </button>
@@ -2014,9 +2014,9 @@ export default function App() {
                     </div>
 
                     {/* Campaign Creation Form */}
-                    <div className="bg-white border-2 border-blue-300 rounded-2xl p-6 shadow-sm max-w-2xl mx-auto">
+                    <div className="bg-white border-2 border-brand-300 rounded-2xl p-6 shadow-sm max-w-2xl mx-auto">
                       <h3 className="text-sm font-bold text-slate-800 font-display mb-1 flex items-center gap-2">
-                        <Plus className="h-4 w-4 text-blue-600" />
+                        <Plus className="h-4 w-4 text-brand-600" />
                         Create New Campaign
                       </h3>
                       <p className="text-xs text-slate-500 mb-5">Define campaign schedules, regions and budgets.</p>
@@ -2026,13 +2026,13 @@ export default function App() {
                             <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Campaign Name</label>
                             <input type="text" value={newCampaignName} onChange={(e) => setNewCampaignName(e.target.value)}
                               placeholder="e.g., Coke Zero Summer"
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors" required />
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors" required />
                           </div>
                           <div>
                             <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Naming Code</label>
                             <input type="text" value={newCampaignCode} onChange={(e) => setNewCampaignCode(e.target.value)}
                               placeholder="e.g., UZ01EP12_COKE"
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors" required />
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors" required />
                           </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -2040,12 +2040,12 @@ export default function App() {
                             <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Budget (ZAR)</label>
                             <input type="number" value={newCampaignBudget} onChange={(e) => setNewCampaignBudget(e.target.value)}
                               placeholder="e.g., 15000"
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors" required />
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors" required />
                           </div>
                           <div>
                             <label className="block text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-1 font-mono">Target Region</label>
                             <select value={newCampaignRegion} onChange={(e) => setNewCampaignRegion(e.target.value)}
-                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors">
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-2 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors">
                               <option value="SADC Region">SADC Region (Southern Africa)</option>
                               <option value="East Africa proxy">East Africa Broadcast proxy</option>
                               <option value="Global Streaming stream">Global Streaming streams</option>
@@ -2056,7 +2056,7 @@ export default function App() {
                           <p className="text-2xs text-red-600 font-semibold font-mono bg-red-50 p-2.5 rounded-lg border border-red-100">{campaignError}</p>
                         )}
                         <button type="submit"
-                          className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-lg transition-all cursor-pointer">
+                          className="w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm rounded-lg transition-all cursor-pointer">
                           <Plus className="h-4 w-4" />
                           Register Brand Campaign
                         </button>
@@ -2074,9 +2074,9 @@ export default function App() {
                             const assetCount = assetList.filter(a => a.campaignId === c.id).length;
                             return (
                               <button key={c.id} onClick={() => navigateTo('dashboard', c.id)}
-                                className="bg-white border border-slate-200 rounded-xl p-5 text-left hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
+                                className="bg-white border border-slate-200 rounded-xl p-5 text-left hover:border-brand-300 hover:shadow-md transition-all cursor-pointer">
                                 <span className={`inline-block h-2.5 w-2.5 rounded-full mb-2 ${
-                                  c.status === 'Active' ? 'bg-emerald-500' : c.status === 'Draft' ? 'bg-blue-500' : 'bg-slate-400'
+                                  c.status === 'Active' ? 'bg-emerald-500' : c.status === 'Draft' ? 'bg-brand-500' : 'bg-slate-400'
                                 }`} />
                                 <h3 className="text-sm font-bold text-slate-800">{c.name}</h3>
                                 <p className="text-[10px] text-slate-400 font-mono mt-1">{c.namingStructureCode}</p>

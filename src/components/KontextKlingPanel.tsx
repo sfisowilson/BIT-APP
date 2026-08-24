@@ -332,7 +332,7 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
           type="button"
           disabled={suggesting || !assetId || !promptText.trim()}
           onClick={handleSuggestPrompt}
-          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-40 cursor-pointer"
+          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase border border-brand-200 text-brand-700 hover:bg-brand-50 disabled:opacity-40 cursor-pointer"
         >
           {suggesting ? (
             <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Asking Gemini...</>
@@ -342,15 +342,15 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
         </button>
 
         {suggestion && (
-          <div className="space-y-1.5 bg-blue-50/50 border border-blue-100 rounded-lg p-2.5">
-            <div className="text-[9px] uppercase tracking-wider font-bold text-blue-700 font-mono">
+          <div className="space-y-1.5 bg-brand-50/50 border border-brand-100 rounded-lg p-2.5">
+            <div className="text-[9px] uppercase tracking-wider font-bold text-brand-700 font-mono">
               Gemini looked at the frame + asset — pick which prompt to use
             </div>
             <button
               type="button"
               onClick={() => setSuggestion(null)}
               className={`w-full text-left p-2 rounded-lg border text-[10px] cursor-pointer transition-colors ${
-                promptText === suggestion.original ? 'border-blue-400 bg-white' : 'border-slate-200 bg-white hover:border-blue-300'
+                promptText === suggestion.original ? 'border-brand-400 bg-white' : 'border-slate-200 bg-white hover:border-brand-300'
               }`}
             >
               <span className="font-bold text-slate-500 font-mono uppercase text-[9px] block mb-0.5">Your original</span>
@@ -359,9 +359,9 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
             <button
               type="button"
               onClick={() => { setPromptText(suggestion.suggested); setSuggestion(null); }}
-              className="w-full text-left p-2 rounded-lg border border-blue-300 bg-white hover:border-blue-400 text-[10px] cursor-pointer transition-colors"
+              className="w-full text-left p-2 rounded-lg border border-brand-300 bg-white hover:border-brand-400 text-[10px] cursor-pointer transition-colors"
             >
-              <span className="font-bold text-blue-600 font-mono uppercase text-[9px] block mb-0.5">Gemini's suggestion — click to use</span>
+              <span className="font-bold text-brand-600 font-mono uppercase text-[9px] block mb-0.5">Gemini's suggestion — click to use</span>
               {suggestion.suggested}
             </button>
           </div>
@@ -568,7 +568,7 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
           type="button"
           disabled={suggesting || !assetId || !promptText.trim()}
           onClick={handleSuggestPrompt}
-          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase border border-blue-200 text-blue-700 hover:bg-blue-50 disabled:opacity-40 cursor-pointer"
+          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase border border-brand-200 text-brand-700 hover:bg-brand-50 disabled:opacity-40 cursor-pointer"
         >
           {suggesting ? (
             <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Asking Gemini...</>
@@ -578,15 +578,15 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
         </button>
 
         {suggestion && (
-          <div className="space-y-1.5 bg-blue-50/50 border border-blue-100 rounded-lg p-2.5">
-            <div className="text-[9px] uppercase tracking-wider font-bold text-blue-700 font-mono">
+          <div className="space-y-1.5 bg-brand-50/50 border border-brand-100 rounded-lg p-2.5">
+            <div className="text-[9px] uppercase tracking-wider font-bold text-brand-700 font-mono">
               Gemini looked at the frame + asset — pick which prompt to use
             </div>
             <button
               type="button"
               onClick={() => setSuggestion(null)}
               className={`w-full text-left p-2 rounded-lg border text-[10px] cursor-pointer transition-colors ${
-                promptText === suggestion.original ? 'border-blue-400 bg-white' : 'border-slate-200 bg-white hover:border-blue-300'
+                promptText === suggestion.original ? 'border-brand-400 bg-white' : 'border-slate-200 bg-white hover:border-brand-300'
               }`}
             >
               <span className="font-bold text-slate-500 font-mono uppercase text-[9px] block mb-0.5">Your original</span>
@@ -595,9 +595,9 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
             <button
               type="button"
               onClick={() => { setPromptText(suggestion.suggested); setSuggestion(null); }}
-              className="w-full text-left p-2 rounded-lg border border-blue-300 bg-white hover:border-blue-400 text-[10px] cursor-pointer transition-colors"
+              className="w-full text-left p-2 rounded-lg border border-brand-300 bg-white hover:border-brand-400 text-[10px] cursor-pointer transition-colors"
             >
-              <span className="font-bold text-blue-600 font-mono uppercase text-[9px] block mb-0.5">Gemini's suggestion — click to use</span>
+              <span className="font-bold text-brand-600 font-mono uppercase text-[9px] block mb-0.5">Gemini's suggestion — click to use</span>
               {suggestion.suggested}
             </button>
           </div>
@@ -823,8 +823,8 @@ export const KontextKlingPanel: React.FC<KontextKlingPanelProps> = ({
               onClick={handleQueue}
               className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-[10px] font-mono font-bold tracking-wider uppercase transition-all cursor-pointer disabled:opacity-50 ${
                 activeRender!.isQueuedForFinal
-                  ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-sm'
-                  : 'bg-white border border-blue-300 text-blue-600 hover:bg-blue-50'
+                  ? 'bg-brand-600 hover:bg-brand-500 text-white shadow-sm'
+                  : 'bg-white border border-brand-300 text-brand-600 hover:bg-brand-50'
               }`}
               title="Use this render for this scene in the final combined video"
             >

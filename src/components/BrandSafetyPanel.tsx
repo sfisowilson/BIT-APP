@@ -68,7 +68,7 @@ export const BrandSafetyPanel: React.FC = () => {
   if (loading) {
     return (
       <div className="bg-white border border-slate-200/90 rounded-2xl p-8 text-center">
-        <Loader2 className="h-5 w-5 animate-spin text-blue-500 mx-auto mb-2" />
+        <Loader2 className="h-5 w-5 animate-spin text-brand-500 mx-auto mb-2" />
         <p className="text-xs text-slate-400 font-mono">Loading brand-safety rules...</p>
       </div>
     );

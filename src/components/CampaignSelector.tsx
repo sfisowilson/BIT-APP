@@ -101,13 +101,13 @@ export const CampaignSelector: React.FC<CampaignSelectorProps> = ({
     <div ref={ref} className="relative">
       <button
         onClick={() => { setOpen(!open); if (!open) setTimeout(() => inputRef.current?.focus(), 50); }}
-        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 hover:border-blue-300 hover:shadow-sm transition-all min-w-[200px] cursor-pointer"
+        className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 hover:border-brand-300 hover:shadow-sm transition-all min-w-[200px] cursor-pointer"
       >
         {selected ? (
           <>
             <span className={`h-2 w-2 rounded-full ${
               selected.status === 'Active' ? 'bg-emerald-500' :
-              selected.status === 'Draft' ? 'bg-blue-500' :
+              selected.status === 'Draft' ? 'bg-brand-500' :
               selected.status === 'Completed' ? 'bg-slate-400' : 'bg-amber-500'
             }`} />
             <span className="flex-1 text-left truncate" title={selected.name}>{selected.name}</span>
@@ -137,7 +137,7 @@ export const CampaignSelector: React.FC<CampaignSelectorProps> = ({
                 onChange={(e) => { setFilter(e.target.value); if (!open) setOpen(true); }}
                 onKeyDown={handleKeyDown}
                 placeholder="Filter campaigns..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-400 transition-colors"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-400 transition-colors"
               />
             </div>
           </div>
@@ -157,12 +157,12 @@ export const CampaignSelector: React.FC<CampaignSelectorProps> = ({
                       onClick={() => selectCampaign(c.id)}
                       onMouseEnter={() => setHighlightIndex(idx)}
                       className={`w-full text-left px-4 py-2.5 flex items-center gap-3 transition-colors cursor-pointer ${
-                        idx === highlightIndex ? 'bg-blue-50' : isSelected ? 'bg-blue-50/60' : 'hover:bg-blue-50'
+                        idx === highlightIndex ? 'bg-brand-50' : isSelected ? 'bg-brand-50/60' : 'hover:bg-brand-50'
                       }`}
                     >
                       <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${
                         c.status === 'Active' ? 'bg-emerald-500' :
-                        c.status === 'Draft' ? 'bg-blue-500' : 'bg-slate-400'
+                        c.status === 'Draft' ? 'bg-brand-500' : 'bg-slate-400'
                       }`} />
                       <div className="flex-1 min-w-0">
                         <div className="text-xs font-bold text-slate-800 truncate" title={c.name}>{c.name}</div>
@@ -170,7 +170,7 @@ export const CampaignSelector: React.FC<CampaignSelectorProps> = ({
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <span className="text-[10px] text-slate-400 font-mono">{assetCounts[c.id] || 0}</span>
-                        {isSelected && <Check className="h-3.5 w-3.5 text-blue-600" />}
+                        {isSelected && <Check className="h-3.5 w-3.5 text-brand-600" />}
                       </div>
                     </button>
                   </li>
@@ -182,7 +182,7 @@ export const CampaignSelector: React.FC<CampaignSelectorProps> = ({
           <div className="border-t border-slate-100 pt-1">
             <button
               onClick={() => { onCreateNew(); setOpen(false); setFilter(''); }}
-              className="w-full text-left px-4 py-2.5 flex items-center gap-2 text-xs font-bold text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+              className="w-full text-left px-4 py-2.5 flex items-center gap-2 text-xs font-bold text-brand-600 hover:bg-brand-50 transition-colors cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
               Create New Campaign

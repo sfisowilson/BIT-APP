@@ -66,7 +66,7 @@ export const InvoicePanel: React.FC<InvoicePanelProps> = ({ campaignId }) => {
     <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
       <div className="flex items-start justify-between border-b border-slate-100 pb-4 mb-4">
         <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+          <div className="h-9 w-9 rounded-lg bg-brand-50 flex items-center justify-center text-brand-600 shrink-0">
             <FileText className="h-4 w-4" />
           </div>
           <div>

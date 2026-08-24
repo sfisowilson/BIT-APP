@@ -100,11 +100,11 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({
       key="telemetry_tab"
     >
       {/* Informational guide */}
-      <div className="lg:col-span-3 bg-blue-50 border border-blue-100 rounded-2xl p-5 text-xs text-blue-800 flex items-start gap-3 shadow-xs">
-        <Activity className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+      <div className="lg:col-span-3 bg-brand-50 border border-brand-100 rounded-2xl p-5 text-xs text-brand-800 flex items-start gap-3 shadow-xs">
+        <Activity className="h-5 w-5 text-brand-600 shrink-0 mt-0.5" />
         <div>
-          <h4 className="font-bold text-sm text-blue-900">Step 5: Operational Monitoring, Alarms &amp; Security Logs</h4>
-          <p className="mt-1 text-blue-700 leading-normal">
+          <h4 className="font-bold text-sm text-brand-900">Step 5: Operational Monitoring, Alarms &amp; Security Logs</h4>
+          <p className="mt-1 text-brand-700 leading-normal">
             This operations and maintenance tab allows real-time health inspection. View secure automated transaction event audit logs, download CSV compliance logs, and simulate or clear hardware alarms/fault triggers to ensure platform redundancy.
           </p>
         </div>
@@ -132,7 +132,7 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({
             <select
               value={logSeverityFilter}
               onChange={e => setLogSeverityFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] text-slate-700 focus:outline-none focus:border-blue-400"
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] text-slate-700 focus:outline-none focus:border-brand-400"
             >
               <option value="">All Severities</option>
               <option value="Info">Info</option>
@@ -147,7 +147,7 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({
                 value={logSearchFilter}
                 onChange={e => setLogSearchFilter(e.target.value)}
                 placeholder="Search logs..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-6 pr-2 py-1 text-[10px] text-slate-700 focus:outline-none focus:border-blue-400"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-6 pr-2 py-1 text-[10px] text-slate-700 focus:outline-none focus:border-brand-400"
               />
             </div>
           </div>
@@ -164,7 +164,7 @@ export const TelemetryTab: React.FC<TelemetryTabProps> = ({
                   <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold shrink-0 mt-0.5 ${
                     log.severity === 'Critical' ? 'bg-red-500/10 text-red-400' :
                     log.severity === 'Warning' ? 'bg-yellow-500/10 text-yellow-400' :
-                    'bg-blue-500/10 text-blue-400'
+                    'bg-brand-500/10 text-brand-400'
                   }`}>{log.severity}</span>
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2 text-slate-500">

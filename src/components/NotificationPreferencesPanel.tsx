@@ -72,7 +72,7 @@ export const NotificationPreferencesPanel: React.FC = () => {
       <div className="flex items-center gap-2 mb-2">
         <Bell className="h-3.5 w-3.5 text-slate-400" />
         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">Notification Preferences</span>
-        {saving && <Loader2 className="h-3 w-3 animate-spin text-blue-500 ml-auto" />}
+        {saving && <Loader2 className="h-3 w-3 animate-spin text-brand-500 ml-auto" />}
       </div>
       <div className="space-y-1 max-h-[200px] overflow-y-auto">
         {ALL_NOTIFICATION_TYPES.map(nt => (
@@ -84,7 +84,7 @@ export const NotificationPreferencesPanel: React.FC = () => {
               type="checkbox"
               checked={!muted.includes(nt.key)}
               onChange={() => toggle(nt.key)}
-              className="h-3 w-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              className="h-3 w-3 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
             />
             <span className="text-[10px] text-slate-600">{nt.label}</span>
             {muted.includes(nt.key) && <BellOff className="h-3 w-3 text-slate-300 ml-auto" />}

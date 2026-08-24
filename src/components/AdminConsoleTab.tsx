@@ -303,7 +303,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
       <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-start gap-4">
-            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+            <div className="p-3 bg-brand-50 text-brand-600 rounded-xl">
               <Users className="h-6 w-6" />
             </div>
             <div>
@@ -325,7 +325,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
           { label: "Total Users", val: totalUsersCount, sub: "Registered accounts", color: "text-slate-900" },
-          { label: "Administrators", val: roleCounts.admin, sub: "Full system control", color: "text-blue-600 font-bold" },
+          { label: "Administrators", val: roleCounts.admin, sub: "Full system control", color: "text-brand-600 font-bold" },
           { label: "Editors / Approvers", val: roleCounts.editor, sub: "QA visual workflow", color: "text-indigo-600" },
           { label: "Advertisers", val: roleCounts.advertiser, sub: "Campaign & assets", color: "text-emerald-600" },
           { label: "Suspended", val: roleCounts.suspended, sub: "Forbidden logins", color: roleCounts.suspended > 0 ? "text-rose-600 font-bold animate-pulse" : "text-slate-400" },
@@ -354,7 +354,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                   placeholder="Search user, email or role..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400"
+                  className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all placeholder:text-slate-400"
                 />
               </div>
             </div>
@@ -362,7 +362,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
             {/* List Table */}
             {loading ? (
               <div className="p-12 text-center text-slate-400 text-xs font-mono">
-                <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full mx-auto mb-3"></div>
+                <div className="animate-spin h-6 w-6 border-2 border-brand-600 border-t-transparent rounded-full mx-auto mb-3"></div>
                 Loading secure directory database...
               </div>
             ) : users.length === 0 ? (
@@ -387,7 +387,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                       
                       // Role Color maps
                       const roleStyles = {
-                        Admin: "bg-blue-50 text-blue-700 border-blue-200",
+                        Admin: "bg-brand-50 text-brand-700 border-brand-200",
                         Editor: "bg-indigo-50 text-indigo-700 border-indigo-200",
                         Advertiser: "bg-emerald-50 text-emerald-700 border-emerald-200"
                       };
@@ -402,14 +402,14 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                                   value={editFullName}
                                   onChange={(e) => setEditFullName(e.target.value)}
                                   placeholder="Full Name"
-                                  className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                                  className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-brand-500"
                                 />
                                 <input
                                   type="email"
                                   value={editEmail}
                                   onChange={(e) => setEditEmail(e.target.value)}
                                   placeholder="Email Address"
-                                  className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-blue-500 font-mono text-[11px]"
+                                  className="w-full px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-brand-500 font-mono text-[11px]"
                                 />
                               </div>
                             ) : (
@@ -427,7 +427,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                               <select
                                 value={editRole}
                                 onChange={(e) => setEditRole(e.target.value as any)}
-                                className="px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                                className="px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-brand-500"
                               >
                                 <option value="Admin">Admin</option>
                                 <option value="Editor">Editor</option>
@@ -445,7 +445,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                               <select
                                 value={editStatus}
                                 onChange={(e) => setEditStatus(e.target.value as any)}
-                                className="px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                                className="px-2 py-1 bg-white border border-slate-200 rounded-md text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-brand-500"
                               >
                                 <option value="Active">Active</option>
                                 <option value="Suspended">Suspended</option>
@@ -563,7 +563,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
         <div className="space-y-6">
           <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm">
             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
-              <UserPlus className="h-5 w-5 text-blue-600" />
+              <UserPlus className="h-5 w-5 text-brand-600" />
               <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-widest font-display">
                 Create User Profile
               </h3>
@@ -593,7 +593,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                   placeholder="e.g. Sindi Dube"
                   value={newFullName}
                   onChange={(e) => setNewFullName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-300"
+                  className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all placeholder:text-slate-300"
                 />
               </div>
 
@@ -606,7 +606,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                   placeholder="e.g. sindi@brandinserts.tech"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-300"
+                  className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all placeholder:text-slate-300"
                 />
               </div>
 
@@ -617,7 +617,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
                 <select
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  className="w-full px-3 py-2 bg-slate-50/50 border border-slate-200 rounded-lg text-xs font-medium focus:outline-hidden focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
                 >
                   <option value="Editor">Editor (QA Approvals / Operator)</option>
                   <option value="Admin">Admin (Full Central Access)</option>
@@ -628,7 +628,7 @@ export const AdminConsoleTab: React.FC<AdminConsoleTabProps> = ({ onTriggerLog, 
               <div className="pt-2">
                 <button
                   type="submit"
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs tracking-tight shadow-sm hover:shadow-blue-500/15 transition-all cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full py-2.5 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-lg text-xs tracking-tight shadow-sm hover:shadow-brand-500/15 transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
                   <UserPlus className="h-4 w-4" />
                   PROVISION NEW USER

@@ -71,8 +71,8 @@ export const RendersTab: React.FC<RendersTabProps> = ({ campaignId, campaignName
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6" key="renders_tab">
       <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
         <div className="flex items-center gap-3 mb-4">
-          <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center">
-            <Film className="h-5 w-5 text-blue-600" />
+          <div className="h-10 w-10 rounded-xl bg-brand-50 flex items-center justify-center">
+            <Film className="h-5 w-5 text-brand-600" />
           </div>
           <div>
             <h2 className="text-lg font-bold text-slate-800 font-display">Render Queue</h2>
@@ -113,7 +113,7 @@ export const RendersTab: React.FC<RendersTabProps> = ({ campaignId, campaignName
         {statusFilter && (
           <div className="mb-4 flex items-center gap-2 text-[10px] text-slate-500 font-mono">
             <span>Filtered to: <strong className="text-slate-700">{statusFilter}</strong></span>
-            <button type="button" onClick={() => setStatusFilter('')} className="text-blue-600 hover:text-blue-700 cursor-pointer font-bold">✕ Clear filter</button>
+            <button type="button" onClick={() => setStatusFilter('')} className="text-brand-600 hover:text-brand-700 cursor-pointer font-bold">✕ Clear filter</button>
           </div>
         )}
 
@@ -168,7 +168,7 @@ export const RendersTab: React.FC<RendersTabProps> = ({ campaignId, campaignName
                     <a
                       href={buildPlacementUrl(r)}
                       onClick={(e) => { e.preventDefault(); navigate(buildPlacementUrl(r)); }}
-                      className="inline-flex items-center gap-0.5 text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
+                      className="inline-flex items-center gap-0.5 text-brand-600 hover:text-brand-700 font-semibold cursor-pointer"
                     >
                       <ExternalLink className="h-2.5 w-2.5" /> View in Placements
                     </a>

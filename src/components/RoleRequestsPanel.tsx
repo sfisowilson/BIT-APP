@@ -62,7 +62,7 @@ export const RoleRequestsPanel: React.FC = () => {
   if (loading) {
     return (
       <div className="bg-white border border-slate-200/90 rounded-2xl p-8 text-center">
-        <Loader2 className="h-5 w-5 animate-spin text-blue-500 mx-auto mb-2" />
+        <Loader2 className="h-5 w-5 animate-spin text-brand-500 mx-auto mb-2" />
         <p className="text-xs text-slate-400 font-mono">Loading role requests...</p>
       </div>
     );
@@ -88,7 +88,7 @@ export const RoleRequestsPanel: React.FC = () => {
               key={f}
               onClick={() => setFilter(f)}
               className={`px-3 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition-colors ${
-                filter === f ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                filter === f ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
               }`}
             >
               {f === 'all' ? 'All' : f}
@@ -127,7 +127,7 @@ export const RoleRequestsPanel: React.FC = () => {
                   </td>
                   <td className="p-4">
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      r.requestedRole === 'Admin' ? 'bg-blue-50 text-blue-700' :
+                      r.requestedRole === 'Admin' ? 'bg-brand-50 text-brand-700' :
                       r.requestedRole === 'Editor' ? 'bg-indigo-50 text-indigo-700' :
                       'bg-emerald-50 text-emerald-700'
                     }`}>{r.requestedRole}</span>

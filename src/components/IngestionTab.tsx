@@ -56,7 +56,7 @@ interface IngestionTabProps {
 /** Pipeline stage display order with icons and labels */
 const PIPELINE_STAGES = [
   { key: 'Staging',       label: 'Staging',        icon: Clock,      color: 'text-slate-400', bg: 'bg-slate-100' },
-  { key: 'Transcoding',   label: 'Transcoding',    icon: Loader2,    color: 'text-blue-500',  bg: 'bg-blue-50' },
+  { key: 'Transcoding',   label: 'Transcoding',    icon: Loader2,    color: 'text-brand-500',  bg: 'bg-brand-50' },
   { key: 'SceneDetecting',label: 'Scene Detection', icon: Sparkles,   color: 'text-fuchsia-500', bg: 'bg-fuchsia-50' },
   { key: 'Completed',     label: 'Ready for QA',   icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-50' },
 ] as const;
@@ -73,7 +73,7 @@ function PipelineIndicator({ status }: { status: string }) {
         return (
           <React.Fragment key={stage.key}>
             {idx > 0 && (
-              <div className={`h-0.5 w-3 rounded-full ${isComplete || isCurrent ? 'bg-blue-400' : 'bg-slate-200'}`} />
+              <div className={`h-0.5 w-3 rounded-full ${isComplete || isCurrent ? 'bg-brand-400' : 'bg-slate-200'}`} />
             )}
             <div
               className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[8px] font-bold transition-all ${
@@ -330,15 +330,15 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
       key="ingestion_tab"
     >
       {/* Informational guide */}
-      <div className="lg:col-span-3 bg-blue-50 border border-blue-100 rounded-2xl p-5 text-xs text-blue-800 flex items-start gap-3 shadow-xs">
-        <Video className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+      <div className="lg:col-span-3 bg-brand-50 border border-brand-100 rounded-2xl p-5 text-xs text-brand-800 flex items-start gap-3 shadow-xs">
+        <Video className="h-5 w-5 text-brand-600 shrink-0 mt-0.5" />
         <div>
-          <h4 className="font-bold text-sm text-blue-900">
+          <h4 className="font-bold text-sm text-brand-900">
             {selectedCampaignId && selectedCampaignName
               ? `Content for: ${selectedCampaignName}`
               : 'Step 2: Video Ingestion Pipeline'}
           </h4>
-          <p className="mt-1 text-blue-700 leading-normal">
+          <p className="mt-1 text-brand-700 leading-normal">
             {selectedCampaignId
               ? <>Videos ingested for <strong>{selectedCampaignName}</strong>. New uploads will be automatically linked to this campaign.</>
               : <><strong>1. Register</strong> video metadata (title, duration, resolution, frame rate, source).{' '}
@@ -406,7 +406,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                   max={960}
                   step={1}
                   list="fps-presets"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-mono text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors"
                   required
                 />
                 <datalist id="fps-presets">
@@ -436,17 +436,17 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                   value={newVideoChannel}
                   onChange={(e) => setNewVideoChannel(e.target.value)}
                   placeholder="SuperSport Variety"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors"
                   required
                 />
               </div>
             </div>
 
-            <label className="border border-dashed border-slate-200 rounded-xl p-4 bg-slate-50/50 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors block">
+            <label className="border border-dashed border-slate-200 rounded-xl p-4 bg-slate-50/50 text-center cursor-pointer hover:border-brand-300 hover:bg-brand-50/30 transition-colors block">
               {newVideoFile ? (
                 <>
-                  <Video className="h-6 w-6 text-blue-500 mx-auto mb-2" />
-                  <span className="text-2xs text-blue-600 block font-semibold">{newVideoFile.name}</span>
+                  <Video className="h-6 w-6 text-brand-500 mx-auto mb-2" />
+                  <span className="text-2xs text-brand-600 block font-semibold">{newVideoFile.name}</span>
                   <span className="text-[10px] text-slate-400 block mt-1">{(newVideoFile.size / (1024 * 1024)).toFixed(1)} MB — click to change</span>
                 </>
               ) : (
@@ -478,7 +478,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                 </div>
                 <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
                   <div
-                    className="bg-blue-500 h-full rounded-full transition-all duration-300 ease-out"
+                    className="bg-brand-500 h-full rounded-full transition-all duration-300 ease-out"
                     style={{ width: `${uploadProgress}%` }}
                   />
                 </div>
@@ -501,15 +501,15 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
 
             {/* ── Probe progress indicator ── */}
             {probeRunning && (
-              <div className="space-y-1.5 bg-blue-50 border border-blue-100 rounded-lg p-3">
-                <div className="flex items-center gap-2 text-[10px] text-blue-700 font-mono">
+              <div className="space-y-1.5 bg-brand-50 border border-brand-100 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-[10px] text-brand-700 font-mono">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   <span>Analysing video with ffprobe...</span>
                   <span className="font-bold ml-auto">{probeProgress}%</span>
                 </div>
-                <div className="w-full bg-blue-200 rounded-full h-1.5 overflow-hidden">
+                <div className="w-full bg-brand-200 rounded-full h-1.5 overflow-hidden">
                   <div
-                    className="bg-blue-500 h-full rounded-full transition-all duration-300"
+                    className="bg-brand-500 h-full rounded-full transition-all duration-300"
                     style={{ width: `${probeProgress}%` }}
                   />
                 </div>
@@ -538,7 +538,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
             <button 
               type="submit" 
               disabled={ingesting}
-              className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer ${ingesting ? 'bg-blue-400 cursor-wait' : 'bg-blue-600 hover:bg-blue-500'}`}
+              className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer ${ingesting ? 'bg-brand-400 cursor-wait' : 'bg-brand-600 hover:bg-brand-500'}`}
             >
               {ingesting ? (
                 <>
@@ -618,7 +618,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                   over it, hiding the native <video> controls) into normal flow below it. */}
               <div className="bg-slate-950/90 border-t border-slate-700/50 px-4 py-3">
                 <div className="flex items-center gap-2 mb-1.5">
-                  <Eye className="h-3 w-3 text-blue-400" />
+                  <Eye className="h-3 w-3 text-brand-400" />
                   <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">
                     {activeVideo.title.length > 45 ? activeVideo.title.substring(0, 45) + '...' : activeVideo.title}
                   </span>
@@ -629,7 +629,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                   {/* Scene blocks */}
                   {scenesForVideo.length > 0 ? (
                     scenesForVideo.map((scene, idx) => {
-                      const colors = ['bg-blue-500/60', 'bg-emerald-500/60', 'bg-fuchsia-500/60', 'bg-amber-500/60', 'bg-cyan-500/60'];
+                      const colors = ['bg-brand-500/60', 'bg-emerald-500/60', 'bg-fuchsia-500/60', 'bg-amber-500/60', 'bg-cyan-500/60'];
                       const totalFrames = scenesForVideo.reduce((max, s) => Math.max(max, s.endFrame), 1);
                       const leftPct = (scene.startFrame / totalFrames) * 100;
                       const widthPct = ((scene.endFrame - scene.startFrame) / totalFrames) * 100;
@@ -679,7 +679,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
             <select
               value={contentStatusFilter}
               onChange={e => setContentStatusFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] text-slate-700 focus:outline-none focus:border-blue-400"
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] text-slate-700 focus:outline-none focus:border-brand-400"
             >
               <option value="">All Statuses</option>
               <option value="Staging">Staging</option>
@@ -695,7 +695,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                 value={contentSearchFilter}
                 onChange={e => setContentSearchFilter(e.target.value)}
                 placeholder="Search videos..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-6 pr-2 py-1 text-[10px] text-slate-700 focus:outline-none focus:border-blue-400"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-6 pr-2 py-1 text-[10px] text-slate-700 focus:outline-none focus:border-brand-400"
               />
             </div>
             <div
@@ -708,7 +708,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                 type="button"
                 onClick={() => setSplitMode('scene')}
                 className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-                  splitMode === 'scene' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                  splitMode === 'scene' ? 'bg-white text-brand-600 shadow-xs' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
                 Scene
@@ -717,7 +717,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                 type="button"
                 onClick={() => setSplitMode('cut')}
                 className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
-                  splitMode === 'cut' ? 'bg-white text-blue-600 shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                  splitMode === 'cut' ? 'bg-white text-brand-600 shadow-xs' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
                 Cut
@@ -754,7 +754,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                   onClick={() => setSelectedVideo(video.id)}
                   className={`border rounded-xl p-4 transition-all cursor-pointer ${
                     isSelected 
-                      ? 'bg-blue-50/40 border-blue-400 shadow-sm' 
+                      ? 'bg-brand-50/40 border-brand-400 shadow-sm' 
                       : 'bg-slate-50/30 border-slate-200 hover:border-slate-300'
                   }`}
                   id={`video_card_${video.id}`}
@@ -762,7 +762,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-2xs font-mono font-bold text-blue-600">ID: {video.id}</span>
+                        <span className="text-2xs font-mono font-bold text-brand-600">ID: {video.id}</span>
                         <PipelineIndicator status={video.ingestionStatus} />
                       </div>
                       <h4 className="text-sm font-bold text-slate-800 font-display mt-1.5">{video.title}</h4>
@@ -800,7 +800,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                         if (videoScenes.length > 0) {
                           const totalFrames = videoScenes.reduce((max, s) => Math.max(max, s.endFrame), 1);
                           return videoScenes.map((scene, idx) => {
-                            const colors = ['bg-blue-400', 'bg-emerald-400', 'bg-fuchsia-400', 'bg-amber-400'];
+                            const colors = ['bg-brand-400', 'bg-emerald-400', 'bg-fuchsia-400', 'bg-amber-400'];
                             const leftPct = (scene.startFrame / totalFrames) * 100;
                             const widthPct = Math.max(((scene.endFrame - scene.startFrame) / totalFrames) * 100, 1.5);
                             return (
@@ -950,7 +950,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                       </span>
                     )}
                     {isSelected && scenesForVideo.length > 0 && (
-                      <span className="text-[9px] text-blue-600 font-mono">
+                      <span className="text-[9px] text-brand-600 font-mono">
                         ↓ {scenesForVideo.length} scene{scenesForVideo.length !== 1 ? 's' : ''} detected below
                       </span>
                     )}
@@ -962,7 +962,7 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                       <div className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400 mb-2 font-mono flex items-center gap-2">
                         <Film className="h-3 w-3" />
                         Indexed Scene Cuts
-                        {scenesForVideo.length > 0 && <span className="text-blue-500">({scenesForVideo.length})</span>}
+                        {scenesForVideo.length > 0 && <span className="text-brand-500">({scenesForVideo.length})</span>}
                       </div>
                       {scenesForVideo.length === 0 ? (
                         <div className="text-2xs text-slate-400 italic bg-slate-50 rounded-lg p-3 border border-dashed border-slate-200">
@@ -1016,8 +1016,8 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                                 checked
                                   ? 'border-fuchsia-400 bg-fuchsia-50 shadow-sm ring-1 ring-fuchsia-300'
                                   : scene.id === selectedSceneId
-                                  ? 'border-blue-400 bg-blue-50 shadow-sm ring-1 ring-blue-300'
-                                  : 'border-slate-200/80 hover:border-blue-300 hover:bg-blue-50/30'
+                                  ? 'border-brand-400 bg-brand-50 shadow-sm ring-1 ring-brand-300'
+                                  : 'border-slate-200/80 hover:border-brand-300 hover:bg-brand-50/30'
                               }`}
                             >
                               {onMergeScenes && (
@@ -1050,12 +1050,12 @@ export const IngestionTab: React.FC<IngestionTabProps> = ({
                                 <div className="text-slate-400">{scene.durationSeconds}s</div>
                                 <div className={`text-[9px] mt-1 font-bold ${
                                   scene.qaStatus === 'Approved' ? 'text-emerald-600' :
-                                  scene.qaStatus === 'PendingReview' ? 'text-blue-600' :
+                                  scene.qaStatus === 'PendingReview' ? 'text-brand-600' :
                                   scene.qaStatus === 'Flagged' ? 'text-red-500' : 'text-slate-400'
                                 }`}>
                                   {scene.qaStatus}
                                 </div>
-                                <div className="text-[8px] text-blue-400 mt-1.5 font-sans flex items-center gap-0.5">
+                                <div className="text-[8px] text-brand-400 mt-1.5 font-sans flex items-center gap-0.5">
                                   <Eye className="h-2.5 w-2.5" /> Click to review surfaces
                                 </div>
                               </div>

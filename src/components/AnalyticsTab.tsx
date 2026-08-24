@@ -23,13 +23,13 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ summary, loading }) 
   if (loading || !summary) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin h-8 w-8 border-2 border-blue-500 border-t-transparent rounded-full" />
+        <div className="animate-spin h-8 w-8 border-2 border-brand-500 border-t-transparent rounded-full" />
       </div>
     );
   }
 
   const cards = [
-    { label: 'Total Content', value: summary.totalContent, icon: Film, color: 'text-blue-600', bg: 'bg-blue-50' },
+    { label: 'Total Content', value: summary.totalContent, icon: Film, color: 'text-brand-600', bg: 'bg-brand-50' },
     { label: 'Scenes Indexed', value: summary.totalScenes, icon: Clapperboard, color: 'text-fuchsia-600', bg: 'bg-fuchsia-50' },
     { label: 'Ad Surfaces', value: summary.totalSurfaces, icon: MonitorSmartphone, color: 'text-amber-600', bg: 'bg-amber-50' },
     { label: 'Renders', value: summary.totalRenders, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
@@ -48,9 +48,9 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({ summary, loading }) 
       className="space-y-6"
       key="analytics_tab"
     >
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg">
+      <div className="bg-gradient-to-r from-brand-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg">
         <h2 className="text-lg font-bold">Platform Analytics</h2>
-        <p className="text-sm text-blue-100 mt-1">Real-time operational summary across all subsystems</p>
+        <p className="text-sm text-brand-100 mt-1">Real-time operational summary across all subsystems</p>
       </div>
 
       {/* Summary cards */}

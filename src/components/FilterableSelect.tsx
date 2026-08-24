@@ -106,18 +106,18 @@ export const FilterableSelect: React.FC<FilterableSelectProps> = ({
         {value ? (
           /* Selected value display */
           <div
-            className="w-full bg-blue-50 border border-blue-200 rounded-lg pl-3 pr-16 py-1.5 text-xs text-blue-800 flex items-center cursor-pointer"
+            className="w-full bg-brand-50 border border-brand-200 rounded-lg pl-3 pr-16 py-1.5 text-xs text-brand-800 flex items-center cursor-pointer"
             onClick={() => { setIsOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}
           >
             <span className="truncate" title={value}>{value}</span>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); clearValue(); }}
-              className="absolute right-7 top-1/2 -translate-y-1/2 p-0.5 rounded text-blue-400 hover:text-red-500 hover:bg-red-50 cursor-pointer"
+              className="absolute right-7 top-1/2 -translate-y-1/2 p-0.5 rounded text-brand-400 hover:text-red-500 hover:bg-red-50 cursor-pointer"
             >
               <X className="h-3 w-3" />
             </button>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-blue-400 pointer-events-none" />
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-brand-400 pointer-events-none" />
           </div>
         ) : (
           /* Search input */
@@ -131,7 +131,7 @@ export const FilterableSelect: React.FC<FilterableSelectProps> = ({
               onFocus={() => setIsOpen(true)}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-7 pr-8 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-7 pr-8 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors"
               required={required}
             />
             <ChevronDown
@@ -158,7 +158,7 @@ export const FilterableSelect: React.FC<FilterableSelectProps> = ({
                 onMouseEnter={() => setHighlightIndex(idx)}
                 className={`px-3 py-1.5 text-xs cursor-pointer transition-colors ${
                   idx === highlightIndex
-                    ? 'bg-blue-50 text-blue-700'
+                    ? 'bg-brand-50 text-brand-700'
                     : 'text-slate-700 hover:bg-slate-50'
                 } ${option === value ? 'font-bold' : ''}`}
               >

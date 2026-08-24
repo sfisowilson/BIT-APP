@@ -56,7 +56,7 @@ export const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
             <div className="flex items-center gap-2 mb-1">
               <span className={`px-2 py-0.5 rounded text-[9px] font-bold font-mono uppercase ${
                 campaign.status === 'Active' ? 'bg-emerald-50 text-emerald-600' :
-                campaign.status === 'Draft' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'
+                campaign.status === 'Draft' ? 'bg-brand-50 text-brand-600' : 'bg-slate-100 text-slate-500'
               }`}>{campaign.status}</span>
               <span className="text-[10px] text-slate-400 font-mono">{campaign.namingStructureCode}</span>
             </div>
@@ -99,16 +99,16 @@ export const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
               <button
                 key={action.view}
                 onClick={() => onNavigate(action.view)}
-                className="flex items-center gap-3 p-4 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-200 rounded-xl transition-all cursor-pointer text-left group"
+                className="flex items-center gap-3 p-4 bg-slate-50 hover:bg-brand-50 border border-slate-200 hover:border-brand-200 rounded-xl transition-all cursor-pointer text-left group"
               >
-                <div className="h-9 w-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center group-hover:border-blue-200 transition-colors">
-                  <Icon className="h-4.5 w-4.5 text-slate-500 group-hover:text-blue-600 transition-colors" />
+                <div className="h-9 w-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center group-hover:border-brand-200 transition-colors">
+                  <Icon className="h-4.5 w-4.5 text-slate-500 group-hover:text-brand-600 transition-colors" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-xs font-bold text-slate-800">{action.label}</div>
                   <div className="text-[10px] text-slate-400">{action.desc}</div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-blue-500 transition-colors" />
+                <ArrowRight className="h-4 w-4 text-slate-300 group-hover:text-brand-500 transition-colors" />
               </button>
             );
           })}
@@ -127,7 +127,7 @@ export const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                 <div key={r.id} className="bg-slate-50 rounded-lg overflow-hidden">
                   <div className="flex items-center justify-between p-3 text-xs">
                     <div className="flex items-center gap-3 min-w-0">
-                      <span className="font-mono font-bold text-blue-600 truncate" title={r.id}>{r.id}</span>
+                      <span className="font-mono font-bold text-brand-600 truncate" title={r.id}>{r.id}</span>
                       <span className="text-slate-500 shrink-0">{r.exportPreset}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -137,7 +137,7 @@ export const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                             type="button"
                             onClick={() => setWatchingRenderId(isWatching ? null : r.id)}
                             title={isWatching ? 'Close player' : 'Watch this render'}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 cursor-pointer transition-colors"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold bg-brand-50 text-brand-600 hover:bg-brand-100 cursor-pointer transition-colors"
                           >
                             {isWatching ? <X className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                             {isWatching ? 'Close' : 'Watch'}
@@ -154,7 +154,7 @@ export const CampaignDashboard: React.FC<CampaignDashboardProps> = ({
                       )}
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                         r.renderStatus === 'Finished' ? 'bg-emerald-50 text-emerald-600' :
-                        r.renderStatus === 'Processing' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'
+                        r.renderStatus === 'Processing' ? 'bg-brand-50 text-brand-600' : 'bg-slate-100 text-slate-500'
                       }`}>{r.renderStatus}</span>
                     </div>
                   </div>

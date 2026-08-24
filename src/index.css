@@ -5,6 +5,21 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --font-display: "Space Grotesk", sans-serif;
+
+  /* Brand blue — derived from the logo's sky blue (#38A5D8), used for primary/neutral action
+     buttons (bg-brand-600 hover:bg-brand-500, matching the app's existing -600/-500 convention).
+     Status colors (red=danger, emerald=success, amber=warning) are intentionally untouched. */
+  --color-brand-50: #eaf6fc;
+  --color-brand-100: #d3ecf8;
+  --color-brand-200: #a8d9f1;
+  --color-brand-300: #7cc5e9;
+  --color-brand-400: #56b0e0;
+  --color-brand-500: #38a5d8;
+  --color-brand-600: #2b8dbe;
+  --color-brand-700: #23739c;
+  --color-brand-800: #1d5c7d;
+  --color-brand-900: #184a65;
+  --color-brand-950: #0f2e40;
 }
 
 /* Elegant Dark Theme overrides */

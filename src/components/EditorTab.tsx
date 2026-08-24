@@ -441,7 +441,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
           <span className="text-slate-300">|</span>
           <span className="text-slate-600">{activeVideo?.resolution || '—'}</span>
           <span className="text-slate-300">|</span>
-          <span className={`font-bold ${selectedSurfaceId ? 'text-blue-600' : 'text-slate-400'}`}>
+          <span className={`font-bold ${selectedSurfaceId ? 'text-brand-600' : 'text-slate-400'}`}>
             {selectedSurfaceId ? `Surface: ${currentSurface?.surfaceType || selectedSurfaceId.slice(0,12)}` : 'No surface selected'}
           </span>
         </div>
@@ -457,7 +457,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               <React.Fragment key={step.label}>
                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   step.active
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                    ? 'bg-brand-50 text-brand-700 border border-brand-200'
                     : step.done
                       ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
                       : 'bg-slate-50 text-slate-400 border border-slate-200'
@@ -532,21 +532,21 @@ export const EditorTab: React.FC<EditorTabProps> = ({
 
       {/* ═══ No scenes at all ═══ */}
       {!hasScenes && hasCompletedVideos && (
-        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 shadow-sm">
+        <div className="bg-brand-50 border border-brand-200 rounded-2xl p-6 shadow-sm">
           <div className="flex items-start gap-4">
-            <div className="h-10 w-10 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
-              <Tv className="h-5 w-5 text-blue-600" />
+            <div className="h-10 w-10 rounded-xl bg-brand-100 flex items-center justify-center shrink-0">
+              <Tv className="h-5 w-5 text-brand-600" />
             </div>
             <div className="flex-1">
-              <h3 className="text-sm font-bold text-blue-800 font-display">Scenes Not Yet Detected</h3>
-              <p className="text-xs text-blue-600 mt-1 leading-relaxed">
+              <h3 className="text-sm font-bold text-brand-800 font-display">Scenes Not Yet Detected</h3>
+              <p className="text-xs text-brand-600 mt-1 leading-relaxed">
                 Your video has been ingested but scene detection hasn't run yet. Run the AI analysis from the Content tab
                 to generate scenes and detect advertising surfaces.
               </p>
               {onNavigateToContent && (
                 <button
                   onClick={onNavigateToContent}
-                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer"
+                  className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer"
                 >
                   <ArrowRight className="h-3.5 w-3.5" />
                   Go to Content Tab
@@ -569,7 +569,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
           {onNavigateToContent && (
             <button
               onClick={onNavigateToContent}
-              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer"
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer"
             >
               <ArrowRight className="h-3.5 w-3.5" />
               Go to Content Tab
@@ -880,8 +880,8 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                 {/* Click helper when surfaces exist but none selected */}
                 {surfacesForScene.length > 0 && !selectedSurfaceId && (
                   <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-                    <div className="bg-slate-900/80 border border-blue-400/50 text-white rounded-xl px-5 py-3 text-center animate-pulse shadow-2xl">
-                      <MapPin className="h-6 w-6 text-blue-400 mx-auto mb-1" />
+                    <div className="bg-slate-900/80 border border-brand-400/50 text-white rounded-xl px-5 py-3 text-center animate-pulse shadow-2xl">
+                      <MapPin className="h-6 w-6 text-brand-400 mx-auto mb-1" />
                       <p className="text-xs font-bold">Click a highlighted region to inspect it</p>
                       <p className="text-[10px] text-slate-400 mt-0.5">{surfacesForScene.length} surface{surfacesForScene.length > 1 ? 's' : ''} detected</p>
                     </div>
@@ -1032,7 +1032,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               {/* Scene info bar — kept out of the video's own box so it never overlaps the native <video controls> bar */}
               <div className="mt-2 bg-slate-900/90 border border-slate-700 rounded-lg px-4 py-2 flex items-center justify-between text-[11px] font-mono text-slate-400">
                 <div className="flex items-center gap-2">
-                  <Eye className="h-3 w-3 text-blue-400" />
+                  <Eye className="h-3 w-3 text-brand-400" />
                   <span>
                     Scene #{currentScene?.sceneIndex ?? '—'}
                     {currentScene && ` · ${currentScene.durationSeconds.toFixed(1)}s`}
@@ -1077,7 +1077,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                         <button
                           onClick={handleRedetectClick}
                           className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-white font-semibold text-[10px] rounded-lg transition-all cursor-pointer shadow-sm ${
-                            isDetecting ? 'bg-amber-500 hover:bg-amber-400' : 'bg-blue-600 hover:bg-blue-500'
+                            isDetecting ? 'bg-amber-500 hover:bg-amber-400' : 'bg-brand-600 hover:bg-brand-500'
                           }`}
                           title={isDetecting ? 'Detection in progress...' : 'Re-run surface detection to find new or changed surfaces'}
                         >
@@ -1097,7 +1097,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                       const statusColor =
                         sf.status === 'Approved' ? 'border-emerald-300 bg-emerald-50' :
                         sf.status === 'Excluded' ? 'border-red-300 bg-red-50' :
-                        'border-blue-300 bg-blue-50';
+                        'border-brand-300 bg-brand-50';
                       return (
                         <div
                           key={sf.id}
@@ -1105,7 +1105,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                           tabIndex={0}
                           onClick={() => seekToSurface(sf.id)}
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') seekToSurface(sf.id); }}
-                          className={`relative text-left p-3 rounded-lg border cursor-pointer transition-all ${statusColor} ${isSelected ? 'ring-2 ring-blue-500 shadow-md' : 'hover:shadow-sm'}`}
+                          className={`relative text-left p-3 rounded-lg border cursor-pointer transition-all ${statusColor} ${isSelected ? 'ring-2 ring-brand-500 shadow-md' : 'hover:shadow-sm'}`}
                         >
                           {onDeleteSurface && (
                             <button
@@ -1164,14 +1164,14 @@ export const EditorTab: React.FC<EditorTabProps> = ({
               <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200/60 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <div className="text-[10px] uppercase font-mono font-bold text-slate-500 mb-1.5 flex items-center gap-1.5">
-                    <Layout className="h-3.5 w-3.5 text-blue-500" />
+                    <Layout className="h-3.5 w-3.5 text-brand-500" />
                     <span>Blend Mode</span>
                   </div>
                   <div className="flex gap-1.5">
                     {[{ mode: 'normal', label: 'Flat Matte' }, { mode: 'multiply', label: 'Multiply' }, { mode: 'overlay', label: 'Overlay' }].map(b => (
                       <button key={b.mode} onClick={() => setSelectedBlendMode(b.mode as any)}
                         className={`px-2.5 py-1.5 text-[10px] font-semibold rounded-lg border transition-all cursor-pointer ${
-                          selectedBlendMode === b.mode ? 'bg-blue-600 border-blue-700 text-white shadow-xs' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                          selectedBlendMode === b.mode ? 'bg-brand-600 border-brand-700 text-white shadow-xs' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                         }`}>{b.label}</button>
                     ))}
                   </div>
@@ -1182,12 +1182,12 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                   </div>
                   <input type="range" min="0.2" max="1.0" step="0.05" value={ambientIntensity}
                     onChange={(e) => setAmbientIntensity(parseFloat(e.target.value))}
-                    className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
+                    className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-brand-600" />
                 </div>
               </div>
 
               <div className="mt-4 text-xs text-slate-500 flex items-center gap-1.5 font-mono">
-                <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse"></span>
+                <span className="h-2 w-2 rounded-full bg-brand-500 animate-pulse"></span>
                 <span>Click colored polygons above to select surfaces. Place assets from the right panel.</span>
               </div>
             </div>
@@ -1255,7 +1255,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                                   <Loader2 className="h-3 w-3 animate-spin" />
                                   {renderForSurface.renderStatus} {renderForSurface.progress > 0 ? `${renderForSurface.progress}%` : ''}
                                 </span>
-                                <button onClick={() => onNavigateToRenders?.()} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium cursor-pointer">View in Renders</button>
+                                <button onClick={() => onNavigateToRenders?.()} className="text-[10px] text-brand-500 hover:text-brand-700 font-medium cursor-pointer">View in Renders</button>
                               </div>
                             )}
                             {isRenderFinished && (
@@ -1614,7 +1614,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
             {currentSurface && currentSurface.status !== 'Excluded' && (
               <div className="bg-white border border-slate-200/95 rounded-2xl p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-bold text-slate-800 font-display flex items-center gap-2"><Package className="h-4 w-4 text-blue-500" />Asset Placement</h3>
+                  <h3 className="text-sm font-bold text-slate-800 font-display flex items-center gap-2"><Package className="h-4 w-4 text-brand-500" />Asset Placement</h3>
                   <button onClick={() => setShowingPlacementPanel(!showingPlacementPanel)} className="text-[10px] text-slate-400 hover:text-slate-600 cursor-pointer">{showingPlacementPanel ? 'Hide' : 'Show'}</button>
                 </div>
                 {showingPlacementPanel && (
@@ -1662,7 +1662,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                     {/* Manual asset selection */}
                     {!getPlacedAsset(currentSurface.id) && (
                       <>
-                        <div className="text-[10px] font-mono font-bold text-slate-400 uppercase">Available Assets {selectedCampaignId && <span className="text-blue-500">(campaign-filtered)</span>}</div>
+                        <div className="text-[10px] font-mono font-bold text-slate-400 uppercase">Available Assets {selectedCampaignId && <span className="text-brand-500">(campaign-filtered)</span>}</div>
                         {campaignAssets.length === 0 ? (
                           <div className="text-xs text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-200">
                             {selectedCampaignId ? 'No assets assigned to this campaign. Go to Assets tab to add assets.' : 'No assets available. Create assets in the Assets tab first.'}
@@ -1671,7 +1671,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                           <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                             {campaignAssets.map(asset => (
                               <button key={asset.id} onClick={() => onPlaceAsset(currentSurface.id, asset.id)}
-                                className="w-full flex items-center gap-2.5 p-2 rounded-lg border border-slate-200 hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer text-left">
+                                className="w-full flex items-center gap-2.5 p-2 rounded-lg border border-slate-200 hover:border-brand-400 hover:bg-brand-50/30 transition-all cursor-pointer text-left">
                                 <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200">
                                   {asset.thumbnailUrl ? (
                                     <img src={asset.thumbnailUrl} alt={asset.name} className="h-full w-full object-cover" />
@@ -1772,8 +1772,8 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                                   disabled={queuingId === currentRender.id}
                                   className={`inline-flex items-center gap-1.5 px-3 py-1.5 font-semibold text-[10px] rounded-lg cursor-pointer transition-all shadow-sm ${
                                     currentRender.isQueuedForFinal
-                                      ? 'bg-blue-600 hover:bg-blue-500 text-white'
-                                      : 'bg-white border border-blue-300 text-blue-600 hover:bg-blue-50'
+                                      ? 'bg-brand-600 hover:bg-brand-500 text-white'
+                                      : 'bg-white border border-brand-300 text-brand-600 hover:bg-brand-50'
                                   } disabled:opacity-50`}
                                   title="Use this render for this scene in the final combined video"
                                 >
@@ -1803,7 +1803,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                                   <Trash2 className="h-3 w-3" /> Delete
                                 </button>
                               )}
-                              <button onClick={() => onNavigateToRenders?.()} className="text-[10px] text-blue-500 hover:text-blue-700 font-medium cursor-pointer ml-auto">
+                              <button onClick={() => onNavigateToRenders?.()} className="text-[10px] text-brand-500 hover:text-brand-700 font-medium cursor-pointer ml-auto">
                                 View all renders →
                               </button>
                             </div>
@@ -1868,7 +1868,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                         currentSurface.status === 'Approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
                         currentSurface.status === 'Excluded' ? 'bg-red-50 text-red-700 border border-red-100' :
-                        'bg-blue-50 text-blue-700 border border-blue-100'
+                        'bg-brand-50 text-brand-700 border border-brand-100'
                       }`}>{currentSurface.status}</span>
                     </div>
                     {currentSurface.exclusionReason && <p className="text-2xs text-red-600 leading-normal mt-2 italic bg-red-50 p-2 rounded border border-red-100">Exclusion: {currentSurface.exclusionReason}</p>}
@@ -1906,7 +1906,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                 status === 'Finished' ? 'bg-emerald-100 text-emerald-700' :
                 status === 'Failed' || status === 'Rejected' ? 'bg-red-100 text-red-700' :
                 status === 'PreviewReady' || status === 'NeedsReview' ? 'bg-amber-100 text-amber-700' :
-                'bg-blue-100 text-blue-700';
+                'bg-brand-100 text-brand-700';
 
               // KontextStep renders overwrite promptText with the Kling propagation prompt once
               // one is sent — kontextPromptText (when present) is the original placement
@@ -1988,7 +1988,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                             </span>
                             <span className="text-slate-400 font-mono shrink-0">{r.renderMode || 'Interactive'}</span>
                             {r.isQueuedForFinal && (
-                              <span className="text-blue-600 font-bold shrink-0" title="Queued for final video">★</span>
+                              <span className="text-brand-600 font-bold shrink-0" title="Queued for final video">★</span>
                             )}
                             <span className="text-slate-400 font-mono ml-auto shrink-0">
                               {new Date(r.createdAt).toLocaleTimeString()}
@@ -1997,7 +1997,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => setViewingRenderUrl(playUrl)}
-                                className="text-blue-500 hover:text-blue-700 font-semibold shrink-0 cursor-pointer"
+                                className="text-brand-500 hover:text-brand-700 font-semibold shrink-0 cursor-pointer"
                                 title="Preview this render inline"
                               >
                                 View
@@ -2024,7 +2024,7 @@ export const EditorTab: React.FC<EditorTabProps> = ({
                                 }}
                                 disabled={queuingId === r.id}
                                 className={`shrink-0 font-semibold disabled:opacity-50 cursor-pointer ${
-                                  r.isQueuedForFinal ? 'text-blue-600 hover:text-blue-800' : 'text-slate-500 hover:text-slate-700'
+                                  r.isQueuedForFinal ? 'text-brand-600 hover:text-brand-800' : 'text-slate-500 hover:text-slate-700'
                                 }`}
                                 title="Use this render for this scene in the final combined video"
                               >

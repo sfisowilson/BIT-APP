@@ -91,7 +91,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
         value={settings[key] || ''}
         onChange={e => updateField(key, e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
       />
     </div>
   );
@@ -99,7 +99,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
   if (loading) {
     return (
       <div className="bg-white border border-slate-200/90 rounded-2xl p-12 text-center">
-        <Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto mb-3" />
+        <Loader2 className="h-6 w-6 animate-spin text-brand-500 mx-auto mb-3" />
         <p className="text-xs text-slate-400 font-mono">Loading platform settings...</p>
       </div>
     );
@@ -128,7 +128,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
           <button
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs cursor-pointer transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-lg text-xs cursor-pointer transition-colors disabled:opacity-50"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             {saving ? 'Saving...' : 'Save All Settings'}
@@ -149,7 +149,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-5 py-3 text-xs font-bold transition-colors cursor-pointer border-b-2 ${
               activeTab === tab.id
-                ? 'text-blue-600 border-blue-600 bg-blue-50/30'
+                ? 'text-brand-600 border-brand-600 bg-brand-50/30'
                 : 'text-slate-400 border-transparent hover:text-slate-600 hover:bg-slate-50'
             }`}
           >
@@ -184,7 +184,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
                   value={testEmail}
                   onChange={e => setTestEmail(e.target.value)}
                   placeholder="your-email@example.com"
-                  className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                 />
                 <button
                   onClick={handleTestEmail}
@@ -214,7 +214,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
                   <select
                     value={settings['proxy_enabled'] || 'true'}
                     onChange={e => updateField('proxy_enabled', e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     <option value="true">Yes — generate H.264 proxies</option>
                     <option value="false">No — skip proxy generation</option>
@@ -281,7 +281,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
             {/* ── Surface Detection Engine ── */}
             <div className="pt-3 border-t border-slate-100">
               <div className="flex items-center gap-2 mb-3">
-                <Cpu className="h-4 w-4 text-blue-500" />
+                <Cpu className="h-4 w-4 text-brand-500" />
                 <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-mono">Surface Detection Engine</h4>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -290,7 +290,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
                   <select
                     value={settings['engine_detection'] || 'replicate'}
                     onChange={e => updateField('engine_detection', e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     <option value="yolo">YOLO — Real-time object detection (local)</option>
                     <option value="grounding-dino">Grounding DINO v2 — Open-vocabulary (local)</option>
@@ -342,7 +342,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
                   <select
                     value={settings['yolo_model_size'] || 'large'}
                     onChange={e => updateField('yolo_model_size', e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     <option value="nano">Nano — ~6 MB, fastest</option>
                     <option value="small">Small — ~23 MB</option>
@@ -365,7 +365,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
                   <select
                     value={settings['gd_model_variant'] || 'base'}
                     onChange={e => updateField('gd_model_variant', e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     <option value="base">Base — Full accuracy</option>
                     <option value="tiny">Tiny — Faster, lower accuracy</option>
@@ -391,7 +391,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
                           type="checkbox"
                           checked={settings[key] !== 'false'}
                           onChange={e => updateField(key, e.target.checked ? 'true' : 'false')}
-                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          className="rounded border-slate-300 text-brand-600 focus:ring-brand-500"
                         />
                         {label}
                       </label>
@@ -423,7 +423,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
                 <select
                   value={settings['engine_brand_analysis'] || 'gemini'}
                   onChange={e => updateField('engine_brand_analysis', e.target.value)}
-                  className="w-full max-w-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="w-full max-w-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                 >
                   <option value="google">Google — Cloud Vision (logo + text)</option>
                   <option value="gemini">Gemini 3 Flash — Multimodal analysis</option>
@@ -439,7 +439,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
                 <select
                   value={settings['engine_compositing'] || 'opencv'}
                   onChange={e => updateField('engine_compositing', e.target.value)}
-                  className="w-full max-w-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  className="w-full max-w-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                 >
                   <option value="opencv">OpenCV — FFmpeg overlay + blend (single-frame preview)</option>
                   <option value="planar-warp">Planar Warp — Deterministic homography (flat signage, pixel-perfect)</option>
@@ -465,7 +465,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = () => {
                   <select
                     value={settings['engine_tracking'] || 'sam3'}
                     onChange={e => updateField('engine_tracking', e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                   >
                     <option value="sam3">SAM 3 — Fal.ai video-rle tracking</option>
                   </select>

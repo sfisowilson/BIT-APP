@@ -60,7 +60,7 @@ export const AttentionBell: React.FC = () => {
 
   const items = [
     { key: 'pendingRoleRequests' as const, label: 'Pending Role Requests', icon: UserPlus, color: 'text-amber-600', bg: 'bg-amber-50', path: '/admin' },
-    { key: 'pendingSurfaces' as const, label: 'Surfaces Awaiting Review', icon: MonitorSmartphone, color: 'text-blue-600', bg: 'bg-blue-50', path: null, hint: 'Open a campaign to review' },
+    { key: 'pendingSurfaces' as const, label: 'Surfaces Awaiting Review', icon: MonitorSmartphone, color: 'text-brand-600', bg: 'bg-brand-50', path: null, hint: 'Open a campaign to review' },
     { key: 'failedRenders' as const, label: 'Failed Render Jobs', icon: Cpu, color: 'text-red-600', bg: 'bg-red-50', path: null, hint: 'Open a campaign to view renders' },
     { key: 'failedContent' as const, label: 'Failed Content Ingestions', icon: Film, color: 'text-red-600', bg: 'bg-red-50', path: null, hint: 'Open a campaign to view content' },
     { key: 'activeAlarms' as const, label: 'Active Platform Alarms', icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-50', path: '/telemetry' },

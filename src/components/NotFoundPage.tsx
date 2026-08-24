@@ -18,7 +18,7 @@ export const NotFoundPage: React.FC = () => {
             <ArrowLeft className="h-4 w-4" /> Go Back
           </button>
           <button onClick={() => navigate('/')}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors cursor-pointer">
+            className="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-sm font-medium transition-colors cursor-pointer">
             <Home className="h-4 w-4" /> Home
           </button>
         </div>

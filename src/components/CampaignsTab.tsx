@@ -172,13 +172,13 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
       key="campaigns_tab"
     >
       {/* Informational guide */}
-      <div className="lg:col-span-12 bg-blue-50 border border-blue-100 rounded-2xl p-5 text-xs text-blue-800 flex items-start gap-3 shadow-xs">
-        <Sliders className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+      <div className="lg:col-span-12 bg-brand-50 border border-brand-100 rounded-2xl p-5 text-xs text-brand-800 flex items-start gap-3 shadow-xs">
+        <Sliders className="h-5 w-5 text-brand-600 shrink-0 mt-0.5" />
         <div>
-          <h4 className="font-bold text-sm text-blue-900">
+          <h4 className="font-bold text-sm text-brand-900">
             {selectedCampaignId ? `Assets: ${selectedCampaign?.name || 'Campaign'}` : 'Step 1: Campaign Planner & Asset Staging'}
           </h4>
-          <p className="mt-1 text-blue-700 leading-normal">
+          <p className="mt-1 text-brand-700 leading-normal">
             {selectedCampaignId
               ? <>Managing creative assets for <strong>{selectedCampaign?.name}</strong> ({selectedCampaign?.namingStructureCode}). Stage brand overlays and assign them to this campaign.</>
               : <><strong>Select a campaign</strong> to view and manage its creative assets. Create advertiser campaigns with strict naming codes, then stage brand overlays and assign them to campaigns. Unassigned assets appear in the staging area.</>
@@ -194,7 +194,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
         <div className="bg-white border border-slate-200/90 rounded-2xl p-6 shadow-sm">
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4 font-display">
             Campaign Database
-            <span className="ml-2 text-[10px] text-blue-500 normal-case font-normal">— click a campaign to manage its assets</span>
+            <span className="ml-2 text-[10px] text-brand-500 normal-case font-normal">— click a campaign to manage its assets</span>
           </h3>
           <div className="relative mb-3">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
@@ -203,7 +203,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
               value={campaignSearch}
               onChange={(e) => setCampaignSearch(e.target.value)}
               placeholder="Search campaigns by name or code..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-400 transition-colors"
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-400 transition-colors"
             />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[500px] overflow-y-auto pr-1">
@@ -217,8 +217,8 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                   className={`
                     cursor-pointer rounded-xl p-4 border-2 transition-all duration-200 flex flex-col justify-between
                     ${isSelected
-                      ? 'border-blue-500 bg-blue-50/40 shadow-md ring-1 ring-blue-200'
-                      : 'border-slate-200/60 bg-slate-50/60 hover:border-blue-200 hover:bg-blue-50/20'
+                      ? 'border-brand-500 bg-brand-50/40 shadow-md ring-1 ring-brand-200'
+                      : 'border-slate-200/60 bg-slate-50/60 hover:border-brand-200 hover:bg-brand-50/20'
                     }
                   `}
                 >
@@ -228,7 +228,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                       <div className="flex items-center gap-1.5">
                         <span className={`px-2 py-0.5 rounded text-[8px] font-bold font-mono uppercase ${
                           camp.status === 'Active' ? 'bg-green-50 text-green-600' :
-                          camp.status === 'Draft' ? 'bg-blue-50 text-blue-600' :
+                          camp.status === 'Draft' ? 'bg-brand-50 text-brand-600' :
                           camp.status === 'Completed' ? 'bg-slate-100 text-slate-500' :
                           'bg-amber-50 text-amber-600'
                         }`}>{camp.status}</span>
@@ -251,14 +251,14 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                   <div className="mt-3 pt-3 border-t border-slate-200/50 flex items-center justify-between text-2xs text-slate-500">
                     <span>Region: {camp.targetRegion}</span>
                     <div className="flex items-center gap-3">
-                      <span className="flex items-center gap-1 text-blue-600 font-semibold">
+                      <span className="flex items-center gap-1 text-brand-600 font-semibold">
                         <Package className="h-3 w-3" /> {assetCount}
                       </span>
                       <span className="font-bold text-slate-700">R{camp.totalBudget.toLocaleString()}</span>
                     </div>
                   </div>
                   {isSelected && (
-                    <div className="mt-2 text-[10px] text-blue-600 font-semibold flex items-center gap-1">
+                    <div className="mt-2 text-[10px] text-brand-600 font-semibold flex items-center gap-1">
                       <Eye className="h-3 w-3" /> Selected — manage assets in right panel →
                     </div>
                   )}
@@ -288,11 +288,11 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
         {selectedCampaign ? (
           <>
             {/* Campaign Detail Header */}
-            <div className="bg-white border-2 border-blue-300 rounded-2xl p-5 shadow-sm">
+            <div className="bg-white border-2 border-brand-300 rounded-2xl p-5 shadow-sm">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Package className="h-4 w-4 text-blue-600" />
+                  <div className="h-8 w-8 bg-brand-100 rounded-lg flex items-center justify-center">
+                    <Package className="h-4 w-4 text-brand-600" />
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-800 font-display">{selectedCampaign.name}</h3>
@@ -318,7 +318,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                 </div>
                 <div className="bg-slate-50 rounded-lg p-2">
                   <p className="text-[10px] text-slate-500">Assets</p>
-                  <p className="text-xs font-bold text-blue-600">{campaignAssetsTotalCount}</p>
+                  <p className="text-xs font-bold text-brand-600">{campaignAssetsTotalCount}</p>
                 </div>
               </div>
             </div>
@@ -326,7 +326,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
             {/* Campaign's Assets */}
             <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm">
               <h3 className="text-sm font-bold text-slate-800 font-display mb-3 flex items-center gap-2">
-                <Link2 className="h-4 w-4 text-blue-500" />
+                <Link2 className="h-4 w-4 text-brand-500" />
                 Campaign Assets ({campaignAssetsTotalCount})
               </h3>
 
@@ -339,7 +339,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
               ) : (
                 <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                   {campaignAssets.map(as => (
-                    <div key={as.id} className="bg-blue-50/40 border border-blue-100 rounded-lg p-3">
+                    <div key={as.id} className="bg-brand-50/40 border border-brand-100 rounded-lg p-3">
                       {editingAssetId === as.id ? (
                         /* Inline Edit Form */
                         <div className="space-y-2">
@@ -376,7 +376,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                             {/* Thumbnail — clickable to view full */}
                             <div
                               className={`h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200 transition-all ${
-                                as.thumbnailUrl ? 'cursor-pointer hover:border-blue-400 hover:shadow-sm' : ''
+                                as.thumbnailUrl ? 'cursor-pointer hover:border-brand-400 hover:shadow-sm' : ''
                               }`}
                               onClick={() => as.thumbnailUrl && setPreviewAsset(as)}
                               title={as.thumbnailUrl ? 'Click to view full image' : 'No preview available'}
@@ -390,7 +390,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                             <div className="min-w-0 flex-1">
                               <p className="text-2xs font-bold text-slate-800 truncate" title={as.name}>{as.name}</p>
                               <div className="flex items-center gap-2 mt-1">
-                                <span className="text-[8px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-mono">{as.type}</span>
+                                <span className="text-[8px] px-1.5 py-0.5 rounded bg-brand-100 text-brand-600 font-mono">{as.type}</span>
                                 <span className="text-[8px] text-slate-400 font-mono">{as.brandCategory}</span>
                                 <span className="text-[8px] text-slate-300 font-mono">{as.dimensions}</span>
                               </div>
@@ -406,7 +406,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                             )}
                             {handleUpdateAsset && (
                               <button type="button" onClick={() => startEditing(as)}
-                                className="p-1 rounded text-slate-300 hover:text-blue-500 hover:bg-blue-50 cursor-pointer transition-colors opacity-0 group-hover:opacity-100" title="Edit">
+                                className="p-1 rounded text-slate-300 hover:text-brand-500 hover:bg-brand-50 cursor-pointer transition-colors opacity-0 group-hover:opacity-100" title="Edit">
                                 <Edit3 className="h-3 w-3" />
                               </button>
                             )}
@@ -444,14 +444,14 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                     value={newAssetName} 
                     onChange={(e) => setNewAssetName(e.target.value)} 
                     placeholder="Asset name (e.g., Coke Transparent Banner)"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors"
                     required
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <select 
                       value={newAssetType} 
                       onChange={(e) => setNewAssetType(e.target.value as any)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors"
                     >
                       <option value="Image">PNG Image</option>
                       <option value="Logo">Alpha Logo</option>
@@ -465,9 +465,9 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                       required
                     />
                   </div>
-                  <label className="border border-dashed border-slate-200 rounded-lg p-2 bg-slate-50/50 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors block">
+                  <label className="border border-dashed border-slate-200 rounded-lg p-2 bg-slate-50/50 text-center cursor-pointer hover:border-brand-300 hover:bg-brand-50/30 transition-colors block">
                     {newAssetFile ? (
-                      <span className="text-[10px] text-blue-600 font-medium">✓ {newAssetFile.name}</span>
+                      <span className="text-[10px] text-brand-600 font-medium">✓ {newAssetFile.name}</span>
                     ) : (
                       <span className="text-[10px] text-slate-400">+ Attach file (optional)</span>
                     )}
@@ -476,7 +476,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                   </label>
                   <button 
                     type="submit" 
-                    className="w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer"
+                    className="w-full inline-flex items-center justify-center gap-2 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs rounded-lg transition-all cursor-pointer"
                   >
                     <Plus className="h-3 w-3" />
                     Add Asset to {selectedCampaign.name.length > 20 ? selectedCampaign.name.substring(0, 20) + '...' : selectedCampaign.name}
@@ -512,7 +512,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                           {/* Thumbnail — clickable to view full */}
                           <div
                             className={`h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-amber-200 transition-all ${
-                              as.thumbnailUrl ? 'cursor-pointer hover:border-blue-400 hover:shadow-sm' : ''
+                              as.thumbnailUrl ? 'cursor-pointer hover:border-brand-400 hover:shadow-sm' : ''
                             }`}
                             onClick={() => as.thumbnailUrl && setPreviewAsset(as)}
                             title={as.thumbnailUrl ? 'Click to view full image' : 'No preview available'}
@@ -557,7 +557,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                       <div className="mt-2 flex items-center gap-2">
                         <span className="text-[8px] text-slate-400 shrink-0">Assign to:</span>
                         <select
-                          className="flex-1 text-[10px] bg-white border border-slate-200 rounded px-1.5 py-1 text-slate-600 focus:outline-none focus:border-blue-400"
+                          className="flex-1 text-[10px] bg-white border border-slate-200 rounded px-1.5 py-1 text-slate-600 focus:outline-none focus:border-brand-400"
                           defaultValue=""
                           onChange={async (e) => {
                             if (e.target.value) {
@@ -594,14 +594,14 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                   value={newAssetName} 
                   onChange={(e) => setNewAssetName(e.target.value)} 
                   placeholder="Asset name (e.g., Nike Swoosh Logo)"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors"
                   required
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <select 
                     value={newAssetType} 
                     onChange={(e) => setNewAssetType(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-blue-500 transition-colors"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-slate-800 focus:bg-white focus:outline-none focus:border-brand-500 transition-colors"
                   >
                     <option value="Image">PNG Image</option>
                     <option value="Logo">Alpha Logo</option>
@@ -615,9 +615,9 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
                     required
                   />
                 </div>
-                <label className="border border-dashed border-slate-200 rounded-lg p-3 bg-slate-50/50 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-colors block">
+                <label className="border border-dashed border-slate-200 rounded-lg p-3 bg-slate-50/50 text-center cursor-pointer hover:border-brand-300 hover:bg-brand-50/30 transition-colors block">
                   {newAssetFile ? (
-                    <div className="flex items-center justify-center gap-2 text-xs text-blue-600 font-medium">
+                    <div className="flex items-center justify-center gap-2 text-xs text-brand-600 font-medium">
                       <Check className="h-4 w-4" />
                       {newAssetFile.name} ({(newAssetFile.size / 1024).toFixed(0)} KB)
                     </div>
@@ -664,7 +664,7 @@ export const CampaignsTab: React.FC<CampaignsTabProps> = ({
               <div className="min-w-0">
                 <h3 className="text-sm font-bold text-slate-800 truncate" title={previewAsset.name}>{previewAsset.name}</h3>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 font-mono">{previewAsset.type}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-100 text-brand-600 font-mono">{previewAsset.type}</span>
                   <span className="text-[10px] text-slate-400 font-mono">{previewAsset.brandCategory}</span>
                   <span className="text-[10px] text-slate-300 font-mono">{previewAsset.dimensions} · {previewAsset.fileSize}</span>
                 </div>

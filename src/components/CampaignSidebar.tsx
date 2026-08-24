@@ -83,17 +83,17 @@ export const CampaignSidebar: React.FC<CampaignSidebarProps> = ({
         disabled={disabled}
         className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer text-left ${
           isActive
-            ? 'bg-blue-50 text-blue-700 border-l-2 border-blue-600'
+            ? 'bg-brand-50 text-brand-700 border-l-2 border-brand-600'
             : disabled
               ? 'text-slate-300 cursor-not-allowed'
               : 'text-slate-600 hover:bg-slate-100'
         }`}
       >
-        <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-blue-600' : disabled ? 'text-slate-300' : 'text-slate-400'}`} />
+        <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-brand-600' : disabled ? 'text-slate-300' : 'text-slate-400'}`} />
         <span className="flex-1">{item.label}</span>
         {count !== undefined && count > 0 && (
           <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-            isActive ? 'bg-blue-200 text-blue-700' : 'bg-slate-200 text-slate-500'
+            isActive ? 'bg-brand-200 text-brand-700' : 'bg-slate-200 text-slate-500'
           }`}>
             {count}
           </span>
