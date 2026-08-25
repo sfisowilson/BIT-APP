@@ -94,6 +94,17 @@ public class ShotDetectionPipeline
             }
         }
 
+        // Short clips don't benefit from scene splitting — a single cut/shot boundary detection
+        // pass on a <10s clip is pure overhead (and can even misfire on brief clips with no real
+        // cuts). Treat the whole video as one scene/shot and skip straight to surface detection.
+        var shortClipDurationSec = ParseDuration(content.Duration);
+        if (shortClipDurationSec > 0 && shortClipDurationSec < 10)
+        {
+            await CreateSingleSceneWithoutSplittingAsync(db, content, contentId, shortClipDurationSec, ct);
+            await ReportProgress(30, "Short clip — using the full video as one scene");
+            return;
+        }
+
         // ── Phase 1: Detect shot boundaries via FFmpeg ──
         var shots = await DetectShotsAsync(content, ct);
         _logger.LogInformation("[ShotPipeline] Detected {Count} shots", shots.Count);
@@ -411,5 +422,69 @@ public class ShotDetectionPipeline
         return int.Parse(match.Groups[1].Value) * 3600 +
                int.Parse(match.Groups[2].Value) * 60 +
                int.Parse(match.Groups[3].Value);
+    }
+
+    /// <summary>
+    /// Short-clip path (&lt;10s): one SceneItem + one ShotItem spanning the entire video, no FFmpeg
+    /// cut detection/embedding/clustering. SurfaceDetectionPipeline only reads SceneItem rows, so
+    /// this alone is enough to reach "Completed"; the ShotItem is still persisted (rather than
+    /// relying on ShotAwareTrackingService's synthetic-shot fallback) so anything that queries
+    /// db.Shots directly at render time behaves identically to a normally-split video.
+    /// </summary>
+    private static async Task CreateSingleSceneWithoutSplittingAsync(
+        PostgresDbContext db, ContentItem content, string contentId, double durationSec, CancellationToken ct)
+    {
+        // Clean re-run: same cascade-delete pattern as the normal path (surfaces → ad slots →
+        // approvals → scenes → shots) so re-detecting a short clip doesn't leave orphans.
+        var existingShots = await db.Shots.Where(s => s.ContentId == contentId).ToListAsync(ct);
+        db.Shots.RemoveRange(existingShots);
+
+        var existingScenes = await db.SceneItems.Where(s => s.ContentId == contentId).ToListAsync(ct);
+        foreach (var scene in existingScenes)
+        {
+            var surfaces = await db.SurfaceItems.Where(sf => sf.SceneId == scene.Id).ToListAsync(ct);
+            foreach (var sf in surfaces)
+            {
+                var adSlots = await db.AdSlots.Where(a => a.SurfaceId == sf.Id).ToListAsync(ct);
+                var adSlotIds = adSlots.Select(s => s.Id).ToList();
+                if (adSlotIds.Count > 0)
+                {
+                    var approvals = await db.Approvals
+                        .Where(a => a.AdSlotId != null && adSlotIds.Contains(a.AdSlotId))
+                        .ToListAsync(ct);
+                    db.Approvals.RemoveRange(approvals);
+                }
+                db.AdSlots.RemoveRange(adSlots);
+            }
+            db.SurfaceItems.RemoveRange(surfaces);
+        }
+        db.SceneItems.RemoveRange(existingScenes);
+
+        var fps = content.FrameRate > 0 && content.FrameRate <= 240 ? content.FrameRate : 30;
+        var totalFrames = Math.Max(1, (int)(durationSec * fps));
+
+        var newScene = new SceneItem
+        {
+            Id = $"sc-{Guid.NewGuid()}",
+            ContentId = contentId,
+            SceneIndex = 0,
+            StartFrame = 0,
+            EndFrame = totalFrames - 1,
+            DurationSeconds = durationSec,
+            QaStatus = "Unchecked",
+        };
+        db.SceneItems.Add(newScene);
+
+        db.Shots.Add(new ShotItem
+        {
+            Id = $"sh-{Guid.NewGuid()}",
+            ContentId = contentId,
+            SceneId = newScene.Id,
+            ShotIndex = 0,
+            StartFrame = 0,
+            EndFrame = totalFrames - 1,
+        });
+
+        await db.SaveChangesAsync(ct);
     }
 }
